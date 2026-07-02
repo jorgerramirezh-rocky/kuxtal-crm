@@ -658,7 +658,7 @@ async function usarPromo(sid,ofId){
   }catch(e){ toast('⚠️ No se pudo generar'); }
 }
 function mostrarQR(o,codigo){
-  const url="https://tevzfdiumfekvapamovw.supabase.co/functions/v1/validar?c="+codigo;
+  const url="https://jorgerramirezh-rocky.github.io/kuxtal-crm/validar.html?c="+codigo;
   $(cardCtx.target).innerHTML=`<div style="text-align:center">
     <div style="font-size:36px">${esc(o.emoji||'🎁')}</div>
     <h3 style="color:var(--kux);margin:6px 0">${esc(o.titulo)}</h3>

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Kuxtal Club</title>
+<style>
+  *{margin:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+  body{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:26px;color:#fff;overflow:hidden;position:relative;background:linear-gradient(135deg,#0f2438,#1b365d);transition:background .4s}
+  body.ok{background:radial-gradient(circle at 50% -10%,#2bbf74,#0f7a47 75%)}
+  body.bad{background:radial-gradient(circle at 50% -10%,#e5484d,#9d1b1f 75%)}
+  .logo{position:fixed;top:26px;left:0;right:0;font-family:'Arial Black',Arial,sans-serif;font-weight:900;letter-spacing:3px;font-size:15px;opacity:.92;z-index:2}
+  .ico{font-size:84px;line-height:1;animation:pop .55s cubic-bezier(.2,1.35,.4,1);z-index:2}
+  @keyframes pop{0%{transform:scale(.3);opacity:0}100%{transform:scale(1);opacity:1}}
+  .card{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:22px;padding:22px 20px;margin-top:16px;max-width:360px;width:100%;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);animation:rise .5s .1s both;z-index:2}
+  @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+  .nom{font-size:26px;font-weight:800;margin:2px 0 10px;line-height:1.15}
+  .tipo{display:inline-block;background:linear-gradient(135deg,#f2c94c,#e0a422);color:#3a2a00;font-weight:800;border-radius:20px;padding:5px 16px;font-size:14px}
+  .promo{margin-top:16px;font-size:15px;font-weight:700}
+  .promo .d{background:rgba(255,255,255,.28);border-radius:8px;padding:2px 8px;font-size:13px;margin-left:4px}
+  .tag{margin-top:18px;font-size:17px;font-weight:800;z-index:2}
+  .sub{font-size:14px;opacity:.92;margin-top:8px}
+  .cf{position:fixed;top:-24px;font-size:22px;animation:fall linear infinite;z-index:0}
+  @keyframes fall{to{transform:translateY(112vh) rotate(420deg)}}
+</style></head>
+<body>
+<div class="logo">KUXTAL TRAVELS ✈</div>
+<div class="ico" id="ico">⏳</div>
+<div class="card" id="card"><div class="nom" id="nom">Validando…</div></div>
+<div class="tag" id="tag"></div>
+<script>
+const FN="https://tevzfdiumfekvapamovw.supabase.co/functions/v1/validar";
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $=id=>document.getElementById(id);
+function confetti(){
+  const em=["🎉","✨","🎊","🌴","🎉","✈️","✨","🎊","🌟","🎉"];
+  em.forEach((e,i)=>{const s=document.createElement('span');s.className='cf';s.textContent=e;
+    s.style.left=(5+i*9.5)+'%';s.style.animationDuration=(2.8+(i%3)*0.7)+'s';s.style.animationDelay=(i*0.28)+'s';document.body.appendChild(s);});
+}
+function ok(d){
+  document.body.className='ok'; confetti();
+  $('ico').textContent='✅';
+  const promo=d.promo?`<div class="promo">${esc(d.promo.emoji||'🎁')} ${esc(d.promo.titulo)}${d.promo.descuento?`<span class="d">${esc(d.promo.descuento)}</span>`:''}</div>`:'';
+  $('card').innerHTML=`<div class="nom">${esc(d.nombre)}</div><span class="tipo">${esc(d.tipo)}</span>${promo}`;
+  $('tag').textContent='Disfrutá de tu beneficio con Kuxtal ✈️';
+}
+function bad(ico,t,sub){
+  document.body.className='bad'; $('ico').textContent=ico;
+  $('card').innerHTML=`<div class="nom" style="font-size:22px">${esc(t)}</div>${sub?`<div class="sub">${esc(sub)}</div>`:''}`;
+  $('tag').textContent='';
+}
+const MSG={falta:['❌','Falta el código',''],invalido:['❌','Código inválido',''],
+  usado:['⛔','Código ya usado',''],vencido:['⌛','Código vencido','Pedí uno nuevo'],
+  membresia_vencida:['⏳','Membresía vencida','Renová para usar tus beneficios'],error:['⚠️','No se pudo validar','Reintentá']};
+(async function(){
+  const c=new URLSearchParams(location.search).get('c')||'';
+  if(!c){ bad(...MSG.falta); return; }
+  try{
+    const d=await (await fetch(FN+"?c="+encodeURIComponent(c))).json();
+    if(d.ok) ok(d);
+    else { const m=MSG[d.reason]||MSG.error; bad(m[0],m[1], d.reason==='usado'&&d.detalle?('el '+new Date(d.detalle).toLocaleString('es-GT')):m[2]); }
+  }catch(e){ bad(...MSG.error); }
+})();
+</script>
+</body></html>
