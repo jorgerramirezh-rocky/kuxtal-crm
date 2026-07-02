@@ -180,12 +180,18 @@
 <div id="modal" class="modal" style="display:none">
   <div class="mcard">
     <h3>Editar socio</h3>
+    <div id="f_motivo" class="warn" style="display:none;margin-bottom:12px;padding:9px 11px;border-radius:9px;font-size:12px"></div>
     <label>Nombre</label><input id="f_n">
-    <label>Teléfono (8 dígitos de Guatemala)</label><input id="f_tel" inputmode="numeric" placeholder="ej. 55551234"><div class="ferr" id="f_telerr"></div>
-    <label>Tipo</label><select id="f_tipo"><option>VIP</option><option>Exclusivo</option><option>Gold</option><option>Regular</option><option>Sin dato</option></select>
-    <label>Vence</label><input id="f_venc" type="date">
-    <label>Closer</label><input id="f_closer">
+    <label>Teléfono (8 dígitos, sin 502)</label><input id="f_tel" inputmode="numeric" placeholder="55551234"><div class="ferr" id="f_telerr"></div>
     <label>DPI (13 dígitos)</label><input id="f_dpi" inputmode="numeric"><div class="ferr" id="f_dpierr"></div>
+    <label>Tipo</label><select id="f_tipo"><option>VIP</option><option>Exclusivo</option><option>Gold</option><option>Regular</option><option>Sin dato</option></select>
+    <label>Fecha de ingreso</label><input id="f_ing" type="date"><div class="ferr" id="f_ingerr"></div>
+    <label>Vence</label><input id="f_venc" type="date"><div class="ferr" id="f_vencerr"></div>
+    <label>Años de servicio</label><input id="f_anios" inputmode="decimal" placeholder="ej. 4"><div class="ferr" id="f_anioserr"></div>
+    <label>Total (US$)</label><input id="f_total" inputmode="decimal" placeholder="ej. 700"><div class="ferr" id="f_totalerr"></div>
+    <label>Copropietario</label><input id="f_copro">
+    <label>Tel. copropietario (8 dígitos)</label><input id="f_celcopro" inputmode="numeric"><div class="ferr" id="f_celcoproerr"></div>
+    <label>Closer</label><input id="f_closer">
     <div class="macc"><button class="mcancel" onclick="cerrarModal()">Cancelar</button><button class="msave" id="msaveBtn" onclick="guardarEdit()">Guardar</button></div>
   </div>
 </div>
@@ -195,7 +201,7 @@
 const SB_URL="https://tevzfdiumfekvapamovw.supabase.co";
 const SB_PUB="sb_publishable_MMVJjzrA1rHdnMWxl0zeMA_DTDTTGTJ";
 const LS="kux_sesion";
-let SES=null, gente=[], BI={}, tab="tablero", vf=90, verLim=60, editId=null, charts={};
+let SES=null, gente=[], BI={}, tab="tablero", vf=90, dirF="todos", verLim=60, editId=null, charts={};
 const HOY=new Date(); HOY.setHours(0,0,0,0);
 
 const $=id=>document.getElementById(id);
@@ -210,6 +216,19 @@ const fmtTel=t=>{const d=telDig(t);return d.length===8?d.slice(0,4)+'-'+d.slice(
 const waHref=t=>'https://wa.me/502'+telDig(t);
 const telHref=t=>'tel:+502'+telDig(t);
 const calcDv=v=>{if(!v)return null;const d=new Date(v+"T00:00:00");const n=Math.round((d-HOY)/86400000);return isNaN(n)?null:n;};
+// ── Tipos de campo (contrato de validación — para no meter datos basura) ──
+const TIPOS=['VIP','Exclusivo','Gold','Regular','Sin dato'];
+const dpiDig=v=>String(v||'').replace(/\D/g,'');
+const dpiOK=v=>{const d=dpiDig(v);return d===''||d.length===13;};
+const VALIDA={
+  tel:v=>{const d=telDig(v);return (d===''||d.length===8)?"":"Teléfono: 8 dígitos (sin 502) o vacío.";},
+  dpi:v=>{const d=dpiDig(v);return (d===''||d.length===13)?"":"DPI: 13 dígitos o vacío.";},
+  tipo:v=>TIPOS.includes(v)?"":"Tipo inválido.",
+  fecha:v=>(!v||/^\d{4}-\d{2}-\d{2}$/.test(v))?"":"Fecha inválida (AAAA-MM-DD).",
+  num:v=>(v===''||v==null||(!isNaN(v)&&Number(v)>=0))?"":"Debe ser un número ≥ 0."
+};
+const motivoRevision=x=>{const m=[];if(x.dup)m.push('No. socio duplicado');if(!telOK(x.tel))m.push('teléfono');if(!dpiOK(x.dpi))m.push('DPI');if(!x.venc)m.push('sin vencimiento');return m;};
+const necesitaRevision=x=>motivoRevision(x).length>0;
 
 // ── Auth ──
 async function sbAuth(path,body){
@@ -239,9 +258,13 @@ async function traerSocios(reintento){
   const r=await fetch(SB_URL+"/rest/v1/socios?select=*&order=vencimiento.asc",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
   if(r.status===401){ if(!reintento && await refrescar()) return traerSocios(true); throw new Error("sesión vencida"); }
   const rows=await r.json();
-  return rows.map(x=>({id:x.id,n:x.nombre||"(sin nombre)",tel:x.celular,dpi:x.dpi,tipo:x.tipo_norm||"Sin dato",
-    closer:x.closer,liner:x.liner,venc:x.vencimiento,dv:calcDv(x.vencimiento),ingreso:x.fecha_ingreso,
-    total:Number(x.total_num)||0,estado:x.estado||""}));
+  const g=rows.map(x=>({id:x.id,no:x.no_socio,n:x.nombre||"(sin nombre)",tel:x.celular,cel_copro:x.cel_copro,
+    copro:x.copropietario,dpi:x.dpi,tipo:x.tipo_norm||"Sin dato",closer:x.closer,liner:x.liner,
+    venc:x.vencimiento,dv:calcDv(x.vencimiento),ingreso:x.fecha_ingreso,anios:x.anios_servicio,
+    total:Number(x.total_num)||0,total_texto:x.total_texto,estado:x.estado||""}));
+  const cnt={}; g.forEach(x=>{if(x.no)cnt[x.no]=(cnt[x.no]||0)+1;});
+  g.forEach(x=>x.dup=!!(x.no&&cnt[x.no]>1));
+  return g;
 }
 async function patchSocio(id,body,reintento){
   const r=await fetch(SB_URL+"/rest/v1/socios?id=eq."+id,{method:"PATCH",
@@ -259,6 +282,7 @@ function calcularBI(){
   const porVencer=gente.filter(x=>x.dv!=null&&x.dv>=0&&x.dv<=365).length;
   const enRiesgo=gente.filter(x=>x.dv!=null&&x.dv>=0&&x.dv<=365).reduce((a,x)=>a+x.total,0);
   const telMal=gente.filter(x=>!telOK(x.tel)).length;
+  const revisar=gente.filter(necesitaRevision).length;
   const sum=(f,g)=>{const m={};gente.forEach(x=>{const k=g(x);if(k==null||k==="")return;m[k]=(m[k]||0)+f(x);});return m;};
   const porTipo=sum(()=>1,x=>x.tipo), revTipo=sum(x=>x.total,x=>x.tipo), revCloser=sum(x=>x.total,x=>(x.closer||"").trim());
   const vencAnio={}, ingMesMap={}; let vig=0,ven=0,sinf=0;
@@ -272,7 +296,7 @@ function calcularBI(){
   const ingMes=meses.slice(-12).map(m=>[lbl(m),Math.round(ingMesMap[m])]);
   let acc=0; const acum=meses.map(m=>{acc+=ingMesMap[m];return[lbl(m),Math.round(acc)];}).slice(-12);
   const topCloser=Object.fromEntries(Object.entries(revCloser).sort((a,b)=>b[1]-a[1]).slice(0,6));
-  BI={socios,totalVentas,ticket,porVencer,enRiesgo,telMal,porTipo,revTipo,revCloser:topCloser,vencAnio,
+  BI={socios,totalVentas,ticket,porVencer,enRiesgo,telMal,revisar,porTipo,revTipo,revCloser:topCloser,vencAnio,
     cartera:{'Vigentes':vig,'Vencidos':ven,'Sin fecha':sinf},ingMes,acum};
 }
 
@@ -282,6 +306,7 @@ const fechaTxt=s=>s?new Date(s+"T00:00:00").toLocaleDateString('es-GT',{day:'num
 const sem=dv=>dv==null?{c:'g',t:'Sin fecha'}:dv<0?{c:'r',t:'Venció hace '+(-dv)+'d'}:dv<=30?{c:'r',t:'Vence en '+dv+'d'}:dv<=90?{c:'a',t:'Vence en '+dv+'d'}:{c:'v',t:'Vence '+fechaTxt(vencDe(dv))};
 function vencDe(dv){const d=new Date(HOY);d.setDate(d.getDate()+dv);return d.toISOString().slice(0,10);}
 function ir(t){tab=t;verLim=60;document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x.dataset.t===t));render();}
+function verRevisar(){dirF='revisar';ir('todos');}
 function up(el,to,fmt){const dur=900,t0=performance.now();(function f(t){let p=Math.min(1,(t-t0)/dur);p=1-Math.pow(1-p,3);el.textContent=fmt(to*p);if(p<1)requestAnimationFrame(f);})(t0);}
 function kpis(){up($('k1'),BI.totalVentas,money);up($('k2'),BI.ticket,money);up($('k3'),BI.socios,v=>Math.round(v).toLocaleString('es-GT'));up($('k4'),BI.porVencer,v=>Math.round(v));}
 
@@ -299,26 +324,37 @@ function marcar(id,val){
 // ── Editar socio ──
 function abrirEdit(id){
   const x=gente.find(g=>g.id===id); if(!x)return; editId=id;
-  $('f_n').value=x.n===""?"":(x.n==="(sin nombre)"?"":x.n);
-  $('f_tel').value=telDig(x.tel); $('f_telerr').textContent="";
-  $('f_tipo').value=['VIP','Exclusivo','Gold','Regular','Sin dato'].includes(x.tipo)?x.tipo:'Sin dato';
-  $('f_venc').value=x.venc||""; $('f_closer').value=x.closer||"";
-  $('f_dpi').value=(x.dpi||"").replace(/\D/g,''); $('f_dpierr').textContent="";
+  const set=(f,v)=>{$(f).value=v==null?"":v;};
+  set('f_n',x.n==="(sin nombre)"?"":x.n);
+  set('f_tel',telDig(x.tel)); set('f_dpi',dpiDig(x.dpi));
+  $('f_tipo').value=TIPOS.includes(x.tipo)?x.tipo:'Sin dato';
+  set('f_ing',x.ingreso); set('f_venc',x.venc);
+  set('f_anios',x.anios); set('f_total',x.total||'');
+  set('f_copro',x.copro); set('f_celcopro',telDig(x.cel_copro)); set('f_closer',x.closer);
+  ['f_telerr','f_dpierr','f_ingerr','f_vencerr','f_anioserr','f_totalerr','f_celcoproerr'].forEach(e=>$(e).textContent="");
+  const mot=motivoRevision(x), mb=$('f_motivo');
+  if(mot.length){mb.style.display='block';mb.textContent='⚠️ Por revisar: '+mot.join(' · ');} else mb.style.display='none';
   $('modal').style.display='flex';
 }
 function cerrarModal(){ $('modal').style.display='none'; editId=null; }
 async function guardarEdit(){
   const x=gente.find(g=>g.id===editId); if(!x)return;
-  const tel=$('f_tel').value.replace(/\D/g,''), dpi=$('f_dpi').value.replace(/\D/g,'');
-  $('f_telerr').textContent=""; $('f_dpierr').textContent="";
-  if(tel!=="" && tel.length!==8){ $('f_telerr').textContent="El teléfono debe tener exactamente 8 dígitos (sin el 502)."; return; }
-  if(dpi!=="" && dpi.length!==13){ $('f_dpierr').textContent="El DPI debe tener 13 dígitos."; return; }
-  const nombre=$('f_n').value.trim(), tipo=$('f_tipo').value, venc=$('f_venc').value||null, closer=$('f_closer').value.trim()||null;
-  const body={nombre:nombre||null,celular:tel||null,tipo:tipo,tipo_norm:tipo,vencimiento:venc,closer:closer,dpi:dpi||null};
+  const tel=telDig($('f_tel').value), dpi=dpiDig($('f_dpi').value), celc=telDig($('f_celcopro').value);
+  const tipo=$('f_tipo').value, ing=$('f_ing').value||null, venc=$('f_venc').value||null;
+  const anios=$('f_anios').value.trim(), total=$('f_total').value.trim();
+  const chk=[['f_telerr',VALIDA.tel(tel)],['f_dpierr',VALIDA.dpi(dpi)],['f_celcoproerr',VALIDA.tel(celc)],
+    ['f_ingerr',VALIDA.fecha(ing)],['f_vencerr',VALIDA.fecha(venc)],['f_anioserr',VALIDA.num(anios)],['f_totalerr',VALIDA.num(total)]];
+  let bad=false; chk.forEach(([e,msg])=>{$(e).textContent=msg; if(msg)bad=true;});
+  if(bad) return;
+  const nombre=$('f_n').value.trim(), copro=$('f_copro').value.trim()||null, closer=$('f_closer').value.trim()||null;
+  const body={nombre:nombre||null,celular:tel||null,dpi:dpi||null,tipo:tipo,tipo_norm:tipo,
+    fecha_ingreso:ing,vencimiento:venc,anios_servicio:anios===''?null:Number(anios),
+    total_num:total===''?null:Number(total),copropietario:copro,cel_copro:celc||null,closer:closer};
   const btn=$('msaveBtn'); btn.disabled=true; btn.textContent="Guardando…";
   try{
     await patchSocio(editId,body);
-    Object.assign(x,{n:nombre||"(sin nombre)",tel:tel,tipo:tipo,venc:venc,dv:calcDv(venc),closer:closer,dpi:dpi});
+    Object.assign(x,{n:nombre||"(sin nombre)",tel:tel,dpi:dpi,tipo:tipo,ingreso:ing,venc:venc,dv:calcDv(venc),
+      anios:anios===''?null:Number(anios),total:total===''?0:Number(total),copro:copro,cel_copro:celc,closer:closer});
     calcularBI(); cerrarModal(); kpis(); render(); toast("✅ Guardado");
   }catch(e){ toast("⚠️ No se pudo guardar"); }
   finally{ btn.disabled=false; btn.textContent="Guardar"; }
@@ -330,7 +366,7 @@ const baseOpt=extra=>Object.assign({responsive:true,maintainAspectRatio:false,an
 function tablero(){
   const proxMes=gente.filter(x=>x.dv!=null&&x.dv>=0&&x.dv<=30).length;
   const olaMax=Math.max(0,...Object.entries(BI.vencAnio).filter(([y])=>y>='2028'&&y<='2031').map(([,v])=>v));
-  const alerta=BI.telMal>0?`<div class="insight full" style="border-color:#f3b0ab;background:linear-gradient(135deg,#fdecea,#fff);color:#b3261e">📵 <b>${BI.telMal} socios</b> tienen el teléfono sin validar (no son 8 dígitos). Abrí cada uno en <b>Directorio → Editar</b> para corregirlo; solo con 8 dígitos funciona el WhatsApp/llamada.</div>`:'';
+  const alerta=BI.revisar>0?`<div class="insight full" style="border-color:#f3b0ab;background:linear-gradient(135deg,#fdecea,#fff);color:#b3261e">⚠️ <b>${BI.revisar} socios</b> necesitan revisión (teléfono, DPI, fecha o No. de socio duplicado). <b onclick="verRevisar()" style="cursor:pointer;text-decoration:underline">Ver y corregir</b>.</div>`:'';
   $('tablero').innerHTML=`<div class="grid">
     <div class="insight full">🔔 <b>Lo urgente:</b> ${proxMes} socio(s) vencen en los próximos 30 días · <b>${money(BI.enRiesgo)}</b> en juego a 12 meses. Andá a <b onclick="ir('vencimientos')" style="cursor:pointer;text-decoration:underline">Renovaciones</b>.</div>
     ${alerta}
@@ -360,7 +396,7 @@ function tablero(){
 
 function filtrar(){
   if(tab==='vencimientos'){ const lim=vf===9999?1e9:vf; return gente.filter(x=>x.dv!=null&&x.dv<=lim).sort((a,b)=>a.dv-b.dv); }
-  if(tab==='todos'){ const q=($('buscar').value||'').toLowerCase(); return gente.filter(x=>x.n.toLowerCase().includes(q)); }
+  if(tab==='todos'){ const q=($('buscar').value||'').toLowerCase(); let r=gente.filter(x=>x.n.toLowerCase().includes(q)); if(dirF==='revisar') r=r.filter(necesitaRevision); return r; }
   return [];
 }
 function tarjeta(x,idx){
@@ -371,12 +407,14 @@ function tarjeta(x,idx){
   const tel = ok?`<a class="btn-c tel" href="${telHref(x.tel)}">Llamar</a>`:'';
   const editar=`<button class="btn-c edit" onclick="abrirEdit(${x.id})">✎ Editar</button>`;
   const btns=['contactado','renovó','no responde','no renovó'].map(e=>`<button class="eb ${x.estado===e?'on':''}" onclick="marcar(${x.id},'${e}')">${e}</button>`).join('');
-  return `<div class="card" ${d}><div class="top"><span class="dot ${s.c}"></span><div class="who"><div class="nombre">${esc(x.n)}</div><div class="meta">${telInfo} <span class="chip ${chipTipo(x.tipo)}">${esc(x.tipo)}</span>${x.closer?' · '+esc(x.closer):''}</div></div><div class="der ${s.c}">${s.t}</div></div><div class="acciones">${wa}${tel}${editar}<div class="estados">${btns}</div></div></div>`;
+  return `<div class="card" ${d}><div class="top"><span class="dot ${s.c}"></span><div class="who"><div class="nombre">${esc(x.n)}</div><div class="meta">${telInfo} <span class="chip ${chipTipo(x.tipo)}">${esc(x.tipo)}</span>${x.closer?' · '+esc(x.closer):''}${necesitaRevision(x)?' <span class="warn">⚠️ revisar</span>':''}</div></div><div class="der ${s.c}">${s.t}</div></div><div class="acciones">${wa}${tel}${editar}<div class="estados">${btns}</div></div></div>`;
 }
 function render(){
   $('search').style.display=tab==='todos'?'block':'none';
   $('filtros').innerHTML = tab==='vencimientos'
-    ? [['Vencidos',-1],['30 días',30],['90 días',90],['12 meses',365],['Todos',9999]].map(([t,v])=>`<div class="fb ${vf===v?'on':''}" onclick="vf=${v};render()">${t}</div>`).join('') : '';
+    ? [['Vencidos',-1],['30 días',30],['90 días',90],['12 meses',365],['Todos',9999]].map(([t,v])=>`<div class="fb ${vf===v?'on':''}" onclick="vf=${v};render()">${t}</div>`).join('')
+    : tab==='todos'
+    ? [['Todos','todos'],['⚠️ Revisar ('+BI.revisar+')','revisar']].map(([t,v])=>`<div class="fb ${dirF===v?'on':''}" onclick="dirF='${v}';verLim=60;render()">${t}</div>`).join('') : '';
   const caps={tablero:'📊 Datos REALES de tus '+BI.socios+' socios · calculado en vivo.',
     vencimientos:'Socios por urgencia. Renovación de un toque por WhatsApp.',
     todos:'Directorio de los '+BI.socios+' socios. Buscá y editá.',
