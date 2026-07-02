@@ -121,6 +121,22 @@
   .mcancel{background:#fff;border:1px solid var(--linea)!important;color:var(--tinta)}
   .msave{background:var(--kux);color:#fff}
   .macc button:active{transform:scale(.98)}
+  /* Ficha 360 */
+  .fcard{max-width:520px}
+  .fn{font-size:21px;font-weight:800;color:var(--kux);word-break:break-word;line-height:1.15}
+  .fsec{border-top:1px solid var(--linea);padding:13px 0}
+  .fsec:first-of-type{border-top:none}
+  .fsec h4{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--gris);margin-bottom:8px}
+  .frow{display:flex;justify-content:space-between;gap:12px;font-size:14px;padding:4px 0}
+  .frow>span{color:var(--gris);flex:none} .frow>b{text-align:right;word-break:break-word}
+  .tl{list-style:none;margin:12px 0 0;padding:0}
+  .tli{border-left:2px solid var(--kux-l);padding:0 0 13px 13px;position:relative}
+  .tli:last-child{padding-bottom:0}
+  .tli::before{content:"";position:absolute;left:-5px;top:3px;width:8px;height:8px;border-radius:50%;background:var(--kux)}
+  .tli .tt{font-size:11px;color:var(--gris)} .tli .tc{font-size:14px;margin-top:1px}
+  .fadd{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+  .fadd textarea{width:100%;border:1px solid var(--linea);border-radius:11px;padding:11px 12px;font-size:16px;min-height:58px;outline:none;resize:vertical;font-family:inherit}
+  .fadd textarea:focus{border-color:var(--kux);box-shadow:0 0 0 3px rgba(27,54,93,.1)}
   /* ── TABLET / DESKTOP ── */
   @media (min-width:600px){
     .stats{grid-template-columns:repeat(4,1fr);gap:11px}
@@ -174,6 +190,9 @@
 </div>
 </div>
 
+<!-- Ficha 360 del cliente -->
+<div id="ficha" class="modal" style="display:none"><div class="mcard fcard"><div id="fichaBody"></div><div class="macc"><button class="mcancel" onclick="cerrarFicha()">Cerrar</button></div></div></div>
+
 <div id="toast"></div>
 
 <!-- MODAL editar socio -->
@@ -201,7 +220,7 @@
 const SB_URL="https://tevzfdiumfekvapamovw.supabase.co";
 const SB_PUB="sb_publishable_MMVJjzrA1rHdnMWxl0zeMA_DTDTTGTJ";
 const LS="kux_sesion";
-let SES=null, gente=[], BI={}, tab="tablero", vf=90, dirF="todos", verLim=60, editId=null, charts={};
+let SES=null, USER="equipo", gente=[], BI={}, tab="tablero", vf=90, dirF="todos", verLim=60, editId=null, charts={};
 const HOY=new Date(); HOY.setHours(0,0,0,0);
 
 const $=id=>document.getElementById(id);
@@ -317,7 +336,7 @@ function msgWA(x){
 function marcar(id,val){
   const x=gente.find(g=>g.id===id); if(!x)return; const prev=x.estado;
   x.estado=x.estado===val?"":val; render();
-  patchSocio(id,{estado:x.estado}).then(()=>toast(x.estado?('Marcado: '+val):'Estado limpiado'))
+  patchSocio(id,{estado:x.estado}).then(()=>{ addInter(id,'estado','Estado: '+(x.estado||'(limpiado)')); toast(x.estado?('Marcado: '+val):'Estado limpiado'); })
     .catch(()=>{ x.estado=prev; render(); toast("⚠️ No se pudo guardar"); });
 }
 
@@ -353,6 +372,19 @@ async function guardarEdit(){
   const btn=$('msaveBtn'); btn.disabled=true; btn.textContent="Guardando…";
   try{
     await patchSocio(editId,body);
+    const camb=[];
+    if((nombre||"")!==(x.n==="(sin nombre)"?"":x.n)) camb.push('nombre');
+    if(tel!==telDig(x.tel)) camb.push('teléfono');
+    if(dpi!==dpiDig(x.dpi)) camb.push('DPI');
+    if(tipo!==x.tipo) camb.push('tipo');
+    if((ing||null)!==(x.ingreso||null)) camb.push('ingreso');
+    if((venc||null)!==(x.venc||null)) camb.push('vencimiento');
+    if(String(anios)!==String(x.anios??'')) camb.push('años');
+    if(String(total)!==String(x.total||'')) camb.push('total');
+    if((closer||null)!==(x.closer||null)) camb.push('closer');
+    if((copro||null)!==(x.copro||null)) camb.push('copropietario');
+    if(celc!==telDig(x.cel_copro)) camb.push('tel copro');
+    if(camb.length) addInter(editId,'edicion','Editó: '+camb.join(', '));
     Object.assign(x,{n:nombre||"(sin nombre)",tel:tel,dpi:dpi,tipo:tipo,ingreso:ing,venc:venc,dv:calcDv(venc),
       anios:anios===''?null:Number(anios),total:total===''?0:Number(total),copro:copro,cel_copro:celc,closer:closer});
     calcularBI(); cerrarModal(); kpis(); render(); toast("✅ Guardado");
@@ -407,7 +439,7 @@ function tarjeta(x,idx){
   const tel = ok?`<a class="btn-c tel" href="${telHref(x.tel)}">Llamar</a>`:'';
   const editar=`<button class="btn-c edit" onclick="abrirEdit(${x.id})">✎ Editar</button>`;
   const btns=['contactado','renovó','no responde','no renovó'].map(e=>`<button class="eb ${x.estado===e?'on':''}" onclick="marcar(${x.id},'${e}')">${e}</button>`).join('');
-  return `<div class="card" ${d}><div class="top"><span class="dot ${s.c}"></span><div class="who"><div class="nombre">${esc(x.n)}</div><div class="meta">${telInfo} <span class="chip ${chipTipo(x.tipo)}">${esc(x.tipo)}</span>${x.closer?' · '+esc(x.closer):''}${necesitaRevision(x)?' <span class="warn">⚠️ revisar</span>':''}</div></div><div class="der ${s.c}">${s.t}</div></div><div class="acciones">${wa}${tel}${editar}<div class="estados">${btns}</div></div></div>`;
+  return `<div class="card" ${d}><div class="top"><span class="dot ${s.c}"></span><div class="who"><div class="nombre" onclick="abrirFicha(${x.id})" style="cursor:pointer">${esc(x.n)}</div><div class="meta">${telInfo} <span class="chip ${chipTipo(x.tipo)}">${esc(x.tipo)}</span>${x.closer?' · '+esc(x.closer):''}${necesitaRevision(x)?' <span class="warn">⚠️ revisar</span>':''}</div></div><div class="der ${s.c}">${s.t}</div></div><div class="acciones">${wa}${tel}${editar}<div class="estados">${btns}</div></div></div>`;
 }
 function render(){
   $('search').style.display=tab==='todos'?'block':'none';
@@ -433,9 +465,70 @@ function render(){
 }
 
 // ── Arranque ──
+// ── Ficha 360 + histórico (trazabilidad) ──
+function decodeUser(){ try{ USER=JSON.parse(atob(SES.access_token.split('.')[1])).email||"equipo"; }catch(e){ USER="equipo"; } }
+async function traerInter(sid,reint){
+  try{ const r=await fetch(SB_URL+"/rest/v1/interacciones?socio_id=eq."+sid+"&select=*&order=creado_en.desc&limit=80",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
+    if(r.status===401){ if(!reint && await refrescar()) return traerInter(sid,true); return null; }
+    if(!r.ok) return null; return await r.json(); }catch(e){ return null; }
+}
+async function addInter(sid,tipo,nota,reint){
+  try{ const r=await fetch(SB_URL+"/rest/v1/interacciones",{method:"POST",
+    headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},
+    body:JSON.stringify({socio_id:sid,tipo:tipo,nota:nota||null,usuario:USER})});
+    if(r.status===401){ if(!reint && await refrescar()) return addInter(sid,tipo,nota,true); return false; }
+    return r.ok; }catch(e){ return false; }
+}
+function abrirFicha(id){
+  const x=gente.find(g=>g.id===id); if(!x)return;
+  const ok=telOK(x.tel), okc=telOK(x.cel_copro), s=sem(x.dv);
+  const cont = ok
+    ? `<a class="btn-c wa" target="_blank" rel="noopener" href="${waHref(x.tel)}?text=${encodeURIComponent(msgWA(x))}" onclick="addInter(${x.id},'whatsapp','WhatsApp al titular')">WhatsApp</a><a class="btn-c tel" href="${telHref(x.tel)}" onclick="addInter(${x.id},'llamada','Llamada al titular')">Llamar</a>`
+    : `<span class="warn">sin teléfono válido</span>`;
+  $('fichaBody').innerHTML=`
+    <div class="fn">${esc(x.n)}</div>
+    <div style="margin:5px 0 12px"><span class="chip ${chipTipo(x.tipo)}">${esc(x.tipo)}</span> <span class="der ${s.c}" style="font-size:12px">${s.t}</span>${necesitaRevision(x)?' <span class="warn">⚠️ revisar</span>':''} <span class="tt" style="color:var(--gris);font-size:11px">· Socio #${esc(x.no||'—')}</span></div>
+    <div class="acciones">${cont}<button class="btn-c edit" onclick="cerrarFicha();abrirEdit(${x.id})">✎ Editar</button></div>
+    <div class="fsec"><h4>Membresía</h4>
+      <div class="frow"><span>Tipo</span><b>${esc(x.tipo)}</b></div>
+      <div class="frow"><span>Ingreso</span><b>${x.ingreso?fechaTxt(x.ingreso):'—'}</b></div>
+      <div class="frow"><span>Años de servicio</span><b>${x.anios??'—'}</b></div>
+      <div class="frow"><span>Vence</span><b>${x.venc?fechaTxt(x.venc):'—'}</b></div>
+      <div class="frow"><span>Total</span><b>${x.total?money(x.total):'—'}</b></div>
+    </div>
+    <div class="fsec"><h4>Contacto</h4>
+      <div class="frow"><span>Teléfono</span><b>${ok?fmtTel(x.tel):(x.tel?esc(x.tel)+' ⚠️':'—')}</b></div>
+      <div class="frow"><span>DPI</span><b>${x.dpi?esc(x.dpi):'—'}</b></div>
+      <div class="frow"><span>Copropietario</span><b>${x.copro?esc(x.copro):'—'}</b></div>
+      <div class="frow"><span>Tel. copropietario</span><b>${okc?fmtTel(x.cel_copro):(x.cel_copro?esc(x.cel_copro)+' ⚠️':'—')}</b></div>
+      <div class="frow"><span>Closer / Liner</span><b>${esc(x.closer||'—')} / ${esc(x.liner||'—')}</b></div>
+    </div>
+    <div class="fsec"><h4>Histórico</h4>
+      <div class="fadd"><textarea id="fnota" placeholder="Escribí una nota del cliente…"></textarea></div>
+      <div class="fadd"><button class="btn-c tel" onclick="regInter(${x.id},'nota')">+ Nota</button><button class="btn-c edit" onclick="regInter(${x.id},'llamada')">☎ Registrar llamada</button><button class="btn-c edit" onclick="regInter(${x.id},'whatsapp')">💬 WhatsApp</button></div>
+      <ul class="tl" id="ftl"><li class="tt">Cargando…</li></ul>
+    </div>`;
+  $('ficha').style.display='flex'; cargarHist(id);
+}
+function cerrarFicha(){ $('ficha').style.display='none'; }
+async function cargarHist(id){
+  const data=await traerInter(id), ul=$('ftl'); if(!ul)return;
+  if(data===null){ ul.innerHTML='<li class="tt">El histórico se activa en breve (conectando la base).</li>'; return; }
+  if(!data.length){ ul.innerHTML='<li class="tt">Sin interacciones aún. Registrá la primera arriba.</li>'; return; }
+  const ico={nota:'📝',llamada:'☎',whatsapp:'💬',estado:'🔖',edicion:'✏️',reserva:'🧳'};
+  ul.innerHTML=data.map(i=>`<li class="tli"><div class="tt">${ico[i.tipo]||'•'} ${new Date(i.creado_en).toLocaleString('es-GT',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})} · ${esc(i.usuario||'')}</div><div class="tc">${esc(i.nota||i.tipo)}</div></li>`).join('');
+}
+async function regInter(id,tipo){
+  const ta=$('fnota'), nota=ta?ta.value.trim():'';
+  if(tipo==='nota' && !nota){ toast('Escribí la nota primero'); return; }
+  const texto=nota || {llamada:'Llamada registrada',whatsapp:'Contacto por WhatsApp'}[tipo] || tipo;
+  if(await addInter(id,tipo,texto)){ if(ta)ta.value=''; toast('✅ Registrado'); cargarHist(id); }
+  else toast('⚠️ Histórico aún no disponible');
+}
 async function arrancar(){
   $('gate').style.display='none'; $('app').style.display='none'; $('load').style.display='flex';
   try{
+    decodeUser();
     gente=await traerSocios(); calcularBI();
     $('load').style.display='none'; $('app').style.display='block';
     document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>ir(t.dataset.t));
@@ -446,6 +539,7 @@ async function arrancar(){
 function mostrarLogin(){ $('load').style.display='none'; $('app').style.display='none'; $('gate').style.display='flex'; setTimeout(()=>$('p').focus(),100); }
 $('p').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
 $('modal').addEventListener('click',e=>{if(e.target.id==='modal')cerrarModal();});
+$('ficha').addEventListener('click',e=>{if(e.target.id==='ficha')cerrarFicha();});
 $('modal').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();guardarEdit();}});
 
 (async function init(){ if(await refrescar()){ if(!await arrancar()) mostrarLogin(); } else mostrarLogin(); })();
