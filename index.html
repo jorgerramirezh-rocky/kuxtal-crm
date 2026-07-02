@@ -166,6 +166,7 @@
 <header><button class="out" onclick="salir()">Salir</button><div class="hwrap">
   <div class="logo"><span class="lg">KUXTAL</span><span class="tr">TRAVELS</span><span class="pl">✈</span></div>
   <div class="slogan">Cada destino, una historia · Business Intelligence</div>
+  <div class="slogan" id="rolLabel" style="text-transform:none;letter-spacing:0;opacity:.9"></div>
 </div></header>
 
 <div class="wrap">
@@ -220,7 +221,9 @@
 const SB_URL="https://tevzfdiumfekvapamovw.supabase.co";
 const SB_PUB="sb_publishable_MMVJjzrA1rHdnMWxl0zeMA_DTDTTGTJ";
 const LS="kux_sesion";
-let SES=null, USER="equipo", gente=[], BI={}, tab="tablero", vf=90, dirF="todos", verLim=60, editId=null, charts={};
+let SES=null, USER="equipo", ROLE="invitado", gente=[], BI={}, tab="tablero", vf=90, dirF="todos", verLim=60, editId=null, charts={};
+const EDITORES=['admin','gerente_general','gerente_ventas'];
+const puedeEditar=()=>EDITORES.includes(ROLE);
 const HOY=new Date(); HOY.setHours(0,0,0,0);
 
 const $=id=>document.getElementById(id);
@@ -437,7 +440,7 @@ function tarjeta(x,idx){
   const telInfo = x.tel?(ok?fmtTel(x.tel):`${esc(x.tel)} <span class="warn">revisar ☎</span>`):`<span class="warn">sin teléfono</span>`;
   const wa = ok?`<a class="btn-c wa" target="_blank" rel="noopener" href="${waHref(x.tel)}?text=${encodeURIComponent(msgWA(x))}">WhatsApp</a>`:'';
   const tel = ok?`<a class="btn-c tel" href="${telHref(x.tel)}">Llamar</a>`:'';
-  const editar=`<button class="btn-c edit" onclick="abrirEdit(${x.id})">✎ Editar</button>`;
+  const editar=puedeEditar()?`<button class="btn-c edit" onclick="abrirEdit(${x.id})">✎ Editar</button>`:'';
   const btns=['contactado','renovó','no responde','no renovó'].map(e=>`<button class="eb ${x.estado===e?'on':''}" onclick="marcar(${x.id},'${e}')">${e}</button>`).join('');
   return `<div class="card" ${d}><div class="top"><span class="dot ${s.c}"></span><div class="who"><div class="nombre" onclick="abrirFicha(${x.id})" style="cursor:pointer">${esc(x.n)}</div><div class="meta">${telInfo} <span class="chip ${chipTipo(x.tipo)}">${esc(x.tipo)}</span>${x.closer?' · '+esc(x.closer):''}${necesitaRevision(x)?' <span class="warn">⚠️ revisar</span>':''}</div></div><div class="der ${s.c}">${s.t}</div></div><div class="acciones">${wa}${tel}${editar}<div class="estados">${btns}</div></div></div>`;
 }
@@ -466,7 +469,8 @@ function render(){
 
 // ── Arranque ──
 // ── Ficha 360 + histórico (trazabilidad) ──
-function decodeUser(){ try{ USER=JSON.parse(atob(SES.access_token.split('.')[1])).email||"equipo"; }catch(e){ USER="equipo"; } }
+function decodeUser(){ try{ const d=JSON.parse(atob(SES.access_token.split('.')[1])); USER=d.email||"equipo"; ROLE=(d.app_metadata&&d.app_metadata.role)||"invitado"; }catch(e){ USER="equipo"; ROLE="invitado"; } }
+const rolBonito=r=>({admin:'Admin general',gerente_general:'Gerente general',gerente_ventas:'Gerente de ventas',telemarketing:'Telemarketing',supervisor:'Supervisor',reservaciones:'Reservaciones'}[r]||'Invitado');
 async function traerInter(sid,reint){
   try{ const r=await fetch(SB_URL+"/rest/v1/interacciones?socio_id=eq."+sid+"&select=*&order=creado_en.desc&limit=80",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
     if(r.status===401){ if(!reint && await refrescar()) return traerInter(sid,true); return null; }
@@ -488,7 +492,7 @@ function abrirFicha(id){
   $('fichaBody').innerHTML=`
     <div class="fn">${esc(x.n)}</div>
     <div style="margin:5px 0 12px"><span class="chip ${chipTipo(x.tipo)}">${esc(x.tipo)}</span> <span class="der ${s.c}" style="font-size:12px">${s.t}</span>${necesitaRevision(x)?' <span class="warn">⚠️ revisar</span>':''} <span class="tt" style="color:var(--gris);font-size:11px">· Socio #${esc(x.no||'—')}</span></div>
-    <div class="acciones">${cont}<button class="btn-c edit" onclick="cerrarFicha();abrirEdit(${x.id})">✎ Editar</button></div>
+    <div class="acciones">${cont}${puedeEditar()?`<button class="btn-c edit" onclick="cerrarFicha();abrirEdit(${x.id})">✎ Editar</button>`:''}</div>
     <div class="fsec"><h4>Membresía</h4>
       <div class="frow"><span>Tipo</span><b>${esc(x.tipo)}</b></div>
       <div class="frow"><span>Ingreso</span><b>${x.ingreso?fechaTxt(x.ingreso):'—'}</b></div>
@@ -533,7 +537,7 @@ async function arrancar(){
     $('load').style.display='none'; $('app').style.display='block';
     document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>ir(t.dataset.t));
     $('buscar').oninput=()=>{verLim=60;render()};
-    kpis(); render(); return true;
+    kpis(); render(); $('rolLabel').textContent=USER+' · '+rolBonito(ROLE); return true;
   }catch(e){ $('load').style.display='none'; return false; }
 }
 function mostrarLogin(){ $('load').style.display='none'; $('app').style.display='none'; $('gate').style.display='flex'; setTimeout(()=>$('p').focus(),100); }
