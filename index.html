@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=League+Gothic&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root{--kux:#1b365d;--kux-d:#0f2438;--kux-l:#e9eef5;--lima:#8dc63f;--lima-d:#6f9e12;
     --rojo:#e5484d;--amar:#f2a900;--verde:#22a06b;--gris:#8a94a6;--tinta:#0f2438;--papel:#f4f6f8;--linea:#e6ebef;}
@@ -137,6 +138,17 @@
   .fadd{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
   .fadd textarea{width:100%;border:1px solid var(--linea);border-radius:11px;padding:11px 12px;font-size:16px;min-height:58px;outline:none;resize:vertical;font-family:inherit}
   .fadd textarea:focus{border-color:var(--kux);box-shadow:0 0 0 3px rgba(27,54,93,.1)}
+  /* Kuxtal Club — tarjeta + validación */
+  .tcard{background:linear-gradient(135deg,var(--kux-d),var(--kux),#245078);color:#fff;border-radius:18px;padding:20px;text-align:center;box-shadow:0 12px 30px rgba(15,36,56,.3)}
+  .tcard .tt{font-family:'League Gothic',sans-serif;font-size:26px;letter-spacing:1px}
+  .tcard .tn{font-size:20px;font-weight:800;margin:6px 0;word-break:break-word}
+  .tcard .tv{display:inline-block;background:var(--lima);color:var(--kux-d);font-weight:800;border-radius:8px;padding:3px 12px;font-size:14px}
+  .qrbox{background:#fff;border-radius:14px;padding:14px;display:inline-block;margin:14px 0;box-shadow:0 3px 12px rgba(15,36,56,.1)}
+  .codebig{font-size:26px;font-weight:800;letter-spacing:3px;color:var(--kux);font-variant-numeric:tabular-nums}
+  #valida{position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;padding:24px;color:#fff;text-align:center;background:var(--kux-d)}
+  #valida.ok{background:linear-gradient(135deg,#1a8a52,#22a06b)} #valida.bad{background:linear-gradient(135deg,#b3261e,#e5484d)}
+  #valida .vbig{font-size:64px} #valida .vt{font-size:26px;font-weight:800;margin:10px 0;word-break:break-word} #valida .vs{font-size:16px;opacity:.95}
+  #valida button{margin-top:22px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.45);color:#fff;padding:13px 24px;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px}
   /* ── TABLET / DESKTOP ── */
   @media (min-width:600px){
     .stats{grid-template-columns:repeat(4,1fr);gap:11px}
@@ -193,6 +205,12 @@
 
 <!-- Ficha 360 del cliente -->
 <div id="ficha" class="modal" style="display:none"><div class="mcard fcard"><div id="fichaBody"></div><div class="macc"><button class="mcancel" onclick="cerrarFicha()">Cerrar</button></div></div></div>
+
+<!-- Kuxtal Club: tarjeta + código de beneficio -->
+<div id="tarjeta" class="modal" style="display:none"><div class="mcard fcard"><div id="tarjetaBody"></div><div class="macc"><button class="mcancel" onclick="cerrarTarjeta()">Cerrar</button></div></div></div>
+
+<!-- Pantalla de validación en el local -->
+<div id="valida"><div><div class="vbig" id="vico"></div><div class="vt" id="vt"></div><div class="vs" id="vs"></div><button onclick="cerrarValida()">Listo</button></div></div>
 
 <div id="toast"></div>
 
@@ -264,6 +282,7 @@ async function login(){
   try{
     const d=await sbAuth("token?grant_type=password",{email:u,password:p}); guardarSes(d);
     if(!await arrancar()){ mostrarLogin(); $('lerr').textContent="No se pudieron cargar los datos. Probá de nuevo."; }
+    else if(pendingValidar) validarCodigo(pendingValidar);
   }catch(e){ mostrarLogin(); $('lerr').textContent="Usuario o contraseña incorrectos."; }
   finally{ b.disabled=false; b.textContent="Entrar"; }
 }
@@ -494,7 +513,7 @@ function abrirFicha(id){
   $('fichaBody').innerHTML=`
     <div class="fn">${esc(x.n)}</div>
     <div style="margin:5px 0 12px"><span class="chip ${chipTipo(x.tipo)}">${esc(x.tipo)}</span> <span class="der ${s.c}" style="font-size:12px">${s.t}</span>${necesitaRevision(x)?' <span class="warn">⚠️ revisar</span>':''} <span class="tt" style="color:var(--gris);font-size:11px">· Socio #${esc(x.no||'—')}</span></div>
-    <div class="acciones">${cont}${puedeEditar()?`<button class="btn-c edit" onclick="cerrarFicha();abrirEdit(${x.id})">✎ Editar</button>`:''}</div>
+    <div class="acciones">${cont}<button class="btn-c" style="background:var(--amar)" onclick="cerrarFicha();abrirTarjeta(${x.id})">🎫 Beneficio</button>${puedeEditar()?`<button class="btn-c edit" onclick="cerrarFicha();abrirEdit(${x.id})">✎ Editar</button>`:''}</div>
     <div class="fsec"><h4>Membresía</h4>
       <div class="frow"><span>Tipo</span><b>${esc(x.tipo)}</b></div>
       <div class="frow"><span>Ingreso</span><b>${x.ingreso?fechaTxt(x.ingreso):'—'}</b></div>
@@ -531,6 +550,47 @@ async function regInter(id,tipo){
   if(await addInter(id,tipo,texto)){ if(ta)ta.value=''; toast('✅ Registrado'); cargarHist(id); }
   else toast('⚠️ Histórico aún no disponible');
 }
+// ── Kuxtal Club: tarjeta digital + beneficio + validación ──
+let pendingValidar=null;
+function abrirTarjeta(id){
+  const x=gente.find(g=>g.id===id); if(!x)return;
+  $('tarjetaBody').innerHTML=`
+    <div class="tcard"><div class="tt">KUXTAL TRAVELS ✈</div><div class="tn">${esc(x.n)}</div><span class="tv">${esc(x.tipo)}</span><div style="font-size:11px;opacity:.85;margin-top:6px">Socio #${esc(x.no||'—')}</div></div>
+    <p style="color:var(--gris);font-size:13px;margin:14px 2px 8px;text-align:center">Generá un código de descuento de un solo uso para mostrar en el local.</p>
+    <button class="btn-c tel" style="width:100%" onclick="generarCodigo(${x.id})">🎟️ Generar código de descuento</button>
+    <div id="codeArea" style="text-align:center"></div>`;
+  $('tarjeta').style.display='flex';
+}
+function cerrarTarjeta(){ $('tarjeta').style.display='none'; }
+function randCode(){ const c='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<8;i++) s+=c[Math.floor(Math.random()*c.length)]; return s; }
+async function generarCodigo(id){
+  const codigo=randCode(), expira=new Date(Date.now()+15*60000).toISOString();
+  try{
+    const r=await fetch(SB_URL+"/rest/v1/codigos",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_id:id,codigo:codigo,tipo:'descuento',expira_en:expira})});
+    if(!r.ok) throw 0;
+    const url=location.origin+location.pathname+"?validar="+codigo;
+    $('codeArea').innerHTML=`<div class="qrbox"><div id="qrc"></div></div><div class="codebig">${codigo}</div><div style="color:var(--gris);font-size:12px;margin-top:4px">Vence en 15 min · un solo uso · el local lo escanea</div>`;
+    if(window.QRCode) new QRCode(document.getElementById('qrc'),{text:url,width:190,height:190,correctLevel:QRCode.CorrectLevel.M});
+    addInter(id,'beneficio','Generó código de descuento '+codigo);
+  }catch(e){ toast('⚠️ No se pudo generar'); }
+}
+function showValida(cls,ico,t,s){ const v=$('valida'); v.className=cls; $('vico').textContent=ico; $('vt').textContent=t; $('vs').textContent=s||''; v.style.display='flex'; }
+function cerrarValida(){ $('valida').style.display='none'; history.replaceState(null,'',location.pathname); if($('app').style.display!=='block') location.reload(); }
+async function validarCodigo(codigo){
+  showValida('','⏳','Validando…','');
+  try{
+    const r=await fetch(SB_URL+"/rest/v1/codigos?codigo=eq."+encodeURIComponent(codigo)+"&select=*,socios(nombre,tipo_norm)",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
+    const d=await r.json(), c=d&&d[0];
+    if(!c) return showValida('bad','❌','Código inválido','');
+    if(c.usado) return showValida('bad','⛔','Código ya usado',new Date(c.usado_en).toLocaleString('es-GT'));
+    if(new Date(c.expira_en)<new Date()) return showValida('bad','⌛','Código vencido','Pedile al socio uno nuevo');
+    await fetch(SB_URL+"/rest/v1/codigos?id=eq."+c.id,{method:"PATCH",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({usado:true,usado_en:new Date().toISOString(),usado_por:USER})});
+    await fetch(SB_URL+"/rest/v1/usos",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_id:c.socio_id,tipo:'descuento',codigo:codigo,usuario:USER})});
+    addInter(c.socio_id,'uso','Usó beneficio (descuento) '+codigo);
+    const so=c.socios||{};
+    showValida('ok','✅',(so.tipo_norm||'Socio')+' · '+(so.nombre||''),'Disfrutá tu beneficio 🎉');
+  }catch(e){ showValida('bad','⚠️','No se pudo validar','Reintentá'); }
+}
 async function arrancar(){
   $('gate').style.display='none'; $('app').style.display='none'; $('load').style.display='flex';
   try{
@@ -546,9 +606,14 @@ function mostrarLogin(){ $('load').style.display='none'; $('app').style.display=
 $('p').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
 $('modal').addEventListener('click',e=>{if(e.target.id==='modal')cerrarModal();});
 $('ficha').addEventListener('click',e=>{if(e.target.id==='ficha')cerrarFicha();});
+$('tarjeta').addEventListener('click',e=>{if(e.target.id==='tarjeta')cerrarTarjeta();});
 $('modal').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();guardarEdit();}});
 
-(async function init(){ if(await refrescar()){ if(!await arrancar()) mostrarLogin(); } else mostrarLogin(); })();
+(async function init(){
+  pendingValidar=new URLSearchParams(location.search).get('validar');
+  if(await refrescar()){ if(await arrancar()){ if(pendingValidar) validarCodigo(pendingValidar); } else mostrarLogin(); }
+  else mostrarLogin();
+})();
 </script>
 </body>
 </html>
