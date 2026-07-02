@@ -221,7 +221,7 @@
 const SB_URL="https://tevzfdiumfekvapamovw.supabase.co";
 const SB_PUB="sb_publishable_MMVJjzrA1rHdnMWxl0zeMA_DTDTTGTJ";
 const LS="kux_sesion";
-let SES=null, USER="equipo", ROLE="invitado", gente=[], BI={}, tab="tablero", vf=90, dirF="todos", verLim=60, editId=null, charts={};
+let SES=null, USER="equipo", ROLE="invitado", gente=[], BI={}, tab="tablero", vf=90, dirF="todos", dirTipo="", dirCloser="", verLim=60, editId=null, charts={};
 const EDITORES=['admin','gerente_general','gerente_ventas'];
 const puedeEditar=()=>EDITORES.includes(ROLE);
 const HOY=new Date(); HOY.setHours(0,0,0,0);
@@ -318,7 +318,8 @@ function calcularBI(){
   const ingMes=meses.slice(-12).map(m=>[lbl(m),Math.round(ingMesMap[m])]);
   let acc=0; const acum=meses.map(m=>{acc+=ingMesMap[m];return[lbl(m),Math.round(acc)];}).slice(-12);
   const topCloser=Object.fromEntries(Object.entries(revCloser).sort((a,b)=>b[1]-a[1]).slice(0,6));
-  BI={socios,totalVentas,ticket,porVencer,enRiesgo,telMal,revisar,porTipo,revTipo,revCloser:topCloser,vencAnio,
+  const closers=[...new Set(gente.map(x=>(x.closer||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  BI={socios,totalVentas,ticket,porVencer,enRiesgo,telMal,revisar,closers,porTipo,revTipo,revCloser:topCloser,vencAnio,
     cartera:{'Vigentes':vig,'Vencidos':ven,'Sin fecha':sinf},ingMes,acum};
 }
 
@@ -408,9 +409,9 @@ function tablero(){
     <div class="panel full"><h3>🌊 La ola de renovaciones (socios por año)</h3><div class="sub">Cuántas membresías vencen cada año. Pico 2028-2031 (~${olaMax}/año). Rojo=vencido, amarillo=este año, azul=futuro.</div><div class="canvas-box"><canvas id="c6"></canvas></div></div>
     <div class="panel"><h3>Ingreso por mes (US$)</h3><div class="sub">Por mes de ingreso del socio (últimos 12)</div><div class="canvas-box"><canvas id="c1"></canvas></div></div>
     <div class="panel"><h3>Ingreso acumulado</h3><div class="sub">La curva de crecimiento</div><div class="canvas-box"><canvas id="c2"></canvas></div></div>
-    <div class="panel"><h3>Ingreso por closer (US$)</h3><div class="sub">Quién genera más venta</div><div class="canvas-box"><canvas id="c4"></canvas></div></div>
+    <div class="panel"><h3>Ingreso por closer (US$)</h3><div class="sub">Quién genera más venta · 👆 tocá una barra para filtrar</div><div class="canvas-box"><canvas id="c4"></canvas></div></div>
     <div class="panel"><h3>Ingreso por tipo (US$)</h3><div class="sub">VIP domina la cartera</div><div class="canvas-box"><canvas id="c5"></canvas></div></div>
-    <div class="panel"><h3>Socios por tipo</h3><div class="sub">Cómo se reparte la membresía</div><div class="canvas-box"><canvas id="c9"></canvas></div></div>
+    <div class="panel"><h3>Socios por tipo</h3><div class="sub">Cómo se reparte la membresía · 👆 tocá para filtrar</div><div class="canvas-box"><canvas id="c9"></canvas></div></div>
     <div class="panel"><h3>Estado de la cartera</h3><div class="sub">Vigentes · vencidos · sin fecha</div><div class="canvas-box"><canvas id="c7"></canvas></div></div>
   </div>`;
   Object.values(charts).forEach(c=>c&&c.destroy()); charts={};
@@ -420,9 +421,9 @@ function tablero(){
   charts.c1=new Chart(c1,{type:'bar',data:{labels:BI.ingMes.map(x=>x[0]),datasets:[{data:BI.ingMes.map(x=>x[1]),backgroundColor:gGrad(c1,'#2a5a8a',NAVY),borderRadius:6}]},options:baseOpt({plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>money0(v)}}}})});
   const c2=$('c2').getContext('2d');
   charts.c2=new Chart(c2,{type:'line',data:{labels:BI.acum.map(x=>x[0]),datasets:[{data:BI.acum.map(x=>x[1]),borderColor:LIMA,backgroundColor:gGrad(c2,'rgba(141,198,63,.35)','rgba(141,198,63,0)'),fill:true,tension:.4,pointRadius:0,borderWidth:3}]},options:baseOpt({plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>money0(v)}}}})});
-  charts.c4=new Chart($('c4'),{type:'bar',data:{labels:Object.keys(BI.revCloser),datasets:[{data:Object.values(BI.revCloser),backgroundColor:LIMA,borderRadius:6}]},options:baseOpt({indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>money0(v)}}}})});
+  charts.c4=new Chart($('c4'),{type:'bar',data:{labels:Object.keys(BI.revCloser),datasets:[{data:Object.values(BI.revCloser),backgroundColor:LIMA,borderRadius:6}]},options:baseOpt({onClick:(e,el)=>{if(el.length){dirCloser=Object.keys(BI.revCloser)[el[0].index];dirTipo='';ir('todos');}},indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>money0(v)}}}})});
   charts.c5=new Chart($('c5'),{type:'doughnut',data:{labels:Object.keys(BI.revTipo),datasets:[{data:Object.values(BI.revTipo),backgroundColor:[NAVY,MOR,AMAR,'#c7ccd4','#9aa4b2'],borderWidth:0}]},options:baseOpt({cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:11,font:{size:10}}}}})});
-  charts.c9=new Chart($('c9'),{type:'doughnut',data:{labels:Object.keys(BI.porTipo),datasets:[{data:Object.values(BI.porTipo),backgroundColor:[NAVY,MOR,AMAR,'#c7ccd4','#9aa4b2'],borderWidth:0}]},options:baseOpt({cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:11,font:{size:10}}}}})});
+  charts.c9=new Chart($('c9'),{type:'doughnut',data:{labels:Object.keys(BI.porTipo),datasets:[{data:Object.values(BI.porTipo),backgroundColor:[NAVY,MOR,AMAR,'#c7ccd4','#9aa4b2'],borderWidth:0}]},options:baseOpt({onClick:(e,el)=>{if(el.length){dirTipo=Object.keys(BI.porTipo)[el[0].index];dirCloser='';ir('todos');}},cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:11,font:{size:10}}}}})});
   const vaK=Object.keys(BI.vencAnio).sort();
   charts.c6=new Chart($('c6'),{type:'bar',data:{labels:vaK,datasets:[{data:vaK.map(y=>BI.vencAnio[y]),backgroundColor:vaK.map(y=>{const yy=+y,ty=HOY.getFullYear();return yy<ty?ROJO:yy<=ty+1?AMAR:NAVY;}),borderRadius:6}]},options:baseOpt({plugins:{legend:{display:false}},scales:{y:{ticks:{precision:0}}}})});
   charts.c7=new Chart($('c7'),{type:'doughnut',data:{labels:Object.keys(BI.cartera),datasets:[{data:Object.values(BI.cartera),backgroundColor:['#22a06b',ROJO,'#c7ccd4'],borderWidth:0}]},options:baseOpt({cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:11,font:{size:10}}}}})});
@@ -431,7 +432,7 @@ function tablero(){
 
 function filtrar(){
   if(tab==='vencimientos'){ const lim=vf===9999?1e9:vf; return gente.filter(x=>x.dv!=null&&x.dv<=lim).sort((a,b)=>a.dv-b.dv); }
-  if(tab==='todos'){ const q=($('buscar').value||'').toLowerCase(); let r=gente.filter(x=>x.n.toLowerCase().includes(q)); if(dirF==='revisar') r=r.filter(necesitaRevision); return r; }
+  if(tab==='todos'){ const q=($('buscar').value||'').toLowerCase(); let r=gente.filter(x=>x.n.toLowerCase().includes(q)); if(dirF==='revisar') r=r.filter(necesitaRevision); if(dirTipo) r=r.filter(x=>x.tipo===dirTipo); if(dirCloser) r=r.filter(x=>(x.closer||'').trim()===dirCloser); return r; }
   return [];
 }
 function tarjeta(x,idx){
@@ -449,7 +450,8 @@ function render(){
   $('filtros').innerHTML = tab==='vencimientos'
     ? [['Vencidos',-1],['30 días',30],['90 días',90],['12 meses',365],['Todos',9999]].map(([t,v])=>`<div class="fb ${vf===v?'on':''}" onclick="vf=${v};render()">${t}</div>`).join('')
     : tab==='todos'
-    ? [['Todos','todos'],['⚠️ Revisar ('+BI.revisar+')','revisar']].map(([t,v])=>`<div class="fb ${dirF===v?'on':''}" onclick="dirF='${v}';verLim=60;render()">${t}</div>`).join('') : '';
+    ? `<div class="fb ${dirF==='todos'?'on':''}" onclick="dirF='todos';verLim=60;render()">Todos</div><div class="fb ${dirF==='revisar'?'on':''}" onclick="dirF='revisar';verLim=60;render()">⚠️ Revisar (${BI.revisar})</div><select class="fb" onchange="dirTipo=this.value;verLim=60;render()">${['','VIP','Exclusivo','Gold','Regular','Sin dato'].map(t=>`<option value="${t}" ${dirTipo===t?'selected':''}>${t?('Tipo: '+t):'Tipo: todos'}</option>`).join('')}</select><select class="fb" onchange="dirCloser=this.value;verLim=60;render()"><option value="">Closer: todos</option>${(BI.closers||[]).map(c=>`<option value="${esc(c)}" ${dirCloser===c?'selected':''}>${esc(c)}</option>`).join('')}</select>${(dirTipo||dirCloser)?`<div class="fb" onclick="dirTipo='';dirCloser='';render()">✕ limpiar</div>`:''}`
+    : '';
   const caps={tablero:'📊 Datos REALES de tus '+BI.socios+' socios · calculado en vivo.',
     vencimientos:'Socios por urgencia. Renovación de un toque por WhatsApp.',
     todos:'Directorio de los '+BI.socios+' socios. Buscá y editá.',
