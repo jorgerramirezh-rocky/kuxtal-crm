@@ -24,7 +24,7 @@
   .logo .pl{color:var(--lima);font-size:clamp(17px,5vw,22px);display:inline-block;animation:fly 3.2s ease-in-out infinite}
   @keyframes fly{0%,100%{transform:translate(0,0)}50%{transform:translate(7px,-3px)}}
   header .slogan{color:var(--lima);font-size:clamp(9px,2.6vw,11px);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-top:4px}
-  .out{position:absolute;top:calc(12px + env(safe-area-inset-top));right:12px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;min-height:38px}
+  .out{position:absolute;top:calc(12px + env(safe-area-inset-top));right:12px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:10px;padding:10px 14px;font-size:12px;font-weight:600;cursor:pointer;min-height:44px}
   .out:active{transform:scale(.95)}
   /* ── LAYOUT ── */
   .wrap{max-width:960px;margin:0 auto;padding:0 12px calc(40px + env(safe-area-inset-bottom))}
@@ -42,7 +42,7 @@
   /* TABS */
   .tabs{display:flex;gap:6px;margin:0 0 12px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
   .tabs::-webkit-scrollbar{display:none}
-  .tab{flex:none;padding:10px 15px;border:1px solid var(--linea);background:#fff;border-radius:11px;font-size:13px;font-weight:600;color:var(--gris);cursor:pointer;white-space:nowrap;transition:all .2s;min-height:40px}
+  .tab{flex:none;padding:11px 16px;border:1px solid var(--linea);background:#fff;border-radius:11px;font-size:13px;font-weight:600;color:var(--gris);cursor:pointer;white-space:nowrap;transition:all .2s;min-height:44px}
   .tab.on{background:var(--kux);color:#fff;border-color:var(--kux);box-shadow:0 4px 12px rgba(27,54,93,.28)}
   .tab:active{transform:scale(.97)}
   .search{position:relative;margin-bottom:12px;display:none}
@@ -51,7 +51,7 @@
   .search .ico{position:absolute;left:13px;top:13px;color:var(--gris)}
   .cap{color:var(--gris);font-size:12px;margin:0 2px 12px;line-height:1.45}
   .filtros{display:flex;gap:6px;margin:0 0 12px;flex-wrap:wrap}
-  .fb{border:1px solid var(--linea);background:#fff;border-radius:10px;padding:8px 13px;font-size:12.5px;font-weight:600;color:var(--gris);cursor:pointer;min-height:38px}
+  .fb{border:1px solid var(--linea);background:#fff;border-radius:10px;padding:11px 14px;font-size:12.5px;font-weight:600;color:var(--gris);cursor:pointer;min-height:44px}
   .fb.on{background:var(--kux);color:#fff;border-color:var(--kux)} .fb:active{transform:scale(.97)}
   /* GRID de gráficas: 1 col en cel, 2 en pantalla mayor */
   .grid{display:grid;grid-template-columns:1fr;gap:12px}
@@ -77,7 +77,7 @@
   .btn-c{color:#fff;border:none;border-radius:11px;padding:10px 14px;font-size:13.5px;font-weight:700;cursor:pointer;text-decoration:none;min-height:42px;display:inline-flex;align-items:center;justify-content:center}
   .btn-c:active{transform:scale(.96)} .wa{background:#25d366}.tel{background:var(--kux)} .edit{background:#fff;color:var(--kux);border:1px solid var(--linea)}
   .estados{display:flex;gap:5px;flex-wrap:wrap;margin-left:auto}
-  .eb{border:1px solid var(--linea);background:#fff;border-radius:9px;padding:7px 9px;font-size:11.5px;cursor:pointer;color:var(--tinta);min-height:34px}
+  .eb{border:1px solid var(--linea);background:#fff;border-radius:9px;padding:9px 11px;font-size:11.5px;cursor:pointer;color:var(--tinta);min-height:40px}
   .eb.on{background:var(--kux-l);border-color:var(--kux);color:var(--kux-d);font-weight:700}
   .eb:active{transform:scale(.95)}
   .chip{font-size:10.5px;border-radius:7px;padding:3px 7px;font-weight:700;white-space:nowrap}
@@ -209,7 +209,7 @@ const telOK=t=>telDig(t).length===8;
 const fmtTel=t=>{const d=telDig(t);return d.length===8?d.slice(0,4)+'-'+d.slice(4):(t?esc(t):'—');};
 const waHref=t=>'https://wa.me/502'+telDig(t);
 const telHref=t=>'tel:+502'+telDig(t);
-const calcDv=v=>{if(!v)return null;const d=new Date(v+"T00:00:00");return Math.round((d-HOY)/86400000);};
+const calcDv=v=>{if(!v)return null;const d=new Date(v+"T00:00:00");const n=Math.round((d-HOY)/86400000);return isNaN(n)?null:n;};
 
 // ── Auth ──
 async function sbAuth(path,body){
@@ -343,6 +343,7 @@ function tablero(){
     <div class="panel"><h3>Estado de la cartera</h3><div class="sub">Vigentes · vencidos · sin fecha</div><div class="canvas-box"><canvas id="c7"></canvas></div></div>
   </div>`;
   Object.values(charts).forEach(c=>c&&c.destroy()); charts={};
+  try{
   const NAVY='#1b365d',LIMA='#8dc63f',AMAR='#f2a900',ROJO='#e5484d',MOR='#7d4bc4';
   const c1=$('c1').getContext('2d');
   charts.c1=new Chart(c1,{type:'bar',data:{labels:BI.ingMes.map(x=>x[0]),datasets:[{data:BI.ingMes.map(x=>x[1]),backgroundColor:gGrad(c1,'#2a5a8a',NAVY),borderRadius:6}]},options:baseOpt({plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>money0(v)}}}})});
@@ -354,6 +355,7 @@ function tablero(){
   const vaK=Object.keys(BI.vencAnio).sort();
   charts.c6=new Chart($('c6'),{type:'bar',data:{labels:vaK,datasets:[{data:vaK.map(y=>BI.vencAnio[y]),backgroundColor:vaK.map(y=>{const yy=+y,ty=HOY.getFullYear();return yy<ty?ROJO:yy<=ty+1?AMAR:NAVY;}),borderRadius:6}]},options:baseOpt({plugins:{legend:{display:false}},scales:{y:{ticks:{precision:0}}}})});
   charts.c7=new Chart($('c7'),{type:'doughnut',data:{labels:Object.keys(BI.cartera),datasets:[{data:Object.values(BI.cartera),backgroundColor:['#22a06b',ROJO,'#c7ccd4'],borderWidth:0}]},options:baseOpt({cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:11,font:{size:10}}}}})});
+  }catch(e){console.warn('charts fallaron',e);}
 }
 
 function filtrar(){
@@ -406,6 +408,7 @@ async function arrancar(){
 function mostrarLogin(){ $('load').style.display='none'; $('app').style.display='none'; $('gate').style.display='flex'; setTimeout(()=>$('p').focus(),100); }
 $('p').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
 $('modal').addEventListener('click',e=>{if(e.target.id==='modal')cerrarModal();});
+$('modal').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();guardarEdit();}});
 
 (async function init(){ if(await refrescar()){ if(!await arrancar()) mostrarLogin(); } else mostrarLogin(); })();
 </script>
