@@ -222,6 +222,9 @@
 <!-- Kuxtal Club: tarjeta + código de beneficio -->
 <div id="tarjeta" class="modal" style="display:none"><div class="mcard fcard"><div id="tarjetaBody"></div><div class="macc"><button class="mcancel" onclick="cerrarTarjeta()">Cerrar</button></div></div></div>
 
+<!-- Crear/editar promoción (admin) -->
+<div id="promoModal" class="modal" style="display:none"><div class="mcard"><div id="promoBody"></div></div></div>
+
 <!-- Pantalla de validación en el local -->
 <div id="valida"><div><div class="vbig" id="vico"></div><div class="vt" id="vt"></div><div class="vs" id="vs"></div><button onclick="cerrarValida()">Listo</button></div></div>
 
@@ -332,7 +335,36 @@ async function traerOfertas(){
   catch(e){ return []; }
 }
 function ofertaCard(o){
-  return `<div class="ocard"><div class="oemoji">${esc(o.emoji||'✈️')}</div><div class="obody"><div class="otit">${esc(o.titulo)} ${o.descuento?`<span class="odesc">${esc(o.descuento)}</span>`:''}</div><div class="odescr">${esc(o.descripcion||'')}</div><div class="ometa">${o.tipo_objetivo==='todos'?'Para todos los socios':'Exclusivo '+esc(o.tipo_objetivo)}${o.vigencia_hasta?' · hasta '+fechaTxt(o.vigencia_hasta):''}</div></div></div>`;
+  const del = ROLE==='admin' ? `<button class="eb" style="flex:none;align-self:flex-start" onclick="borrarPromo(${o.id})">✕</button>` : '';
+  return `<div class="ocard"><div class="oemoji">${esc(o.emoji||'✈️')}</div><div class="obody"><div class="otit">${esc(o.titulo)} ${o.descuento?`<span class="odesc">${esc(o.descuento)}</span>`:''}</div><div class="odescr">${esc(o.descripcion||'')}</div><div class="ometa">${o.tipo_objetivo==='todos'?'Para todos los socios':'Exclusivo '+esc(o.tipo_objetivo)}${o.vigencia_hasta?' · hasta '+fechaTxt(o.vigencia_hasta):''}</div></div>${del}</div>`;
+}
+function nuevaPromo(){
+  if(ROLE!=='admin') return;
+  $('promoBody').innerHTML=`<h3>Nueva promoción</h3>
+    <label>Emoji</label><input id="p_emoji" value="✈️" maxlength="4">
+    <label>Título</label><input id="p_tit" placeholder="Ej. Cancún 2x1">
+    <label>Descripción</label><input id="p_desc" placeholder="Detalle del beneficio">
+    <label>Descuento (texto)</label><input id="p_dto" placeholder="Ej. 30%, 2x1, Regalo">
+    <label>Para</label><select id="p_tipo"><option value="todos">Todos los socios</option><option>VIP</option><option>Exclusivo</option><option>Gold</option><option>Regular</option></select>
+    <label>Vigente hasta</label><input id="p_venc" type="date">
+    <div class="ferr" id="p_err"></div>
+    <div class="macc"><button class="mcancel" onclick="cerrarPromo()">Cancelar</button><button class="msave" id="p_save" onclick="guardarPromo()">Crear</button></div>`;
+  $('promoModal').style.display='flex';
+}
+function cerrarPromo(){ $('promoModal').style.display='none'; }
+async function guardarPromo(){
+  const tit=$('p_tit').value.trim(); if(!tit){ $('p_err').textContent='Poné un título.'; return; }
+  const body={emoji:$('p_emoji').value.trim()||'✈️',titulo:tit,descripcion:$('p_desc').value.trim()||null,descuento:$('p_dto').value.trim()||null,tipo_objetivo:$('p_tipo').value,vigencia_hasta:$('p_venc').value||null,activa:true};
+  const btn=$('p_save'); btn.disabled=true; btn.textContent='Creando…';
+  try{ const r=await fetch(SB_URL+"/rest/v1/ofertas",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(body)}); if(!r.ok) throw 0;
+    OFERTAS=await traerOfertas(); cerrarPromo(); render(); toast('✅ Promo creada'); }
+  catch(e){ $('p_err').textContent='No se pudo crear (¿sos admin?).'; }
+  finally{ btn.disabled=false; btn.textContent='Crear'; }
+}
+async function borrarPromo(id){
+  if(ROLE!=='admin' || !confirm('¿Quitar esta promoción?')) return;
+  try{ const r=await fetch(SB_URL+"/rest/v1/ofertas?id=eq."+id,{method:"DELETE",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,Prefer:"return=minimal"}}); if(!r.ok) throw 0;
+    OFERTAS=await traerOfertas(); render(); toast('Promo quitada'); }catch(e){ toast('⚠️ No se pudo'); }
 }
 // ── BI en vivo ──
 function calcularBI(){
@@ -499,7 +531,7 @@ function render(){
   $('cap').textContent=caps[tab]||'';
   if(tab==='tablero'){$('lista').innerHTML='';tablero();return;}
   $('tablero').innerHTML=''; Object.values(charts).forEach(c=>c&&c.destroy()); charts={};
-  if(tab==='promos'){$('lista').innerHTML=OFERTAS.length?OFERTAS.map(ofertaCard).join(''):`<div class="vacio"><span class="em">🎁</span><b>Sin promociones activas</b><p>Cuando publiques ofertas del Club, aparecen acá.</p></div>`;return;}
+  if(tab==='promos'){const nueva=ROLE==='admin'?`<button class="masbtn" style="margin-bottom:10px" onclick="nuevaPromo()">＋ Nueva promoción</button>`:'';$('lista').innerHTML=nueva+(OFERTAS.length?OFERTAS.map(ofertaCard).join(''):`<div class="vacio"><span class="em">🎁</span><b>Sin promociones activas</b><p>${ROLE==='admin'?'Creá la primera con el botón de arriba.':'Pronto habrá novedades.'}</p></div>`);return;}
   if(tab==='leads'){$('lista').innerHTML=`<div class="vacio"><span class="em">🎯</span><b>Aún no capturás prospectos</b><p>Acá van los interesados que todavía no son socios (TMK, redes, referidos). Cuando los registrés, aparecen listos para llamar y dar seguimiento.</p></div>`;return;}
   if(tab==='activacion'){$('lista').innerHTML=`<div class="vacio"><span class="em">🧳</span><b>Falta capturar el "uso del Club"</b><p>Saber qué socios ya viajaron/usaron beneficios revela quiénes están en riesgo de NO renovar — el dato que más mueve los +US$600K de 2028-2031. Cuando lo captures, esta pestaña se enciende sola.</p></div>`;return;}
   let items=filtrar();
@@ -574,26 +606,37 @@ async function regInter(id,tipo){
 }
 // ── Kuxtal Club: tarjeta digital + beneficio + validación ──
 let pendingValidar=null;
-function abrirTarjeta(id){
-  const x=gente.find(g=>g.id===id); if(!x)return;
+function cardHTML(x){
   const anio=x.ingreso?x.ingreso.slice(0,4):'';
-  const misOf=OFERTAS.filter(o=>o.tipo_objetivo==='todos'||o.tipo_objetivo===x.tipo);
-  $('tarjetaBody').innerHTML=`
-    <div class="tcard">
+  const vencido=x.dv!=null&&x.dv<0;
+  const misOf=vencido?[]:OFERTAS.filter(o=>o.tipo_objetivo==='todos'||o.tipo_objetivo===x.tipo);
+  const benef = vencido
+    ? `<div class="ocard" style="border-color:#f3b0ab;background:#fdecea"><div class="oemoji">⏳</div><div class="obody"><div class="otit" style="color:#b3261e">Membresía vencida</div><div class="odescr">Venció el ${fechaTxt(x.venc)}. Renovala para volver a disfrutar tus beneficios.</div></div></div>`
+    : (misOf.length?`<h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--gris);margin:16px 2px 8px">Tus beneficios</h4>${misOf.map(ofertaCard).join('')}`:`<p style="color:var(--gris);font-size:12.5px;text-align:center;margin:14px 2px">No hay promos para tu membresía ahora mismo.</p>`);
+  const gen = vencido ? '' : `<p style="color:var(--gris);font-size:13px;margin:16px 2px 8px;text-align:center">Generá un código de descuento de un solo uso para mostrar en el local.</p><button class="btn-c tel" style="width:100%" onclick="generarCodigo(${x.id})">🎟️ Generar código de descuento</button>`;
+  return `
+    <div class="tcard${x.tipo==='VIP'?' vip':''}">
       <div class="tcard-top"><span class="tt">KUXTAL TRAVELS</span><span class="tplane">✈</span></div>
       <div class="tn">${esc(x.n)}</div>
       <div class="trow"><span class="tv">${esc(x.tipo)}</span><span class="tsince">MIEMBRO${anio?' DESDE '+anio:''}</span></div>
       <div class="tno">N° ${esc(x.no||'—')}</div>
     </div>
-    ${misOf.length?`<h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--gris);margin:16px 2px 8px">Tus beneficios</h4>${misOf.map(ofertaCard).join('')}`:''}
-    <p style="color:var(--gris);font-size:13px;margin:16px 2px 8px;text-align:center">Generá un código de descuento de un solo uso para mostrar en el local.</p>
-    <button class="btn-c tel" style="width:100%" onclick="generarCodigo(${x.id})">🎟️ Generar código de descuento</button>
+    ${benef}${gen}
     <div id="codeArea" style="text-align:center"></div>`;
-  $('tarjeta').style.display='flex';
+}
+function abrirTarjeta(id){ const x=gente.find(g=>g.id===id); if(!x)return; $('tarjetaBody').innerHTML=cardHTML(x); $('tarjeta').style.display='flex'; }
+function mostrarMiembro(){
+  ['.stats','.tabs'].forEach(s=>{const e=document.querySelector(s);if(e)e.style.display='none';});
+  ['search','cap','filtros'].forEach(id=>{const e=$(id);if(e)e.style.display='none';});
+  $('tablero').innerHTML='';
+  const x=gente[0];
+  $('lista').innerHTML = x ? `<div style="max-width:460px;margin:14px auto 0">${cardHTML(x)}</div>` : '<div class="vacio">No encontramos tu membresía.</div>';
 }
 function cerrarTarjeta(){ $('tarjeta').style.display='none'; }
 function randCode(){ const c='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<8;i++) s+=c[Math.floor(Math.random()*c.length)]; return s; }
 async function generarCodigo(id){
+  const gx=gente.find(g=>g.id===id);
+  if(gx&&gx.dv!=null&&gx.dv<0){ toast('Membresía vencida — no aplica'); return; }
   const codigo=randCode(), expira=new Date(Date.now()+15*60000).toISOString();
   try{
     const r=await fetch(SB_URL+"/rest/v1/codigos",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_id:id,codigo:codigo,tipo:'descuento',expira_en:expira})});
@@ -609,11 +652,12 @@ function cerrarValida(){ $('valida').style.display='none'; history.replaceState(
 async function validarCodigo(codigo){
   showValida('','⏳','Validando…','');
   try{
-    const r=await fetch(SB_URL+"/rest/v1/codigos?codigo=eq."+encodeURIComponent(codigo)+"&select=*,socios(nombre,tipo_norm)",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
+    const r=await fetch(SB_URL+"/rest/v1/codigos?codigo=eq."+encodeURIComponent(codigo)+"&select=*,socios(nombre,tipo_norm,vencimiento)",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
     const d=await r.json(), c=d&&d[0];
     if(!c) return showValida('bad','❌','Código inválido','');
     if(c.usado) return showValida('bad','⛔','Código ya usado',new Date(c.usado_en).toLocaleString('es-GT'));
     if(new Date(c.expira_en)<new Date()) return showValida('bad','⌛','Código vencido','Pedile al socio uno nuevo');
+    if(c.socios&&c.socios.vencimiento&&new Date(c.socios.vencimiento)<new Date()) return showValida('bad','⏳','Membresía vencida','Renová para usar beneficios');
     await fetch(SB_URL+"/rest/v1/codigos?id=eq."+c.id,{method:"PATCH",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({usado:true,usado_en:new Date().toISOString(),usado_por:USER})});
     await fetch(SB_URL+"/rest/v1/usos",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_id:c.socio_id,tipo:'descuento',codigo:codigo,usuario:USER})});
     addInter(c.socio_id,'uso','Usó beneficio (descuento) '+codigo);
@@ -629,6 +673,7 @@ async function arrancar(){
     $('load').style.display='none'; $('app').style.display='block';
     document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>ir(t.dataset.t));
     $('buscar').oninput=()=>{verLim=60;render()};
+    if(ROLE==='cliente'){ mostrarMiembro(); $('rolLabel').textContent=USER; return true; }
     kpis(); render(); $('rolLabel').textContent=USER+' · '+rolBonito(ROLE); return true;
   }catch(e){ $('load').style.display='none'; return false; }
 }
@@ -637,6 +682,7 @@ $('p').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
 $('modal').addEventListener('click',e=>{if(e.target.id==='modal')cerrarModal();});
 $('ficha').addEventListener('click',e=>{if(e.target.id==='ficha')cerrarFicha();});
 $('tarjeta').addEventListener('click',e=>{if(e.target.id==='tarjeta')cerrarTarjeta();});
+$('promoModal').addEventListener('click',e=>{if(e.target.id==='promoModal')cerrarPromo();});
 $('modal').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();guardarEdit();}});
 
 (async function init(){
