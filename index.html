@@ -152,9 +152,15 @@
   .ocard{display:flex;gap:12px;align-items:center;background:#fff;border:1px solid var(--linea);border-radius:14px;padding:12px;margin-bottom:8px;box-shadow:0 1px 3px rgba(15,36,56,.04)}
   .oemoji{font-size:26px;flex:none}
   .otit{font-weight:800;color:var(--kux);font-size:15px}
-  .odesc{background:var(--lima);color:var(--kux-d);border-radius:6px;padding:1px 7px;font-size:12px;font-weight:800;margin-left:4px;white-space:nowrap}
+  .odesc{background:linear-gradient(135deg,#f2c94c,#e0a422);color:#3a2a00;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:800;margin-left:4px;white-space:nowrap}
   .odescr{font-size:12.5px;color:var(--tinta);margin-top:2px;line-height:1.4}
   .ometa{font-size:11px;color:var(--gris);margin-top:3px}
+  .obadge{flex:none;align-self:center;font-size:11px;font-weight:800;border-radius:9px;padding:7px 11px;white-space:nowrap;min-height:34px;display:flex;align-items:center}
+  .obadge.use{background:var(--kux);color:#fff}
+  .obadge.used{background:#e9f7ef;color:#1f8a54;border:1px solid #bfe6cf}
+  .ocard.isused{opacity:.72}
+  .bh{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--gris);margin:16px 2px 8px}
+  .tcard.vip{border:1px solid rgba(242,201,76,.55);box-shadow:0 16px 40px rgba(11,28,46,.5),0 0 0 1px rgba(242,201,76,.15) inset}
   .qrbox{background:#fff;border-radius:14px;padding:14px;display:inline-block;margin:14px 0;box-shadow:0 3px 12px rgba(15,36,56,.1)}
   .codebig{font-size:26px;font-weight:800;letter-spacing:3px;color:var(--kux);font-variant-numeric:tabular-nums}
   #valida{position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;padding:24px;color:#fff;text-align:center;background:var(--kux-d)}
@@ -255,7 +261,7 @@
 const SB_URL="https://tevzfdiumfekvapamovw.supabase.co";
 const SB_PUB="sb_publishable_MMVJjzrA1rHdnMWxl0zeMA_DTDTTGTJ";
 const LS="kux_sesion";
-let SES=null, USER="equipo", ROLE="invitado", gente=[], OFERTAS=[], BI={}, tab="tablero", vf=90, dirF="todos", dirTipo="", dirCloser="", verLim=60, editId=null, charts={};
+let SES=null, USER="equipo", ROLE="invitado", gente=[], OFERTAS=[], BI={}, tab="tablero", vf=90, dirF="todos", dirTipo="", dirCloser="", verLim=60, editId=null, cardCtx={sid:null,target:'tarjetaBody'}, charts={};
 const EDITORES=['admin','gerente_general','gerente_ventas'];
 const puedeEditar=()=>EDITORES.includes(ROLE);
 const HOY=new Date(); HOY.setHours(0,0,0,0);
@@ -606,32 +612,65 @@ async function regInter(id,tipo){
 }
 // ── Kuxtal Club: tarjeta digital + beneficio + validación ──
 let pendingValidar=null;
-function cardHTML(x){
+function cardHTML(x,usados){
+  usados=usados||[];
   const anio=x.ingreso?x.ingreso.slice(0,4):'';
   const vencido=x.dv!=null&&x.dv<0;
   const misOf=vencido?[]:OFERTAS.filter(o=>o.tipo_objetivo==='todos'||o.tipo_objetivo===x.tipo);
-  const benef = vencido
-    ? `<div class="ocard" style="border-color:#f3b0ab;background:#fdecea"><div class="oemoji">⏳</div><div class="obody"><div class="otit" style="color:#b3261e">Membresía vencida</div><div class="odescr">Venció el ${fechaTxt(x.venc)}. Renovala para volver a disfrutar tus beneficios.</div></div></div>`
-    : (misOf.length?`<h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--gris);margin:16px 2px 8px">Tus beneficios</h4>${misOf.map(ofertaCard).join('')}`:`<p style="color:var(--gris);font-size:12.5px;text-align:center;margin:14px 2px">No hay promos para tu membresía ahora mismo.</p>`);
-  const gen = vencido ? '' : `<p style="color:var(--gris);font-size:13px;margin:16px 2px 8px;text-align:center">Generá un código de descuento de un solo uso para mostrar en el local.</p><button class="btn-c tel" style="width:100%" onclick="generarCodigo(${x.id})">🎟️ Generar código de descuento</button>`;
-  return `
+  const top=`
     <div class="tcard${x.tipo==='VIP'?' vip':''}">
       <div class="tcard-top"><span class="tt">KUXTAL TRAVELS</span><span class="tplane">✈</span></div>
       <div class="tn">${esc(x.n)}</div>
       <div class="trow"><span class="tv">${esc(x.tipo)}</span><span class="tsince">MIEMBRO${anio?' DESDE '+anio:''}</span></div>
       <div class="tno">N° ${esc(x.no||'—')}</div>
-    </div>
-    ${benef}${gen}
-    <div id="codeArea" style="text-align:center"></div>`;
+    </div>`;
+  let benef;
+  if(vencido) benef=`<div class="ocard" style="border-color:#f3b0ab;background:#fdecea"><div class="oemoji">⏳</div><div class="obody"><div class="otit" style="color:#b3261e">Membresía vencida</div><div class="odescr">Venció el ${fechaTxt(x.venc)}. Renovala para volver a disfrutar tus beneficios.</div></div></div>`;
+  else if(misOf.length) benef=`<h4 class="bh">Tus beneficios</h4>`+misOf.map(o=>ofertaBenef(o,usados.includes(o.id),x.id)).join('');
+  else benef=`<p style="color:var(--gris);font-size:12.5px;text-align:center;margin:14px 2px">No hay promos para tu membresía ahora mismo.</p>`;
+  return top+benef;
 }
-function abrirTarjeta(id){ const x=gente.find(g=>g.id===id); if(!x)return; $('tarjetaBody').innerHTML=cardHTML(x); $('tarjeta').style.display='flex'; }
-function mostrarMiembro(){
+function ofertaBenef(o,usado,sid){
+  const right = usado ? `<span class="obadge used">✅ Usado</span>` : `<span class="obadge use">Usar →</span>`;
+  const attrs = usado ? '' : `onclick="usarPromo(${sid},${o.id})" style="cursor:pointer"`;
+  return `<div class="ocard${usado?' isused':''}" ${attrs}><div class="oemoji">${esc(o.emoji||'✈️')}</div><div class="obody"><div class="otit">${esc(o.titulo)} ${o.descuento?`<span class="odesc">${esc(o.descuento)}</span>`:''}</div><div class="odescr">${esc(o.descripcion||'')}</div><div class="ometa">${o.vigencia_hasta?'Vigente hasta '+fechaTxt(o.vigencia_hasta):''}</div></div>${right}</div>`;
+}
+async function usosDeSocio(sid){ try{ const r=await fetch(SB_URL+"/rest/v1/usos?socio_id=eq."+sid+"&select=oferta_id",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}}); if(!r.ok) return []; return (await r.json()).map(u=>u.oferta_id).filter(v=>v!=null); }catch(e){ return []; } }
+async function renderCard(){ const x=gente.find(g=>g.id===cardCtx.sid); if(!x||!$(cardCtx.target)) return; const usados=await usosDeSocio(x.id); $(cardCtx.target).innerHTML=cardHTML(x,usados); }
+async function abrirTarjeta(id){ cardCtx={sid:id,target:'tarjetaBody'}; $('tarjetaBody').innerHTML='<p style="text-align:center;color:var(--gris);padding:22px">Cargando…</p>'; $('tarjeta').style.display='flex'; await renderCard(); }
+async function mostrarMiembro(){
   ['.stats','.tabs'].forEach(s=>{const e=document.querySelector(s);if(e)e.style.display='none';});
   ['search','cap','filtros'].forEach(id=>{const e=$(id);if(e)e.style.display='none';});
   $('tablero').innerHTML='';
-  const x=gente[0];
-  $('lista').innerHTML = x ? `<div style="max-width:460px;margin:14px auto 0">${cardHTML(x)}</div>` : '<div class="vacio">No encontramos tu membresía.</div>';
+  if(!gente[0]){ $('lista').innerHTML='<div class="vacio">No encontramos tu membresía.</div>'; return; }
+  $('lista').innerHTML='<div id="miembroCard" style="max-width:460px;margin:14px auto 0"></div>';
+  cardCtx={sid:gente[0].id,target:'miembroCard'}; await renderCard();
 }
+async function usarPromo(sid,ofId){
+  const o=OFERTAS.find(x=>x.id===ofId); if(!o) return;
+  if(!confirm(`¿Usar «${o.titulo}»? Se generará tu código para mostrar en el local.`)) return;
+  const codigo=randCode(), expira=new Date(Date.now()+15*60000).toISOString();
+  try{
+    const r=await fetch(SB_URL+"/rest/v1/codigos",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_id:sid,oferta_id:ofId,codigo:codigo,tipo:'descuento',expira_en:expira})});
+    if(!r.ok) throw 0;
+    addInter(sid,'beneficio','Generó código para '+o.titulo+' ('+codigo+')');
+    mostrarQR(o,codigo);
+  }catch(e){ toast('⚠️ No se pudo generar'); }
+}
+function mostrarQR(o,codigo){
+  const url="https://tevzfdiumfekvapamovw.supabase.co/functions/v1/validar?c="+codigo;
+  $(cardCtx.target).innerHTML=`<div style="text-align:center">
+    <div style="font-size:36px">${esc(o.emoji||'🎁')}</div>
+    <h3 style="color:var(--kux);margin:6px 0">${esc(o.titulo)}</h3>
+    ${o.descuento?`<div class="odesc" style="display:inline-block;margin-bottom:10px">${esc(o.descuento)}</div>`:''}
+    <div class="qrbox"><div id="qrc"></div></div>
+    <div class="codebig">${codigo}</div>
+    <div style="color:var(--gris);font-size:12px;margin-top:4px">Mostralo en el local · vence en 15 min · un solo uso</div>
+    <button class="btn-c edit" style="margin-top:14px" onclick="volverTarjeta()">← Volver a mi tarjeta</button>
+  </div>`;
+  if(window.QRCode) new QRCode(document.getElementById('qrc'),{text:url,width:210,height:210,correctLevel:QRCode.CorrectLevel.M});
+}
+function volverTarjeta(){ renderCard(); }
 function cerrarTarjeta(){ $('tarjeta').style.display='none'; }
 function randCode(){ const c='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<8;i++) s+=c[Math.floor(Math.random()*c.length)]; return s; }
 async function generarCodigo(id){
