@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Kuxtal Travels — CRM</title>
+<meta name="theme-color" content="#0f2438">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=League+Gothic&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root{--kux:#1b365d;--kux-d:#0f2438;--kux-l:#e9eef5;--lima:#8dc63f;--lima-d:#6f9e12;
+    --rojo:#e5484d;--amar:#f2a900;--verde:#22a06b;--gris:#8a94a6;--tinta:#0f2438;--papel:#f4f6f8;--linea:#e6ebef;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{max-width:100%;overflow-x:hidden}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--papel);color:var(--tinta);-webkit-font-smoothing:antialiased;font-size:16px}
+  img,canvas{max-width:100%}
+  /* ── HEADER ── */
+  header{position:relative;background:linear-gradient(120deg,var(--kux-d),var(--kux),#245078,var(--kux));background-size:300% 300%;animation:grad 12s ease infinite;color:#fff;padding:14px 14px 20px;padding-top:calc(14px + env(safe-area-inset-top))}
+  @keyframes grad{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+  .hwrap{max-width:960px;margin:0 auto}
+  .logo{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+  .logo .lg{font-family:'League Gothic',sans-serif;font-size:clamp(30px,8vw,40px);line-height:.85;letter-spacing:1px}
+  .logo .tr{font-family:'League Gothic',sans-serif;font-size:clamp(14px,4vw,18px);letter-spacing:4px;opacity:.9}
+  .logo .pl{color:var(--lima);font-size:clamp(17px,5vw,22px);display:inline-block;animation:fly 3.2s ease-in-out infinite}
+  @keyframes fly{0%,100%{transform:translate(0,0)}50%{transform:translate(7px,-3px)}}
+  header .slogan{color:var(--lima);font-size:clamp(9px,2.6vw,11px);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-top:4px}
+  .out{position:absolute;top:calc(12px + env(safe-area-inset-top));right:12px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:10px;padding:10px 14px;font-size:12px;font-weight:600;cursor:pointer;min-height:44px}
+  .out:active{transform:scale(.95)}
+  /* ── LAYOUT ── */
+  .wrap{max-width:960px;margin:0 auto;padding:0 12px calc(40px + env(safe-area-inset-bottom))}
+  /* KPIs: 2 col en cel, 4 en pantalla mayor */
+  .stats{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin:-12px 0 14px}
+  .stat{position:relative;min-width:0;background:#fff;border:1px solid var(--linea);border-radius:15px;padding:12px 8px;text-align:center;box-shadow:0 3px 12px rgba(15,36,56,.06);cursor:pointer;overflow:hidden;transform:translateY(12px);opacity:0;animation:pop .5s ease forwards;transition:transform .18s,box-shadow .18s}
+  .stat:nth-child(1){animation-delay:.05s}.stat:nth-child(2){animation-delay:.12s}.stat:nth-child(3){animation-delay:.19s}.stat:nth-child(4){animation-delay:.26s}
+  @keyframes pop{to{transform:translateY(0);opacity:1}}
+  .stat::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--kux)}
+  .stat.lima::before{background:var(--lima)} .stat.rojo::before{background:var(--rojo)} .stat.gold::before{background:var(--amar)}
+  .stat:hover{transform:translateY(-3px);box-shadow:0 8px 22px rgba(15,36,56,.14)} .stat:active{transform:scale(.98)}
+  .stat b{display:block;font-size:clamp(17px,5.4vw,22px);line-height:1.1;font-variant-numeric:tabular-nums;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stat span{font-size:clamp(9px,2.6vw,11px);color:var(--gris)}
+  .stat.rojo b{color:var(--rojo)} .stat.lima b{color:var(--lima-d)} .stat.gold b{color:#b5820b}
+  /* TABS */
+  .tabs{display:flex;gap:6px;margin:0 0 12px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex:none;padding:11px 16px;border:1px solid var(--linea);background:#fff;border-radius:11px;font-size:13px;font-weight:600;color:var(--gris);cursor:pointer;white-space:nowrap;transition:all .2s;min-height:44px}
+  .tab.on{background:var(--kux);color:#fff;border-color:var(--kux);box-shadow:0 4px 12px rgba(27,54,93,.28)}
+  .tab:active{transform:scale(.97)}
+  .search{position:relative;margin-bottom:12px;display:none}
+  .search input{width:100%;padding:13px 14px 13px 40px;border:1px solid var(--linea);border-radius:12px;font-size:16px;outline:none}
+  .search input:focus{border-color:var(--kux);box-shadow:0 0 0 3px rgba(27,54,93,.1)}
+  .search .ico{position:absolute;left:13px;top:13px;color:var(--gris)}
+  .cap{color:var(--gris);font-size:12px;margin:0 2px 12px;line-height:1.45}
+  .filtros{display:flex;gap:6px;margin:0 0 12px;flex-wrap:wrap}
+  .fb{border:1px solid var(--linea);background:#fff;border-radius:10px;padding:11px 14px;font-size:12.5px;font-weight:600;color:var(--gris);cursor:pointer;min-height:44px}
+  .fb.on{background:var(--kux);color:#fff;border-color:var(--kux)} .fb:active{transform:scale(.97)}
+  /* GRID de gráficas: 1 col en cel, 2 en pantalla mayor */
+  .grid{display:grid;grid-template-columns:1fr;gap:12px}
+  .panel{min-width:0;background:#fff;border:1px solid var(--linea);border-radius:18px;padding:15px;box-shadow:0 3px 14px rgba(15,36,56,.05);opacity:0;transform:translateY(14px);animation:rise .5s ease forwards}
+  .panel.full{grid-column:1/-1}
+  @keyframes rise{to{opacity:1;transform:translateY(0)}}
+  .panel h3{font-size:14px;color:var(--kux);margin-bottom:1px;font-weight:800}
+  .panel .sub{font-size:11px;color:var(--gris);margin-bottom:10px;line-height:1.4}
+  .canvas-box{position:relative;width:100%;height:200px}
+  /* TARJETAS de socio */
+  .card{min-width:0;background:#fff;border:1px solid var(--linea);border-radius:14px;padding:12px 13px;margin-bottom:9px;box-shadow:0 1px 3px rgba(15,36,56,.04);opacity:0;animation:rise .4s ease forwards}
+  .card .top{display:flex;align-items:flex-start;gap:10px}
+  .dot{width:10px;height:10px;border-radius:50%;flex:none;margin-top:5px}
+  .dot.r{background:var(--rojo)}.dot.a{background:var(--amar)}.dot.v{background:var(--verde)}.dot.b{background:var(--lima)}.dot.g{background:var(--gris)}
+  .dot.r{box-shadow:0 0 0 0 rgba(229,72,77,.5);animation:pulse 2s infinite}
+  @keyframes pulse{70%{box-shadow:0 0 0 7px rgba(229,72,77,0)}100%{box-shadow:0 0 0 0 rgba(229,72,77,0)}}
+  .who{min-width:0;flex:1}
+  .nombre{font-weight:700;font-size:15.5px;word-break:break-word}
+  .meta{font-size:12.5px;color:var(--gris);margin-top:2px;word-break:break-word;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .der{text-align:right;font-size:12px;font-weight:700;flex:none;white-space:nowrap}
+  .der.r{color:var(--rojo)}.der.a{color:var(--amar)}.der.v{color:var(--verde)}.der.g{color:var(--gris)}
+  .acciones{display:flex;gap:7px;margin-top:11px;flex-wrap:wrap;align-items:center}
+  .btn-c{color:#fff;border:none;border-radius:11px;padding:10px 14px;font-size:13.5px;font-weight:700;cursor:pointer;text-decoration:none;min-height:42px;display:inline-flex;align-items:center;justify-content:center}
+  .btn-c:active{transform:scale(.96)} .wa{background:#25d366}.tel{background:var(--kux)} .edit{background:#fff;color:var(--kux);border:1px solid var(--linea)}
+  .estados{display:flex;gap:5px;flex-wrap:wrap;margin-left:auto}
+  .eb{border:1px solid var(--linea);background:#fff;border-radius:9px;padding:9px 11px;font-size:11.5px;cursor:pointer;color:var(--tinta);min-height:40px}
+  .eb.on{background:var(--kux-l);border-color:var(--kux);color:var(--kux-d);font-weight:700}
+  .eb:active{transform:scale(.95)}
+  .chip{font-size:10.5px;border-radius:7px;padding:3px 7px;font-weight:700;white-space:nowrap}
+  .chip.vip{background:#eaf3ff;color:var(--kux)}.chip.exc{background:#efe6ff;color:#6b3fb0}.chip.gold{background:#fff3d6;color:#b5820b}.chip.reg{background:#f1f3f5;color:var(--gris)}
+  .warn{background:#fdecea;color:#b3261e;font-size:10.5px;border-radius:7px;padding:3px 7px;font-weight:700}
+  .vacio{text-align:center;color:var(--gris);padding:40px 22px;background:#fff;border:1px dashed var(--linea);border-radius:18px}
+  .vacio .em{font-size:34px;display:block;margin-bottom:8px}
+  .vacio b{color:var(--kux);font-size:16px;display:block;margin-bottom:4px}
+  .vacio p{font-size:13px;line-height:1.5;max-width:360px;margin:0 auto}
+  .insight{background:linear-gradient(135deg,#fffaf0,#fff);border:1px solid #f2d98a;border-radius:16px;padding:13px 15px;font-size:12.5px;color:#7a5f16;line-height:1.5}
+  .insight.full{grid-column:1/-1}
+  .masbtn{display:block;width:100%;padding:13px;margin-top:4px;border:1px solid var(--linea);background:#fff;border-radius:12px;font-size:13px;font-weight:700;color:var(--kux);cursor:pointer;min-height:46px}
+  /* LOGIN */
+  #gate{position:fixed;inset:0;z-index:50;background:linear-gradient(135deg,var(--kux-d),var(--kux),#245078);background-size:300% 300%;animation:grad 12s ease infinite;display:flex;align-items:center;justify-content:center;padding:20px}
+  .lbox{background:#fff;border-radius:22px;padding:30px 24px;width:100%;max-width:360px;box-shadow:0 24px 60px rgba(0,0,0,.35);text-align:center}
+  .lbox .lg{font-family:'League Gothic',sans-serif;font-size:44px;color:var(--kux);line-height:.9}
+  .lbox .tr{font-family:'League Gothic',sans-serif;font-size:16px;letter-spacing:5px;color:var(--lima-d)}
+  .lbox .pl{color:var(--lima);font-size:22px}
+  .lbox p{color:var(--gris);font-size:12.5px;margin:6px 0 20px}
+  .lbox input{width:100%;padding:14px 15px;border:1px solid var(--linea);border-radius:12px;font-size:16px;margin-bottom:11px;outline:none}
+  .lbox input:focus{border-color:var(--kux);box-shadow:0 0 0 3px rgba(27,54,93,.12)}
+  .lbox button{width:100%;padding:15px;border:none;border-radius:12px;background:var(--kux);color:#fff;font-size:16px;font-weight:700;cursor:pointer;min-height:50px}
+  .lbox button:active{transform:scale(.98)} .lbox button:disabled{opacity:.6}
+  .lerr{color:var(--rojo);font-size:12.5px;margin-top:10px;min-height:16px}
+  #load{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:var(--papel);color:var(--gris);font-size:14px}
+  .spin{width:26px;height:26px;border:3px solid var(--kux-l);border-top-color:var(--kux);border-radius:50%;animation:sp .8s linear infinite;margin-right:10px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--kux-d);color:#fff;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:.25s;z-index:70;max-width:90vw;text-align:center}
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  /* MODAL editar */
+  .modal{position:fixed;inset:0;z-index:60;background:rgba(15,36,56,.5);display:flex;align-items:flex-end;justify-content:center;padding:0}
+  .mcard{background:#fff;width:100%;max-width:460px;border-radius:20px 20px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));max-height:92vh;overflow-y:auto;animation:up .28s ease}
+  @keyframes up{from{transform:translateY(30px);opacity:.6}to{transform:translateY(0);opacity:1}}
+  .mcard h3{color:var(--kux);font-size:18px;margin-bottom:14px}
+  .mcard label{display:block;font-size:12px;font-weight:700;color:var(--gris);margin:12px 0 5px}
+  .mcard input,.mcard select{width:100%;padding:12px 13px;border:1px solid var(--linea);border-radius:11px;font-size:16px;outline:none;background:#fff}
+  .mcard input:focus,.mcard select:focus{border-color:var(--kux);box-shadow:0 0 0 3px rgba(27,54,93,.1)}
+  .ferr{color:var(--rojo);font-size:12px;margin-top:5px;min-height:15px}
+  .macc{display:flex;gap:10px;margin-top:20px}
+  .macc button{flex:1;padding:14px;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;min-height:50px;border:none}
+  .mcancel{background:#fff;border:1px solid var(--linea)!important;color:var(--tinta)}
+  .msave{background:var(--kux);color:#fff}
+  .macc button:active{transform:scale(.98)}
+  /* Ficha 360 */
+  .fcard{max-width:520px}
+  .fn{font-size:21px;font-weight:800;color:var(--kux);word-break:break-word;line-height:1.15}
+  .fsec{border-top:1px solid var(--linea);padding:13px 0}
+  .fsec:first-of-type{border-top:none}
+  .fsec h4{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--gris);margin-bottom:8px}
+  .frow{display:flex;justify-content:space-between;gap:12px;font-size:14px;padding:4px 0}
+  .frow>span{color:var(--gris);flex:none} .frow>b{text-align:right;word-break:break-word}
+  .tl{list-style:none;margin:12px 0 0;padding:0}
+  .tli{border-left:2px solid var(--kux-l);padding:0 0 13px 13px;position:relative}
+  .tli:last-child{padding-bottom:0}
+  .tli::before{content:"";position:absolute;left:-5px;top:3px;width:8px;height:8px;border-radius:50%;background:var(--kux)}
+  .tli .tt{font-size:11px;color:var(--gris)} .tli .tc{font-size:14px;margin-top:1px}
+  .fadd{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+  .fadd textarea{width:100%;border:1px solid var(--linea);border-radius:11px;padding:11px 12px;font-size:16px;min-height:58px;outline:none;resize:vertical;font-family:inherit}
+  .fadd textarea:focus{border-color:var(--kux);box-shadow:0 0 0 3px rgba(27,54,93,.1)}
+  /* Kuxtal Club — tarjeta + validación */
+  .tcard{position:relative;overflow:hidden;background:linear-gradient(135deg,#0b1c2e,#1b365d 55%,#2a5f8f);color:#fff;border-radius:20px;padding:22px 20px;box-shadow:0 16px 40px rgba(11,28,46,.45);border:1px solid rgba(255,255,255,.08)}
+  .tcard::after{content:"";position:absolute;top:-40%;right:-25%;width:75%;height:180%;background:radial-gradient(closest-side,rgba(141,198,63,.20),transparent);transform:rotate(20deg);pointer-events:none}
+  .tcard-top{display:flex;justify-content:space-between;align-items:center;position:relative;z-index:1}
+  .tcard .tt{font-family:'League Gothic',sans-serif;font-size:22px;letter-spacing:2px}
+  .tcard .tplane{color:var(--lima);font-size:20px}
+  .tcard .tn{font-size:22px;font-weight:800;margin:18px 0 8px;letter-spacing:.3px;word-break:break-word;position:relative;z-index:1}
+  .tcard .trow{display:flex;align-items:center;gap:10px;position:relative;z-index:1}
+  .tcard .tv{background:linear-gradient(135deg,#f2c94c,#e0a422);color:#3a2a00;font-weight:800;border-radius:8px;padding:3px 12px;font-size:13px;letter-spacing:.5px}
+  .tcard .tsince{font-size:10px;letter-spacing:1.5px;opacity:.75}
+  .tcard .tno{font-size:12px;opacity:.7;margin-top:14px;font-variant-numeric:tabular-nums;letter-spacing:1px;position:relative;z-index:1}
+  .ocard{display:flex;gap:12px;align-items:center;background:#fff;border:1px solid var(--linea);border-radius:14px;padding:12px;margin-bottom:8px;box-shadow:0 1px 3px rgba(15,36,56,.04)}
+  .oemoji{font-size:26px;flex:none}
+  .otit{font-weight:800;color:var(--kux);font-size:15px}
+  .odesc{background:linear-gradient(135deg,#f2c94c,#e0a422);color:#3a2a00;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:800;margin-left:4px;white-space:nowrap}
+  .odescr{font-size:12.5px;color:var(--tinta);margin-top:2px;line-height:1.4}
+  .ometa{font-size:11px;color:var(--gris);margin-top:3px}
+  .obadge{flex:none;align-self:center;font-size:11px;font-weight:800;border-radius:9px;padding:7px 11px;white-space:nowrap;min-height:34px;display:flex;align-items:center}
+  .obadge.use{background:var(--kux);color:#fff}
+  .obadge.used{background:#e9f7ef;color:#1f8a54;border:1px solid #bfe6cf}
+  .ocard.isused{opacity:.72}
+  .bh{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--gris);margin:16px 2px 8px}
+  .tcard.vip{border:1px solid rgba(242,201,76,.55);box-shadow:0 16px 40px rgba(11,28,46,.5),0 0 0 1px rgba(242,201,76,.15) inset}
+  .qrbox{background:#fff;border-radius:14px;padding:14px;display:inline-block;margin:14px 0;box-shadow:0 3px 12px rgba(15,36,56,.1)}
+  .codebig{font-size:26px;font-weight:800;letter-spacing:3px;color:var(--kux);font-variant-numeric:tabular-nums}
+  #valida{position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;padding:24px;color:#fff;text-align:center;background:var(--kux-d)}
+  #valida.ok{background:linear-gradient(135deg,#1a8a52,#22a06b)} #valida.bad{background:linear-gradient(135deg,#b3261e,#e5484d)}
+  #valida .vbig{font-size:64px} #valida .vt{font-size:26px;font-weight:800;margin:10px 0;word-break:break-word} #valida .vs{font-size:16px;opacity:.95}
+  #valida button{margin-top:22px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.45);color:#fff;padding:13px 24px;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px}
+  /* ── TABLET / DESKTOP ── */
+  @media (min-width:600px){
+    .stats{grid-template-columns:repeat(4,1fr);gap:11px}
+    .grid{grid-template-columns:1fr 1fr}
+    .modal{align-items:center;padding:20px}
+    .mcard{border-radius:20px}
+  }
+  @media (min-width:960px){ .canvas-box{height:210px} }
+</style>
+</head>
+<body>
+
+<div id="load"><span class="spin"></span> Cargando…</div>
+
+<div id="gate" style="display:none">
+  <div class="lbox">
+    <div><span class="lg">KUXTAL</span> <span class="tr">TRAVELS</span> <span class="pl">✈</span></div>
+    <p>Panel del equipo · acceso privado</p>
+    <input id="u" type="email" placeholder="Usuario" autocomplete="username" value="equipo@kuxtal.app">
+    <input id="p" type="password" placeholder="Contraseña" autocomplete="current-password">
+    <button id="entrar" onclick="login()">Entrar</button>
+    <div class="lerr" id="lerr"></div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+<header><button class="out" onclick="salir()">Salir</button><div class="hwrap">
+  <div class="logo"><span class="lg">KUXTAL</span><span class="tr">TRAVELS</span><span class="pl">✈</span></div>
+  <div class="slogan">Cada destino, una historia · Business Intelligence</div>
+  <div class="slogan" id="rolLabel" style="text-transform:none;letter-spacing:0;opacity:.9"></div>
+</div></header>
+
+<div class="wrap">
+  <div class="stats">
+    <div class="stat lima" onclick="ir('tablero')"><b id="k1">$0</b><span>Ventas totales</span></div>
+    <div class="stat gold" onclick="ir('tablero')"><b id="k2">$0</b><span>Ticket prom.</span></div>
+    <div class="stat" onclick="ir('todos')"><b id="k3">0</b><span>Socios</span></div>
+    <div class="stat rojo" onclick="ir('vencimientos')"><b id="k4">0</b><span>Por vencer 12m</span></div>
+  </div>
+  <div class="tabs">
+    <div class="tab on" data-t="tablero">Tablero BI</div>
+    <div class="tab" data-t="vencimientos">Renovaciones</div>
+    <div class="tab" data-t="todos">Directorio</div>
+    <div class="tab" data-t="promos">🎁 Promos</div>
+    <div class="tab" data-t="leads">Prospectos</div>
+    <div class="tab" data-t="bot">🤖 Bot &amp; WhatsApp</div>
+    <div class="tab" data-t="activacion">Activación</div>
+  </div>
+  <div class="search" id="search"><span class="ico">🔎</span><input id="buscar" placeholder="Buscar por nombre…"></div>
+  <div class="cap" id="cap"></div>
+  <div id="filtros"></div>
+  <div id="tablero"></div>
+  <div id="lista"></div>
+</div>
+</div>
+
+<!-- Ficha 360 del cliente -->
+<div id="ficha" class="modal" style="display:none"><div class="mcard fcard"><div id="fichaBody"></div><div class="macc"><button class="mcancel" onclick="cerrarFicha()">Cerrar</button></div></div></div>
+
+<!-- Kuxtal Club: tarjeta + código de beneficio -->
+<div id="tarjeta" class="modal" style="display:none"><div class="mcard fcard"><div id="tarjetaBody"></div><div class="macc"><button class="mcancel" onclick="cerrarTarjeta()">Cerrar</button></div></div></div>
+
+<!-- Crear/editar promoción (admin) -->
+<div id="promoModal" class="modal" style="display:none"><div class="mcard"><div id="promoBody"></div></div></div>
+
+<!-- Pantalla de validación en el local -->
+<div id="valida"><div><div class="vbig" id="vico"></div><div class="vt" id="vt"></div><div class="vs" id="vs"></div><button onclick="cerrarValida()">Listo</button></div></div>
+
+<div id="toast"></div>
+
+<!-- MODAL editar socio -->
+<div id="modal" class="modal" style="display:none">
+  <div class="mcard">
+    <h3>Editar socio</h3>
+    <div id="f_motivo" class="warn" style="display:none;margin-bottom:12px;padding:9px 11px;border-radius:9px;font-size:12px"></div>
+    <label>Nombre</label><input id="f_n">
+    <label>Teléfono (8 dígitos, sin 502)</label><input id="f_tel" inputmode="numeric" placeholder="55551234"><div class="ferr" id="f_telerr"></div>
+    <label>DPI (13 dígitos)</label><input id="f_dpi" inputmode="numeric"><div class="ferr" id="f_dpierr"></div>
+    <label>Tipo</label><select id="f_tipo"><option>VIP</option><option>Exclusivo</option><option>Gold</option><option>Regular</option><option>Sin dato</option></select>
+    <label>Fecha de ingreso</label><input id="f_ing" type="date"><div class="ferr" id="f_ingerr"></div>
+    <label>Vence</label><input id="f_venc" type="date"><div class="ferr" id="f_vencerr"></div>
+    <label>Años de servicio</label><input id="f_anios" inputmode="decimal" placeholder="ej. 4"><div class="ferr" id="f_anioserr"></div>
+    <label>Total (US$)</label><input id="f_total" inputmode="decimal" placeholder="ej. 700"><div class="ferr" id="f_totalerr"></div>
+    <label>Copropietario</label><input id="f_copro">
+    <label>Tel. copropietario (8 dígitos)</label><input id="f_celcopro" inputmode="numeric"><div class="ferr" id="f_celcoproerr"></div>
+    <label>Closer</label><input id="f_closer">
+    <div class="macc"><button class="mcancel" onclick="cerrarModal()">Cancelar</button><button class="msave" id="msaveBtn" onclick="guardarEdit()">Guardar</button></div>
+  </div>
+</div>
+
+<script>
+// ── Supabase (llave PÚBLICA; datos protegidos por RLS + login) ──
+const SB_URL="https://tevzfdiumfekvapamovw.supabase.co";
+const SB_PUB="sb_publishable_MMVJjzrA1rHdnMWxl0zeMA_DTDTTGTJ";
+const LS="kux_sesion";
+let SES=null, USER="equipo", ROLE="invitado", gente=[], OFERTAS=[], LEADS=null, cargandoLeads=false, BI={}, tab="tablero", vf=90, dirF="todos", dirTipo="", dirCloser="", verLim=60, editId=null, cardCtx={sid:null,target:'tarjetaBody'}, charts={};
+const EDITORES=['admin','gerente_general','gerente_ventas'];
+const puedeEditar=()=>EDITORES.includes(ROLE);
+const HOY=new Date(); HOY.setHours(0,0,0,0);
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=n=>'$'+Math.round(n||0).toLocaleString('es-GT');
+const money0=n=>{n=Math.round(n||0);return n>=1000?'$'+Math.round(n/1000)+'k':'$'+n;};
+const toast=m=>{const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(t._);t._=setTimeout(()=>t.classList.remove('on'),2200);};
+// teléfono: se guarda el nacional de 8 dígitos; el +502 se agrega solo al marcar/WhatsApp
+const telDig=t=>String(t||'').replace(/\D/g,'');
+const telOK=t=>telDig(t).length===8;
+const fmtTel=t=>{const d=telDig(t);return d.length===8?d.slice(0,4)+'-'+d.slice(4):(t?esc(t):'—');};
+const waHref=t=>'https://wa.me/502'+telDig(t);
+const telHref=t=>'tel:+502'+telDig(t);
+const calcDv=v=>{if(!v)return null;const d=new Date(v+"T00:00:00");const n=Math.round((d-HOY)/86400000);return isNaN(n)?null:n;};
+// ── Tipos de campo (contrato de validación — para no meter datos basura) ──
+const TIPOS=['VIP','Exclusivo','Gold','Regular','Sin dato'];
+const dpiDig=v=>String(v||'').replace(/\D/g,'');
+const dpiOK=v=>{const d=dpiDig(v);return d===''||d.length===13;};
+const VALIDA={
+  tel:v=>{const d=telDig(v);return (d===''||d.length===8)?"":"Teléfono: 8 dígitos (sin 502) o vacío.";},
+  dpi:v=>{const d=dpiDig(v);return (d===''||d.length===13)?"":"DPI: 13 dígitos o vacío.";},
+  tipo:v=>TIPOS.includes(v)?"":"Tipo inválido.",
+  fecha:v=>(!v||/^\d{4}-\d{2}-\d{2}$/.test(v))?"":"Fecha inválida (AAAA-MM-DD).",
+  num:v=>(v===''||v==null||(!isNaN(v)&&Number(v)>=0))?"":"Debe ser un número ≥ 0."
+};
+const motivoRevision=x=>{const m=[];if(x.dup)m.push('No. socio duplicado');if(!telOK(x.tel))m.push('teléfono');if(!dpiOK(x.dpi))m.push('DPI');if(!x.venc)m.push('sin vencimiento');return m;};
+const necesitaRevision=x=>motivoRevision(x).length>0;
+
+// ── Auth ──
+async function sbAuth(path,body){
+  const r=await fetch(SB_URL+"/auth/v1/"+path,{method:"POST",headers:{apikey:SB_PUB,"Content-Type":"application/json"},body:JSON.stringify(body)});
+  const d=await r.json(); if(!r.ok) throw new Error(d.error_description||d.msg||d.message||"Error"); return d;
+}
+async function login(){
+  const b=$('entrar'); if(b.disabled) return;
+  const u=$('u').value.trim(), p=$('p').value;
+  $('lerr').textContent=""; b.disabled=true; b.textContent="Entrando…";
+  try{
+    const d=await sbAuth("token?grant_type=password",{email:u,password:p}); guardarSes(d);
+    if(!await arrancar()){ mostrarLogin(); $('lerr').textContent="No se pudieron cargar los datos. Probá de nuevo."; }
+    else if(pendingValidar) validarCodigo(pendingValidar);
+  }catch(e){ mostrarLogin(); $('lerr').textContent="Usuario o contraseña incorrectos."; }
+  finally{ b.disabled=false; b.textContent="Entrar"; }
+}
+function guardarSes(d){ SES={access_token:d.access_token,refresh_token:d.refresh_token}; localStorage.setItem(LS,JSON.stringify(SES)); }
+function salir(){ localStorage.removeItem(LS); SES=null; location.reload(); }
+async function refrescar(){
+  const raw=localStorage.getItem(LS); if(!raw) return false;
+  try{ const s=JSON.parse(raw); const d=await sbAuth("token?grant_type=refresh_token",{refresh_token:s.refresh_token}); guardarSes(d); return true; }
+  catch(e){ localStorage.removeItem(LS); return false; }
+}
+
+// ── Datos ──
+async function traerSocios(reintento){
+  const r=await fetch(SB_URL+"/rest/v1/socios?select=*&order=vencimiento.asc",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
+  if(r.status===401){ if(!reintento && await refrescar()) return traerSocios(true); throw new Error("sesión vencida"); }
+  const rows=await r.json();
+  const g=rows.map(x=>({id:x.id,no:x.no_socio,n:x.nombre||"(sin nombre)",tel:x.celular,cel_copro:x.cel_copro,
+    copro:x.copropietario,dpi:x.dpi,tipo:x.tipo_norm||"Sin dato",closer:(x.closer_norm||x.closer),liner:x.liner,
+    venc:x.vencimiento,dv:calcDv(x.vencimiento),ingreso:x.fecha_ingreso,anios:x.anios_servicio,
+    total:Number(x.total_num)||0,total_texto:x.total_texto,estado:x.estado||""}));
+  const cnt={}; g.forEach(x=>{if(x.no)cnt[x.no]=(cnt[x.no]||0)+1;});
+  g.forEach(x=>x.dup=!!(x.no&&cnt[x.no]>1));
+  return g;
+}
+async function patchSocio(id,body,reintento){
+  const r=await fetch(SB_URL+"/rest/v1/socios?id=eq."+id,{method:"PATCH",
+    headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(body)});
+  if(r.status===401){ if(!reintento && await refrescar()) return patchSocio(id,body,true); throw 0; }
+  if(!r.ok) throw 0;
+}
+
+async function traerOfertas(){
+  try{ const r=await fetch(SB_URL+"/rest/v1/ofertas?select=*&activa=eq.true&order=creado_en.desc",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}}); if(!r.ok) return []; return await r.json(); }
+  catch(e){ return []; }
+}
+
+// ── Prospectos (leads que capta la web/bot) — conecta el hub ──
+async function traerLeads(reintento){
+  const r=await fetch(SB_URL+"/rest/v1/leads?select=*&order=creado_en.desc",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
+  if(r.status===401){ if(!reintento && await refrescar()) return traerLeads(true); throw new Error("sesión vencida"); }
+  if(!r.ok) return []; return await r.json();
+}
+async function patchLead(id,body,reintento){
+  const r=await fetch(SB_URL+"/rest/v1/leads?id=eq."+id,{method:"PATCH",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(body)});
+  if(r.status===401){ if(!reintento && await refrescar()) return patchLead(id,body,true); throw 0; }
+  if(!r.ok) throw 0;
+}
+function leadWA(tel){ const d=(tel||'').replace(/\D/g,''); const n=(d.length===11&&d.indexOf('502')===0)?d.slice(3):d; return n.length>=8?('https://wa.me/502'+n):'#'; }
+function leadCard(l){
+  const est=l.estado||'nuevo';
+  const badge = est==='convertido'?'<span class="odesc" style="background:#e9f7ef;color:#1a8a52">Ya es socio 🎉</span>'
+    : est==='contactado'?'<span class="odesc" style="background:#eaf3ff;color:#245078">Contactado</span>'
+    : '<span class="odesc" style="background:#fff3d6;color:#7a5f16">Nuevo</span>';
+  let f=''; try{ f=new Date(l.creado_en).toLocaleDateString('es-GT',{day:'2-digit',month:'short'}); }catch(e){}
+  const cerrado = est==='convertido'||est==='contactado';
+  const wa=leadWA(l.telefono);
+  return `<div class="ocard"><div class="oemoji">🎯</div><div class="obody">
+    <div class="otit">${esc(l.nombre||'Interesado')} ${badge}</div>
+    <div class="odescr">📱 ${esc(l.telefono||'—')}${l.email?(' · '+esc(l.email)):''} · vino de ${esc(l.origen||'web')}</div>
+    <div class="ometa">Llegó ${f}</div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      ${wa!=='#'?`<a class="fb" href="${wa}" target="_blank" rel="noopener">💬 WhatsApp</a>`:''}
+      ${!cerrado?`<button class="fb" onclick="marcarLead('${l.id}','contactado')">✅ Contactado</button>`:''}
+      ${est!=='convertido'?`<button class="fb" onclick="marcarLead('${l.id}','convertido')">🎉 Ya es socio</button>`:''}
+      <button class="fb" onclick="marcarLead('${l.id}','descartado')">✕ Descartar</button>
+    </div>
+  </div></div>`;
+}
+async function marcarLead(id,estado){
+  try{ await patchLead(id,{estado});
+    if(estado==='descartado'){ LEADS=(LEADS||[]).filter(x=>x.id!==id); }
+    else { const l=(LEADS||[]).find(x=>x.id===id); if(l) l.estado=estado; }
+    if(typeof toast==='function') toast('Actualizado'); render();
+  }catch(e){ if(typeof toast==='function') toast('No se pudo, probá de nuevo'); }
+}
+// ── Panel del Bot & WhatsApp (administración dentro del CRM) ──
+function botPanel(botLeads){
+  const FN="https://tevzfdiumfekvapamovw.supabase.co/functions/v1/kuxtal-bot";
+  const listado = botLeads.length ? botLeads.map(leadCard).join('')
+    : `<div class="vacio"><span class="em">💬</span><b>El bot aún no captó prospectos por acá</b><p>Cuando WhatsApp esté conectado, los interesados que le escriban aparecen acá solos.</p></div>`;
+  return `
+  <div class="ocard" style="align-items:flex-start"><div class="oemoji">🤖</div><div class="obody">
+    <div class="otit">El asistente de Kuxtal <span class="odesc" style="background:#e9f7ef;color:#1a8a52">Cerebro activo ✓</span> <span class="odesc" style="background:#fff3d6;color:#7a5f16">WhatsApp: por conectar</span></div>
+    <div class="odescr">Ya responde con la voz de Kuxtal (membresías, destinos, Kuxtal Club) y capta interesados directo acá. Falta conectarlo a WhatsApp — los pasos de Meta están abajo.</div>
+  </div></div>
+  <h3 style="margin:18px 0 10px;color:var(--kux)">🎯 Prospectos que captó el bot (${botLeads.length})</h3>
+  ${listado}
+  <h3 style="margin:24px 0 10px;color:var(--kux)">📲 Cómo conectar WhatsApp (guía de Meta)</h3>
+  <div class="ocard"><div class="obody" style="font-size:14.5px;line-height:1.75">
+    <b>1.</b> Entrá a <b>business.facebook.com</b> → creá/entrá a la cuenta Meta Business de Kuxtal.<br>
+    <b>2.</b> Empezá la <b>Verificación del negocio</b> (Centro de seguridad) — <i>es lo más lento, arrancala primero</i>.<br>
+    <b>3.</b> En <b>developers.facebook.com</b> creá una <b>App</b> tipo “Business” y agregale el producto <b>WhatsApp</b>.<br>
+    <b>4.</b> Registrá el <b>número de WhatsApp Business</b> (no puede estar en un WhatsApp normal).<br>
+    <b>5.</b> Copiá 4 datos: <b>Token de acceso</b>, <b>Phone Number ID</b>, <b>App Secret</b>, y elegí un <b>Verify Token</b> (una palabra que inventás).<br>
+    <b>6.</b> Configurá el <b>Webhook</b> con esta URL y suscribí el evento “messages”:<br>
+      <code style="background:var(--kux-l);padding:3px 7px;border-radius:6px;display:inline-block;margin:4px 0;word-break:break-all">${FN}</code><br>
+    <b>7.</b> Pasale esos 4 datos a tu asistente → los conecta y el bot queda <b>vivo en WhatsApp</b>.
+  </div></div>
+  <div class="insight full" style="margin-top:14px">🔒 El cerebro del bot está <b>aislado y protegido</b>: vive en la base de Kuxtal, no comparte datos con nadie. Cuando se ceda, se protege con llave — no se regala.</div>`;
+}
+function ofertaCard(o){
+  const del = ROLE==='admin' ? `<button class="eb" style="flex:none;align-self:flex-start" onclick="borrarPromo(${o.id})">✕</button>` : '';
+  return `<div class="ocard"><div class="oemoji">${esc(o.emoji||'✈️')}</div><div class="obody"><div class="otit">${esc(o.titulo)} ${o.descuento?`<span class="odesc">${esc(o.descuento)}</span>`:''}</div><div class="odescr">${esc(o.descripcion||'')}</div><div class="ometa">${o.tipo_objetivo==='todos'?'Para todos los socios':'Exclusivo '+esc(o.tipo_objetivo)}${o.vigencia_hasta?' · hasta '+fechaTxt(o.vigencia_hasta):''}</div></div>${del}</div>`;
+}
+function nuevaPromo(){
+  if(ROLE!=='admin') return;
+  $('promoBody').innerHTML=`<h3>Nueva promoción</h3>
+    <label>Emoji</label><input id="p_emoji" value="✈️" maxlength="4">
+    <label>Título</label><input id="p_tit" placeholder="Ej. Cancún 2x1">
+    <label>Descripción</label><input id="p_desc" placeholder="Detalle del beneficio">
+    <label>Descuento (texto)</label><input id="p_dto" placeholder="Ej. 30%, 2x1, Regalo">
+    <label>Para</label><select id="p_tipo"><option value="todos">Todos los socios</option><option>VIP</option><option>Exclusivo</option><option>Gold</option><option>Regular</option></select>
+    <label>Vigente hasta</label><input id="p_venc" type="date">
+    <div class="ferr" id="p_err"></div>
+    <div class="macc"><button class="mcancel" onclick="cerrarPromo()">Cancelar</button><button class="msave" id="p_save" onclick="guardarPromo()">Crear</button></div>`;
+  $('promoModal').style.display='flex';
+}
+function cerrarPromo(){ $('promoModal').style.display='none'; }
+async function guardarPromo(){
+  const tit=$('p_tit').value.trim(); if(!tit){ $('p_err').textContent='Poné un título.'; return; }
+  const body={emoji:$('p_emoji').value.trim()||'✈️',titulo:tit,descripcion:$('p_desc').value.trim()||null,descuento:$('p_dto').value.trim()||null,tipo_objetivo:$('p_tipo').value,vigencia_hasta:$('p_venc').value||null,activa:true};
+  const btn=$('p_save'); btn.disabled=true; btn.textContent='Creando…';
+  try{ const r=await fetch(SB_URL+"/rest/v1/ofertas",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(body)}); if(!r.ok) throw 0;
+    OFERTAS=await traerOfertas(); cerrarPromo(); render(); toast('✅ Promo creada'); }
+  catch(e){ $('p_err').textContent='No se pudo crear (¿sos admin?).'; }
+  finally{ btn.disabled=false; btn.textContent='Crear'; }
+}
+async function borrarPromo(id){
+  if(ROLE!=='admin' || !confirm('¿Quitar esta promoción?')) return;
+  try{ const r=await fetch(SB_URL+"/rest/v1/ofertas?id=eq."+id,{method:"DELETE",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,Prefer:"return=minimal"}}); if(!r.ok) throw 0;
+    OFERTAS=await traerOfertas(); render(); toast('Promo quitada'); }catch(e){ toast('⚠️ No se pudo'); }
+}
+// ── BI en vivo ──
+function calcularBI(){
+  const socios=gente.length;
+  const totalVentas=gente.reduce((a,x)=>a+x.total,0);
+  const conMonto=gente.filter(x=>x.total>0).length;
+  const ticket=conMonto?totalVentas/conMonto:0;
+  const porVencer=gente.filter(x=>x.dv!=null&&x.dv>=0&&x.dv<=365).length;
+  const enRiesgo=gente.filter(x=>x.dv!=null&&x.dv>=0&&x.dv<=365).reduce((a,x)=>a+x.total,0);
+  const telMal=gente.filter(x=>!telOK(x.tel)).length;
+  const revisar=gente.filter(necesitaRevision).length;
+  const sum=(f,g)=>{const m={};gente.forEach(x=>{const k=g(x);if(k==null||k==="")return;m[k]=(m[k]||0)+f(x);});return m;};
+  const porTipo=sum(()=>1,x=>x.tipo), revTipo=sum(x=>x.total,x=>x.tipo), revCloser=sum(x=>x.total,x=>(x.closer||"").trim());
+  const vencAnio={}, ingMesMap={}; let vig=0,ven=0,sinf=0;
+  gente.forEach(x=>{
+    if(x.dv==null)sinf++; else if(x.dv<0)ven++; else vig++;
+    if(x.venc){const y=x.venc.slice(0,4);vencAnio[y]=(vencAnio[y]||0)+1;}
+    if(x.ingreso){const m=x.ingreso.slice(0,7);ingMesMap[m]=(ingMesMap[m]||0)+x.total;}
+  });
+  const lbl=m=>{const[y,mo]=m.split("-");return ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"][+mo-1]+" "+y.slice(2);};
+  const meses=Object.keys(ingMesMap).sort();
+  const ingMes=meses.slice(-12).map(m=>[lbl(m),Math.round(ingMesMap[m])]);
+  let acc=0; const acum=meses.map(m=>{acc+=ingMesMap[m];return[lbl(m),Math.round(acc)];}).slice(-12);
+  const topCloser=Object.fromEntries(Object.entries(revCloser).sort((a,b)=>b[1]-a[1]).slice(0,6));
+  const closers=[...new Set(gente.map(x=>(x.closer||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  BI={socios,totalVentas,ticket,porVencer,enRiesgo,telMal,revisar,closers,porTipo,revTipo,revCloser:topCloser,vencAnio,
+    cartera:{'Vigentes':vig,'Vencidos':ven,'Sin fecha':sinf},ingMes,acum};
+}
+
+// ── Render ──
+const chipTipo=t=>({VIP:'vip',Exclusivo:'exc',Gold:'gold'}[t]||'reg');
+const fechaTxt=s=>s?new Date(s+"T00:00:00").toLocaleDateString('es-GT',{day:'numeric',month:'short',year:'numeric'}):'—';
+const sem=dv=>dv==null?{c:'g',t:'Sin fecha'}:dv<0?{c:'r',t:'Venció hace '+(-dv)+'d'}:dv<=30?{c:'r',t:'Vence en '+dv+'d'}:dv<=90?{c:'a',t:'Vence en '+dv+'d'}:{c:'v',t:'Vence '+fechaTxt(vencDe(dv))};
+function vencDe(dv){const d=new Date(HOY);d.setDate(d.getDate()+dv);return d.toISOString().slice(0,10);}
+function ir(t){tab=t;verLim=60;document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x.dataset.t===t));render();}
+function verRevisar(){dirF='revisar';ir('todos');}
+function up(el,to,fmt){const dur=900,t0=performance.now();(function f(t){let p=Math.min(1,(t-t0)/dur);p=1-Math.pow(1-p,3);el.textContent=fmt(to*p);if(p<1)requestAnimationFrame(f);})(t0);}
+function kpis(){up($('k1'),BI.totalVentas,money);up($('k2'),BI.ticket,money);up($('k3'),BI.socios,v=>Math.round(v).toLocaleString('es-GT'));up($('k4'),BI.porVencer,v=>Math.round(v));}
+
+function msgWA(x){
+  if(x.dv!=null&&x.dv<0) return `Hola 👋 Soy de Kuxtal Travels. Tu membresía ${x.tipo} venció el ${fechaTxt(x.venc)} — te ayudamos a reactivarla y seguís viajando con nosotros. ✈️`;
+  return `Hola 👋 Soy de Kuxtal Travels. Tu membresía ${x.tipo} vence el ${fechaTxt(x.venc)}. ¿La renovamos y seguís viajando? 🧳`;
+}
+function marcar(id,val){
+  const x=gente.find(g=>g.id===id); if(!x)return; const prev=x.estado;
+  x.estado=x.estado===val?"":val; render();
+  patchSocio(id,{estado:x.estado}).then(()=>{ addInter(id,'estado','Estado: '+(x.estado||'(limpiado)')); toast(x.estado?('Marcado: '+val):'Estado limpiado'); })
+    .catch(()=>{ x.estado=prev; render(); toast("⚠️ No se pudo guardar"); });
+}
+
+// ── Editar socio ──
+function abrirEdit(id){
+  const x=gente.find(g=>g.id===id); if(!x)return; editId=id;
+  const set=(f,v)=>{$(f).value=v==null?"":v;};
+  set('f_n',x.n==="(sin nombre)"?"":x.n);
+  set('f_tel',telDig(x.tel)); set('f_dpi',dpiDig(x.dpi));
+  $('f_tipo').value=TIPOS.includes(x.tipo)?x.tipo:'Sin dato';
+  set('f_ing',x.ingreso); set('f_venc',x.venc);
+  set('f_anios',x.anios); set('f_total',x.total||'');
+  set('f_copro',x.copro); set('f_celcopro',telDig(x.cel_copro)); set('f_closer',x.closer);
+  ['f_telerr','f_dpierr','f_ingerr','f_vencerr','f_anioserr','f_totalerr','f_celcoproerr'].forEach(e=>$(e).textContent="");
+  const mot=motivoRevision(x), mb=$('f_motivo');
+  if(mot.length){mb.style.display='block';mb.textContent='⚠️ Por revisar: '+mot.join(' · ');} else mb.style.display='none';
+  $('modal').style.display='flex';
+}
+function cerrarModal(){ $('modal').style.display='none'; editId=null; }
+async function guardarEdit(){
+  const x=gente.find(g=>g.id===editId); if(!x)return;
+  const tel=telDig($('f_tel').value), dpi=dpiDig($('f_dpi').value), celc=telDig($('f_celcopro').value);
+  const tipo=$('f_tipo').value, ing=$('f_ing').value||null, venc=$('f_venc').value||null;
+  const anios=$('f_anios').value.trim(), total=$('f_total').value.trim();
+  const chk=[['f_telerr',VALIDA.tel(tel)],['f_dpierr',VALIDA.dpi(dpi)],['f_celcoproerr',VALIDA.tel(celc)],
+    ['f_ingerr',VALIDA.fecha(ing)],['f_vencerr',VALIDA.fecha(venc)],['f_anioserr',VALIDA.num(anios)],['f_totalerr',VALIDA.num(total)]];
+  let bad=false; chk.forEach(([e,msg])=>{$(e).textContent=msg; if(msg)bad=true;});
+  if(bad) return;
+  const nombre=$('f_n').value.trim(), copro=$('f_copro').value.trim()||null, closer=$('f_closer').value.trim()||null;
+  const body={nombre:nombre||null,celular:tel||null,dpi:dpi||null,tipo:tipo,tipo_norm:tipo,
+    fecha_ingreso:ing,vencimiento:venc,anios_servicio:anios===''?null:Number(anios),
+    total_num:total===''?null:Number(total),copropietario:copro,cel_copro:celc||null,closer:closer,closer_norm:closer};
+  const btn=$('msaveBtn'); btn.disabled=true; btn.textContent="Guardando…";
+  try{
+    await patchSocio(editId,body);
+    const camb=[];
+    if((nombre||"")!==(x.n==="(sin nombre)"?"":x.n)) camb.push('nombre');
+    if(tel!==telDig(x.tel)) camb.push('teléfono');
+    if(dpi!==dpiDig(x.dpi)) camb.push('DPI');
+    if(tipo!==x.tipo) camb.push('tipo');
+    if((ing||null)!==(x.ingreso||null)) camb.push('ingreso');
+    if((venc||null)!==(x.venc||null)) camb.push('vencimiento');
+    if(String(anios)!==String(x.anios??'')) camb.push('años');
+    if(String(total)!==String(x.total||'')) camb.push('total');
+    if((closer||null)!==(x.closer||null)) camb.push('closer');
+    if((copro||null)!==(x.copro||null)) camb.push('copropietario');
+    if(celc!==telDig(x.cel_copro)) camb.push('tel copro');
+    if(camb.length) addInter(editId,'edicion','Editó: '+camb.join(', '));
+    Object.assign(x,{n:nombre||"(sin nombre)",tel:tel,dpi:dpi,tipo:tipo,ingreso:ing,venc:venc,dv:calcDv(venc),
+      anios:anios===''?null:Number(anios),total:total===''?0:Number(total),copro:copro,cel_copro:celc,closer:closer});
+    calcularBI(); cerrarModal(); kpis(); render(); toast("✅ Guardado");
+  }catch(e){ toast("⚠️ No se pudo guardar"); }
+  finally{ btn.disabled=false; btn.textContent="Guardar"; }
+}
+
+// ── Charts ──
+const gGrad=(ctx,c1,c2)=>{const g=ctx.createLinearGradient(0,0,0,200);g.addColorStop(0,c1);g.addColorStop(1,c2);return g;};
+const baseOpt=extra=>Object.assign({responsive:true,maintainAspectRatio:false,animation:{duration:900,easing:'easeOutQuart'}},extra);
+function tablero(){
+  const proxMes=gente.filter(x=>x.dv!=null&&x.dv>=0&&x.dv<=30).length;
+  const olaMax=Math.max(0,...Object.entries(BI.vencAnio).filter(([y])=>y>='2028'&&y<='2031').map(([,v])=>v));
+  const alerta=BI.revisar>0?`<div class="insight full" style="border-color:#f3b0ab;background:linear-gradient(135deg,#fdecea,#fff);color:#b3261e">⚠️ <b>${BI.revisar} socios</b> necesitan revisión (teléfono, DPI, fecha o No. de socio duplicado). <b onclick="verRevisar()" style="cursor:pointer;text-decoration:underline">Ver y corregir</b>.</div>`:'';
+  $('tablero').innerHTML=`<div class="grid">
+    <div class="insight full">🔔 <b>Lo urgente:</b> ${proxMes} socio(s) vencen en los próximos 30 días · <b>${money(BI.enRiesgo)}</b> en juego a 12 meses. Andá a <b onclick="ir('vencimientos')" style="cursor:pointer;text-decoration:underline">Renovaciones</b>.</div>
+    ${alerta}
+    <div class="panel full"><h3>🌊 La ola de renovaciones (socios por año)</h3><div class="sub">Cuántas membresías vencen cada año. Pico 2028-2031 (~${olaMax}/año). Rojo=vencido, amarillo=este año, azul=futuro.</div><div class="canvas-box"><canvas id="c6"></canvas></div></div>
+    <div class="panel"><h3>Ingreso por mes (US$)</h3><div class="sub">Por mes de ingreso del socio (últimos 12)</div><div class="canvas-box"><canvas id="c1"></canvas></div></div>
+    <div class="panel"><h3>Ingreso acumulado</h3><div class="sub">La curva de crecimiento</div><div class="canvas-box"><canvas id="c2"></canvas></div></div>
+    <div class="panel"><h3>Ingreso por closer (US$)</h3><div class="sub">Quién genera más venta · 👆 tocá una barra para filtrar</div><div class="canvas-box"><canvas id="c4"></canvas></div></div>
+    <div class="panel"><h3>Ingreso por tipo (US$)</h3><div class="sub">VIP domina la cartera</div><div class="canvas-box"><canvas id="c5"></canvas></div></div>
+    <div class="panel"><h3>Socios por tipo</h3><div class="sub">Cómo se reparte la membresía · 👆 tocá para filtrar</div><div class="canvas-box"><canvas id="c9"></canvas></div></div>
+    <div class="panel"><h3>Estado de la cartera</h3><div class="sub">Vigentes · vencidos · sin fecha</div><div class="canvas-box"><canvas id="c7"></canvas></div></div>
+  </div>`;
+  Object.values(charts).forEach(c=>c&&c.destroy()); charts={};
+  try{
+  const NAVY='#1b365d',LIMA='#8dc63f',AMAR='#f2a900',ROJO='#e5484d',MOR='#7d4bc4';
+  const c1=$('c1').getContext('2d');
+  charts.c1=new Chart(c1,{type:'bar',data:{labels:BI.ingMes.map(x=>x[0]),datasets:[{data:BI.ingMes.map(x=>x[1]),backgroundColor:gGrad(c1,'#2a5a8a',NAVY),borderRadius:6}]},options:baseOpt({plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>money0(v)}}}})});
+  const c2=$('c2').getContext('2d');
+  charts.c2=new Chart(c2,{type:'line',data:{labels:BI.acum.map(x=>x[0]),datasets:[{data:BI.acum.map(x=>x[1]),borderColor:LIMA,backgroundColor:gGrad(c2,'rgba(141,198,63,.35)','rgba(141,198,63,0)'),fill:true,tension:.4,pointRadius:0,borderWidth:3}]},options:baseOpt({plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>money0(v)}}}})});
+  charts.c4=new Chart($('c4'),{type:'bar',data:{labels:Object.keys(BI.revCloser),datasets:[{data:Object.values(BI.revCloser),backgroundColor:LIMA,borderRadius:6}]},options:baseOpt({onClick:(e,el)=>{if(el.length){dirCloser=Object.keys(BI.revCloser)[el[0].index];dirTipo='';ir('todos');}},indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>money0(v)}}}})});
+  charts.c5=new Chart($('c5'),{type:'doughnut',data:{labels:Object.keys(BI.revTipo),datasets:[{data:Object.values(BI.revTipo),backgroundColor:[NAVY,MOR,AMAR,'#c7ccd4','#9aa4b2'],borderWidth:0}]},options:baseOpt({cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:11,font:{size:10}}}}})});
+  charts.c9=new Chart($('c9'),{type:'doughnut',data:{labels:Object.keys(BI.porTipo),datasets:[{data:Object.values(BI.porTipo),backgroundColor:[NAVY,MOR,AMAR,'#c7ccd4','#9aa4b2'],borderWidth:0}]},options:baseOpt({onClick:(e,el)=>{if(el.length){dirTipo=Object.keys(BI.porTipo)[el[0].index];dirCloser='';ir('todos');}},cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:11,font:{size:10}}}}})});
+  const vaK=Object.keys(BI.vencAnio).sort();
+  charts.c6=new Chart($('c6'),{type:'bar',data:{labels:vaK,datasets:[{data:vaK.map(y=>BI.vencAnio[y]),backgroundColor:vaK.map(y=>{const yy=+y,ty=HOY.getFullYear();return yy<ty?ROJO:yy<=ty+1?AMAR:NAVY;}),borderRadius:6}]},options:baseOpt({plugins:{legend:{display:false}},scales:{y:{ticks:{precision:0}}}})});
+  charts.c7=new Chart($('c7'),{type:'doughnut',data:{labels:Object.keys(BI.cartera),datasets:[{data:Object.values(BI.cartera),backgroundColor:['#22a06b',ROJO,'#c7ccd4'],borderWidth:0}]},options:baseOpt({cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:11,font:{size:10}}}}})});
+  }catch(e){console.warn('charts fallaron',e);}
+}
+
+function filtrar(){
+  if(tab==='vencimientos'){ const lim=vf===9999?1e9:vf; return gente.filter(x=>x.dv!=null&&x.dv<=lim).sort((a,b)=>a.dv-b.dv); }
+  if(tab==='todos'){ const q=($('buscar').value||'').toLowerCase(); let r=gente.filter(x=>x.n.toLowerCase().includes(q)); if(dirF==='revisar') r=r.filter(necesitaRevision); if(dirTipo) r=r.filter(x=>x.tipo===dirTipo); if(dirCloser) r=r.filter(x=>(x.closer||'').trim()===dirCloser); return r; }
+  return [];
+}
+function tarjeta(x,idx){
+  const s=sem(x.dv), d=`style="animation-delay:${Math.min(idx,20)*30}ms"`;
+  const ok=telOK(x.tel);
+  const telInfo = x.tel?(ok?fmtTel(x.tel):`${esc(x.tel)} <span class="warn">revisar ☎</span>`):`<span class="warn">sin teléfono</span>`;
+  const wa = ok?`<a class="btn-c wa" target="_blank" rel="noopener" href="${waHref(x.tel)}?text=${encodeURIComponent(msgWA(x))}">WhatsApp</a>`:'';
+  const tel = ok?`<a class="btn-c tel" href="${telHref(x.tel)}">Llamar</a>`:'';
+  const editar=puedeEditar()?`<button class="btn-c edit" onclick="abrirEdit(${x.id})">✎ Editar</button>`:'';
+  const btns=['contactado','renovó','no responde','no renovó'].map(e=>`<button class="eb ${x.estado===e?'on':''}" onclick="marcar(${x.id},'${e}')">${e}</button>`).join('');
+  return `<div class="card" ${d}><div class="top"><span class="dot ${s.c}"></span><div class="who"><div class="nombre" onclick="abrirFicha(${x.id})" style="cursor:pointer">${esc(x.n)}</div><div class="meta">${telInfo} <span class="chip ${chipTipo(x.tipo)}">${esc(x.tipo)}</span>${x.closer?' · '+esc(x.closer):''}${necesitaRevision(x)?' <span class="warn">⚠️ revisar</span>':''}</div></div><div class="der ${s.c}">${s.t}</div></div><div class="acciones">${wa}${tel}${editar}<div class="estados">${btns}</div></div></div>`;
+}
+function render(){
+  $('search').style.display=tab==='todos'?'block':'none';
+  $('filtros').innerHTML = tab==='vencimientos'
+    ? [['Vencidos',-1],['30 días',30],['90 días',90],['12 meses',365],['Todos',9999]].map(([t,v])=>`<div class="fb ${vf===v?'on':''}" onclick="vf=${v};render()">${t}</div>`).join('')
+    : tab==='todos'
+    ? `<div class="fb ${dirF==='todos'?'on':''}" onclick="dirF='todos';verLim=60;render()">Todos</div><div class="fb ${dirF==='revisar'?'on':''}" onclick="dirF='revisar';verLim=60;render()">⚠️ Revisar (${BI.revisar})</div><select class="fb" onchange="dirTipo=this.value;verLim=60;render()">${['','VIP','Exclusivo','Gold','Regular','Sin dato'].map(t=>`<option value="${t}" ${dirTipo===t?'selected':''}>${t?('Tipo: '+t):'Tipo: todos'}</option>`).join('')}</select><select class="fb" onchange="dirCloser=this.value;verLim=60;render()"><option value="">Closer: todos</option>${(BI.closers||[]).map(c=>`<option value="${esc(c)}" ${dirCloser===c?'selected':''}>${esc(c)}</option>`).join('')}</select>${(dirTipo||dirCloser)?`<div class="fb" onclick="dirTipo='';dirCloser='';render()">✕ limpiar</div>`:''}`
+    : '';
+  const caps={tablero:'📊 Datos REALES de tus '+BI.socios+' socios · calculado en vivo.',
+    vencimientos:'Socios por urgencia. Renovación de un toque por WhatsApp.',
+    todos:'Directorio de los '+BI.socios+' socios. Buscá y editá.',
+    promos:'🎁 Promociones activas del Club.',
+    leads:'Interesados que dejan sus datos en la web · llamalos y dales seguimiento.',bot:'El asistente de WhatsApp de Kuxtal: estado, prospectos que captó y cómo conectarlo.',activacion:'Uso del Club por socio (por capturar).'};
+  $('cap').textContent=caps[tab]||'';
+  if(tab==='tablero'){$('lista').innerHTML='';tablero();return;}
+  $('tablero').innerHTML=''; Object.values(charts).forEach(c=>c&&c.destroy()); charts={};
+  if(tab==='promos'){const nueva=ROLE==='admin'?`<button class="masbtn" style="margin-bottom:10px" onclick="nuevaPromo()">＋ Nueva promoción</button>`:'';$('lista').innerHTML=nueva+(OFERTAS.length?OFERTAS.map(ofertaCard).join(''):`<div class="vacio"><span class="em">🎁</span><b>Sin promociones activas</b><p>${ROLE==='admin'?'Creá la primera con el botón de arriba.':'Pronto habrá novedades.'}</p></div>`);return;}
+  if(tab==='leads'){
+    if(LEADS===null){
+      if(!cargandoLeads){
+        cargandoLeads=true; $('lista').innerHTML='<div class="vacio"><span class="spin"></span> Cargando prospectos…</div>';
+        traerLeads().then(rows=>{LEADS=rows;cargandoLeads=false;if(tab==='leads'||tab==='bot')render();})
+          .catch(()=>{cargandoLeads=false;/* LEADS sigue null → reintenta al reentrar */ if(tab==='leads'||tab==='bot')$('lista').innerHTML=`<div class="vacio"><span class="em">😕</span><b>No pude cargar los prospectos</b><p>Puede ser la conexión. <b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;});
+      }
+      return;
+    }
+    const act=LEADS.filter(l=>l.estado!=='descartado');
+    if(!act.length){ $('lista').innerHTML=`<div class="vacio"><span class="em">🎯</span><b>Sin prospectos por ahora</b><p>Acá caen SOLOS los interesados que dejan sus datos en la web de Kuxtal. Cuando llegue uno, aparece listo para llamarlo por WhatsApp y darle seguimiento.</p></div>`; return; }
+    $('lista').innerHTML=act.map(leadCard).join('');
+    return;
+  }
+  if(tab==='bot'){
+    if(LEADS===null){
+      if(!cargandoLeads){ cargandoLeads=true; $('lista').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>'; traerLeads().then(rows=>{LEADS=rows;cargandoLeads=false;if(tab==='leads'||tab==='bot')render();}).catch(()=>{cargandoLeads=false;if(tab==='leads'||tab==='bot')$('lista').innerHTML=`<div class="vacio"><span class="em">😕</span><b>No pude cargar</b><p><b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;}); }
+      return;
+    }
+    const botLeads=LEADS.filter(l=>l.origen==='bot'&&l.estado!=='descartado');
+    $('lista').innerHTML=botPanel(botLeads);
+    return;
+  }
+  if(tab==='activacion'){$('lista').innerHTML=`<div class="vacio"><span class="em">🧳</span><b>Falta capturar el "uso del Club"</b><p>Saber qué socios ya viajaron/usaron beneficios revela quiénes están en riesgo de NO renovar — el dato que más mueve los +US$600K de 2028-2031. Cuando lo captures, esta pestaña se enciende sola.</p></div>`;return;}
+  let items=filtrar();
+  if(tab==='vencimientos'&&!items.length){$('lista').innerHTML=`<div class="vacio"><span class="em">✅</span><b>Nada por vencer en este rango</b><p>Probá ampliar el filtro de arriba.</p></div>`;return;}
+  if(!items.length){$('lista').innerHTML=`<div class="vacio"><span class="em">🔎</span><b>Sin resultados</b><p>No hay socios que coincidan con tu búsqueda.</p></div>`;return;}
+  const total=items.length; if(tab==='todos') items=items.slice(0,verLim);
+  $('lista').innerHTML=items.map((x,i)=>tarjeta(x,i)).join('');
+  if(tab==='todos'&&total>verLim) $('lista').innerHTML+=`<button class="masbtn" onclick="verLim+=60;render()">Ver más (${total-verLim} restantes)</button>`;
+}
+
+// ── Arranque ──
+// ── Ficha 360 + histórico (trazabilidad) ──
+function decodeUser(){ try{ const d=JSON.parse(atob(SES.access_token.split('.')[1])); USER=d.email||"equipo"; ROLE=(d.app_metadata&&d.app_metadata.role)||"invitado"; }catch(e){ USER="equipo"; ROLE="invitado"; } }
+const rolBonito=r=>({admin:'Admin general',gerente_general:'Gerente general',gerente_ventas:'Gerente de ventas',telemarketing:'Telemarketing',supervisor:'Supervisor',reservaciones:'Reservaciones'}[r]||'Invitado');
+async function traerInter(sid,reint){
+  try{ const r=await fetch(SB_URL+"/rest/v1/interacciones?socio_id=eq."+sid+"&select=*&order=creado_en.desc&limit=80",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
+    if(r.status===401){ if(!reint && await refrescar()) return traerInter(sid,true); return null; }
+    if(!r.ok) return null; return await r.json(); }catch(e){ return null; }
+}
+async function addInter(sid,tipo,nota,reint){
+  try{ const r=await fetch(SB_URL+"/rest/v1/interacciones",{method:"POST",
+    headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},
+    body:JSON.stringify({socio_id:sid,tipo:tipo,nota:nota||null,usuario:USER})});
+    if(r.status===401){ if(!reint && await refrescar()) return addInter(sid,tipo,nota,true); return false; }
+    return r.ok; }catch(e){ return false; }
+}
+function abrirFicha(id){
+  const x=gente.find(g=>g.id===id); if(!x)return;
+  const ok=telOK(x.tel), okc=telOK(x.cel_copro), s=sem(x.dv);
+  const cont = ok
+    ? `<a class="btn-c wa" target="_blank" rel="noopener" href="${waHref(x.tel)}?text=${encodeURIComponent(msgWA(x))}" onclick="addInter(${x.id},'whatsapp','WhatsApp al titular')">WhatsApp</a><a class="btn-c tel" href="${telHref(x.tel)}" onclick="addInter(${x.id},'llamada','Llamada al titular')">Llamar</a>`
+    : `<span class="warn">sin teléfono válido</span>`;
+  $('fichaBody').innerHTML=`
+    <div class="fn">${esc(x.n)}</div>
+    <div style="margin:5px 0 12px"><span class="chip ${chipTipo(x.tipo)}">${esc(x.tipo)}</span> <span class="der ${s.c}" style="font-size:12px">${s.t}</span>${necesitaRevision(x)?' <span class="warn">⚠️ revisar</span>':''} <span class="tt" style="color:var(--gris);font-size:11px">· Socio #${esc(x.no||'—')}</span></div>
+    <div class="acciones">${cont}<button class="btn-c" style="background:var(--amar)" onclick="cerrarFicha();abrirTarjeta(${x.id})">🎫 Beneficio</button>${puedeEditar()?`<button class="btn-c edit" onclick="cerrarFicha();abrirEdit(${x.id})">✎ Editar</button>`:''}</div>
+    <div class="fsec"><h4>Membresía</h4>
+      <div class="frow"><span>Tipo</span><b>${esc(x.tipo)}</b></div>
+      <div class="frow"><span>Ingreso</span><b>${x.ingreso?fechaTxt(x.ingreso):'—'}</b></div>
+      <div class="frow"><span>Años de servicio</span><b>${x.anios??'—'}</b></div>
+      <div class="frow"><span>Vence</span><b>${x.venc?fechaTxt(x.venc):'—'}</b></div>
+      <div class="frow"><span>Total</span><b>${x.total?money(x.total):'—'}</b></div>
+    </div>
+    <div class="fsec"><h4>Contacto</h4>
+      <div class="frow"><span>Teléfono</span><b>${ok?fmtTel(x.tel):(x.tel?esc(x.tel)+' ⚠️':'—')}</b></div>
+      <div class="frow"><span>DPI</span><b>${x.dpi?esc(x.dpi):'—'}</b></div>
+      <div class="frow"><span>Copropietario</span><b>${x.copro?esc(x.copro):'—'}</b></div>
+      <div class="frow"><span>Tel. copropietario</span><b>${okc?fmtTel(x.cel_copro):(x.cel_copro?esc(x.cel_copro)+' ⚠️':'—')}</b></div>
+      <div class="frow"><span>Closer / Liner</span><b>${esc(x.closer||'—')} / ${esc(x.liner||'—')}</b></div>
+    </div>
+    <div class="fsec"><h4>Histórico</h4>
+      <div class="fadd"><textarea id="fnota" placeholder="Escribí una nota del cliente…"></textarea></div>
+      <div class="fadd"><button class="btn-c tel" onclick="regInter(${x.id},'nota')">+ Nota</button><button class="btn-c edit" onclick="regInter(${x.id},'llamada')">☎ Registrar llamada</button><button class="btn-c edit" onclick="regInter(${x.id},'whatsapp')">💬 WhatsApp</button></div>
+      <ul class="tl" id="ftl"><li class="tt">Cargando…</li></ul>
+    </div>`;
+  $('ficha').style.display='flex'; cargarHist(id);
+}
+function cerrarFicha(){ $('ficha').style.display='none'; }
+async function cargarHist(id){
+  const data=await traerInter(id), ul=$('ftl'); if(!ul)return;
+  if(data===null){ ul.innerHTML='<li class="tt">El histórico se activa en breve (conectando la base).</li>'; return; }
+  if(!data.length){ ul.innerHTML='<li class="tt">Sin interacciones aún. Registrá la primera arriba.</li>'; return; }
+  const ico={nota:'📝',llamada:'☎',whatsapp:'💬',estado:'🔖',edicion:'✏️',reserva:'🧳'};
+  ul.innerHTML=data.map(i=>`<li class="tli"><div class="tt">${ico[i.tipo]||'•'} ${new Date(i.creado_en).toLocaleString('es-GT',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})} · ${esc(i.usuario||'')}</div><div class="tc">${esc(i.nota||i.tipo)}</div></li>`).join('');
+}
+async function regInter(id,tipo){
+  const ta=$('fnota'), nota=ta?ta.value.trim():'';
+  if(tipo==='nota' && !nota){ toast('Escribí la nota primero'); return; }
+  const texto=nota || {llamada:'Llamada registrada',whatsapp:'Contacto por WhatsApp'}[tipo] || tipo;
+  if(await addInter(id,tipo,texto)){ if(ta)ta.value=''; toast('✅ Registrado'); cargarHist(id); }
+  else toast('⚠️ Histórico aún no disponible');
+}
+// ── Kuxtal Club: tarjeta digital + beneficio + validación ──
+let pendingValidar=null;
+function cardHTML(x,usados){
+  usados=usados||[];
+  const anio=x.ingreso?x.ingreso.slice(0,4):'';
+  const vencido=x.dv!=null&&x.dv<0;
+  const misOf=vencido?[]:OFERTAS.filter(o=>o.tipo_objetivo==='todos'||o.tipo_objetivo===x.tipo);
+  const top=`
+    <div class="tcard${x.tipo==='VIP'?' vip':''}">
+      <div class="tcard-top"><span class="tt">KUXTAL TRAVELS</span><span class="tplane">✈</span></div>
+      <div class="tn">${esc(x.n)}</div>
+      <div class="trow"><span class="tv">${esc(x.tipo)}</span><span class="tsince">MIEMBRO${anio?' DESDE '+anio:''}</span></div>
+      <div class="tno">N° ${esc(x.no||'—')}</div>
+    </div>`;
+  let benef;
+  if(vencido) benef=`<div class="ocard" style="border-color:#f3b0ab;background:#fdecea"><div class="oemoji">⏳</div><div class="obody"><div class="otit" style="color:#b3261e">Membresía vencida</div><div class="odescr">Venció el ${fechaTxt(x.venc)}. Renovala para volver a disfrutar tus beneficios.</div></div></div>`;
+  else if(misOf.length) benef=`<h4 class="bh">Tus beneficios</h4>`+misOf.map(o=>ofertaBenef(o,usados.includes(o.id),x.id)).join('');
+  else benef=`<p style="color:var(--gris);font-size:12.5px;text-align:center;margin:14px 2px">No hay promos para tu membresía ahora mismo.</p>`;
+  return top+benef;
+}
+function ofertaBenef(o,usado,sid){
+  const right = usado ? `<span class="obadge used">✅ Usado</span>` : `<span class="obadge use">Usar →</span>`;
+  const attrs = usado ? '' : `onclick="usarPromo(${sid},${o.id})" style="cursor:pointer"`;
+  return `<div class="ocard${usado?' isused':''}" ${attrs}><div class="oemoji">${esc(o.emoji||'✈️')}</div><div class="obody"><div class="otit">${esc(o.titulo)} ${o.descuento?`<span class="odesc">${esc(o.descuento)}</span>`:''}</div><div class="odescr">${esc(o.descripcion||'')}</div><div class="ometa">${o.vigencia_hasta?'Vigente hasta '+fechaTxt(o.vigencia_hasta):''}</div></div>${right}</div>`;
+}
+async function usosDeSocio(sid){ try{ const r=await fetch(SB_URL+"/rest/v1/usos?socio_id=eq."+sid+"&select=oferta_id",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}}); if(!r.ok) return []; return (await r.json()).map(u=>u.oferta_id).filter(v=>v!=null); }catch(e){ return []; } }
+async function renderCard(){ const x=gente.find(g=>g.id===cardCtx.sid); if(!x||!$(cardCtx.target)) return; const usados=await usosDeSocio(x.id); $(cardCtx.target).innerHTML=cardHTML(x,usados); }
+async function abrirTarjeta(id){ cardCtx={sid:id,target:'tarjetaBody'}; $('tarjetaBody').innerHTML='<p style="text-align:center;color:var(--gris);padding:22px">Cargando…</p>'; $('tarjeta').style.display='flex'; await renderCard(); }
+async function mostrarMiembro(){
+  ['.stats','.tabs'].forEach(s=>{const e=document.querySelector(s);if(e)e.style.display='none';});
+  ['search','cap','filtros'].forEach(id=>{const e=$(id);if(e)e.style.display='none';});
+  $('tablero').innerHTML='';
+  if(!gente[0]){ $('lista').innerHTML='<div class="vacio">No encontramos tu membresía.</div>'; return; }
+  $('lista').innerHTML='<div id="miembroCard" style="max-width:460px;margin:14px auto 0"></div>';
+  cardCtx={sid:gente[0].id,target:'miembroCard'}; await renderCard();
+}
+async function usarPromo(sid,ofId){
+  const o=OFERTAS.find(x=>x.id===ofId); if(!o) return;
+  if(!confirm(`¿Usar «${o.titulo}»? Se generará tu código para mostrar en el local.`)) return;
+  const codigo=randCode(), expira=new Date(Date.now()+15*60000).toISOString();
+  try{
+    const r=await fetch(SB_URL+"/rest/v1/codigos",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_id:sid,oferta_id:ofId,codigo:codigo,tipo:'descuento',expira_en:expira})});
+    if(!r.ok) throw 0;
+    addInter(sid,'beneficio','Generó código para '+o.titulo+' ('+codigo+')');
+    mostrarQR(o,codigo);
+  }catch(e){ toast('⚠️ No se pudo generar'); }
+}
+function mostrarQR(o,codigo){
+  const url="https://jorgerramirezh-rocky.github.io/kuxtal-crm/validar.html?c="+codigo;
+  $(cardCtx.target).innerHTML=`<div style="text-align:center">
+    <div style="font-size:36px">${esc(o.emoji||'🎁')}</div>
+    <h3 style="color:var(--kux);margin:6px 0">${esc(o.titulo)}</h3>
+    ${o.descuento?`<div class="odesc" style="display:inline-block;margin-bottom:10px">${esc(o.descuento)}</div>`:''}
+    <div class="qrbox"><div id="qrc"></div></div>
+    <div class="codebig">${codigo}</div>
+    <div style="color:var(--gris);font-size:12px;margin-top:4px">Mostralo en el local · vence en 15 min · un solo uso</div>
+    <button class="btn-c edit" style="margin-top:14px" onclick="volverTarjeta()">← Volver a mi tarjeta</button>
+  </div>`;
+  if(window.QRCode) new QRCode(document.getElementById('qrc'),{text:url,width:210,height:210,correctLevel:QRCode.CorrectLevel.M});
+}
+function volverTarjeta(){ renderCard(); }
+function cerrarTarjeta(){ $('tarjeta').style.display='none'; }
+function randCode(){ const c='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<8;i++) s+=c[Math.floor(Math.random()*c.length)]; return s; }
+async function generarCodigo(id){
+  const gx=gente.find(g=>g.id===id);
+  if(gx&&gx.dv!=null&&gx.dv<0){ toast('Membresía vencida — no aplica'); return; }
+  const codigo=randCode(), expira=new Date(Date.now()+15*60000).toISOString();
+  try{
+    const r=await fetch(SB_URL+"/rest/v1/codigos",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_id:id,codigo:codigo,tipo:'descuento',expira_en:expira})});
+    if(!r.ok) throw 0;
+    const url=location.origin+location.pathname+"?validar="+codigo;
+    $('codeArea').innerHTML=`<div class="qrbox"><div id="qrc"></div></div><div class="codebig">${codigo}</div><div style="color:var(--gris);font-size:12px;margin-top:4px">Vence en 15 min · un solo uso · el local lo escanea</div>`;
+    if(window.QRCode) new QRCode(document.getElementById('qrc'),{text:url,width:190,height:190,correctLevel:QRCode.CorrectLevel.M});
+    addInter(id,'beneficio','Generó código de descuento '+codigo);
+  }catch(e){ toast('⚠️ No se pudo generar'); }
+}
+function showValida(cls,ico,t,s){ const v=$('valida'); v.className=cls; $('vico').textContent=ico; $('vt').textContent=t; $('vs').textContent=s||''; v.style.display='flex'; }
+function cerrarValida(){ $('valida').style.display='none'; history.replaceState(null,'',location.pathname); if($('app').style.display!=='block') location.reload(); }
+async function validarCodigo(codigo){
+  showValida('','⏳','Validando…','');
+  try{
+    const r=await fetch(SB_URL+"/rest/v1/codigos?codigo=eq."+encodeURIComponent(codigo)+"&select=*,socios(nombre,tipo_norm,vencimiento)",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
+    const d=await r.json(), c=d&&d[0];
+    if(!c) return showValida('bad','❌','Código inválido','');
+    if(c.usado) return showValida('bad','⛔','Código ya usado',new Date(c.usado_en).toLocaleString('es-GT'));
+    if(new Date(c.expira_en)<new Date()) return showValida('bad','⌛','Código vencido','Pedile al socio uno nuevo');
+    if(c.socios&&c.socios.vencimiento&&new Date(c.socios.vencimiento)<new Date()) return showValida('bad','⏳','Membresía vencida','Renová para usar beneficios');
+    await fetch(SB_URL+"/rest/v1/codigos?id=eq."+c.id,{method:"PATCH",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({usado:true,usado_en:new Date().toISOString(),usado_por:USER})});
+    await fetch(SB_URL+"/rest/v1/usos",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_id:c.socio_id,tipo:'descuento',codigo:codigo,usuario:USER})});
+    addInter(c.socio_id,'uso','Usó beneficio (descuento) '+codigo);
+    const so=c.socios||{};
+    showValida('ok','✅',(so.tipo_norm||'Socio')+' · '+(so.nombre||''),'Disfrutá tu beneficio 🎉');
+  }catch(e){ showValida('bad','⚠️','No se pudo validar','Reintentá'); }
+}
+async function arrancar(){
+  $('gate').style.display='none'; $('app').style.display='none'; $('load').style.display='flex';
+  try{
+    decodeUser();
+    gente=await traerSocios(); OFERTAS=await traerOfertas(); calcularBI();
+    $('load').style.display='none'; $('app').style.display='block';
+    document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>ir(t.dataset.t));
+    $('buscar').oninput=()=>{verLim=60;render()};
+    if(ROLE==='cliente'){ mostrarMiembro(); $('rolLabel').textContent=USER; return true; }
+    kpis(); render(); $('rolLabel').textContent=USER+' · '+rolBonito(ROLE); return true;
+  }catch(e){ $('load').style.display='none'; return false; }
+}
+function mostrarLogin(){ $('load').style.display='none'; $('app').style.display='none'; $('gate').style.display='flex'; setTimeout(()=>$('p').focus(),100); }
+$('p').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
+$('modal').addEventListener('click',e=>{if(e.target.id==='modal')cerrarModal();});
+$('ficha').addEventListener('click',e=>{if(e.target.id==='ficha')cerrarFicha();});
+$('tarjeta').addEventListener('click',e=>{if(e.target.id==='tarjeta')cerrarTarjeta();});
+$('promoModal').addEventListener('click',e=>{if(e.target.id==='promoModal')cerrarPromo();});
+$('modal').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();guardarEdit();}});
+
+(async function init(){
+  pendingValidar=new URLSearchParams(location.search).get('validar');
+  if(await refrescar()){ if(await arrancar()){ if(pendingValidar) validarCodigo(pendingValidar); } else mostrarLogin(); }
+  else mostrarLogin();
+})();
+</script>
+<script>
+/* PWA — service worker + botón Instalar DENTRO del app (no en la vitrina) */
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
+(function(){var dp=null;
+ window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();dp=e;boton();});
+ function boton(){if(document.getElementById('kxinstall'))return;var b=document.createElement('button');b.id='kxinstall';b.type='button';b.textContent='Instalar app';b.style.cssText='position:fixed;right:14px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:75;background:#8dc63f;color:#0e2a00;border:none;border-radius:12px;padding:12px 15px;font-weight:700;font-size:13.5px;box-shadow:0 8px 22px rgba(15,36,56,.28);cursor:pointer;min-height:44px';b.onclick=function(){if(dp){dp.prompt();dp.userChoice.finally(function(){dp=null;b.remove();});}};document.body.appendChild(b);}
+})();
+</script>
+</body>
+</html>
