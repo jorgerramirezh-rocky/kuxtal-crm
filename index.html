@@ -261,7 +261,7 @@
 const SB_URL="https://tevzfdiumfekvapamovw.supabase.co";
 const SB_PUB="sb_publishable_MMVJjzrA1rHdnMWxl0zeMA_DTDTTGTJ";
 const LS="kux_sesion";
-let SES=null, USER="equipo", ROLE="invitado", gente=[], OFERTAS=[], BI={}, tab="tablero", vf=90, dirF="todos", dirTipo="", dirCloser="", verLim=60, editId=null, cardCtx={sid:null,target:'tarjetaBody'}, charts={};
+let SES=null, USER="equipo", ROLE="invitado", gente=[], OFERTAS=[], LEADS=null, cargandoLeads=false, BI={}, tab="tablero", vf=90, dirF="todos", dirTipo="", dirCloser="", verLim=60, editId=null, cardCtx={sid:null,target:'tarjetaBody'}, charts={};
 const EDITORES=['admin','gerente_general','gerente_ventas'];
 const puedeEditar=()=>EDITORES.includes(ROLE);
 const HOY=new Date(); HOY.setHours(0,0,0,0);
@@ -339,6 +339,46 @@ async function patchSocio(id,body,reintento){
 async function traerOfertas(){
   try{ const r=await fetch(SB_URL+"/rest/v1/ofertas?select=*&activa=eq.true&order=creado_en.desc",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}}); if(!r.ok) return []; return await r.json(); }
   catch(e){ return []; }
+}
+
+// ── Prospectos (leads que capta la web/bot) — conecta el hub ──
+async function traerLeads(reintento){
+  const r=await fetch(SB_URL+"/rest/v1/leads?select=*&order=creado_en.desc",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
+  if(r.status===401){ if(!reintento && await refrescar()) return traerLeads(true); throw new Error("sesión vencida"); }
+  if(!r.ok) return []; return await r.json();
+}
+async function patchLead(id,body,reintento){
+  const r=await fetch(SB_URL+"/rest/v1/leads?id=eq."+id,{method:"PATCH",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(body)});
+  if(r.status===401){ if(!reintento && await refrescar()) return patchLead(id,body,true); throw 0; }
+  if(!r.ok) throw 0;
+}
+function leadWA(tel){ const d=(tel||'').replace(/\D/g,''); const n=(d.length===11&&d.indexOf('502')===0)?d.slice(3):d; return n.length>=8?('https://wa.me/502'+n):'#'; }
+function leadCard(l){
+  const est=l.estado||'nuevo';
+  const badge = est==='convertido'?'<span class="odesc" style="background:#e9f7ef;color:#1a8a52">Ya es socio 🎉</span>'
+    : est==='contactado'?'<span class="odesc" style="background:#eaf3ff;color:#245078">Contactado</span>'
+    : '<span class="odesc" style="background:#fff3d6;color:#7a5f16">Nuevo</span>';
+  let f=''; try{ f=new Date(l.creado_en).toLocaleDateString('es-GT',{day:'2-digit',month:'short'}); }catch(e){}
+  const cerrado = est==='convertido'||est==='contactado';
+  const wa=leadWA(l.telefono);
+  return `<div class="ocard"><div class="oemoji">🎯</div><div class="obody">
+    <div class="otit">${esc(l.nombre||'Interesado')} ${badge}</div>
+    <div class="odescr">📱 ${esc(l.telefono||'—')}${l.email?(' · '+esc(l.email)):''} · vino de ${esc(l.origen||'web')}</div>
+    <div class="ometa">Llegó ${f}</div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      ${wa!=='#'?`<a class="fb" href="${wa}" target="_blank" rel="noopener">💬 WhatsApp</a>`:''}
+      ${!cerrado?`<button class="fb" onclick="marcarLead('${l.id}','contactado')">✅ Contactado</button>`:''}
+      ${est!=='convertido'?`<button class="fb" onclick="marcarLead('${l.id}','convertido')">🎉 Ya es socio</button>`:''}
+      <button class="fb" onclick="marcarLead('${l.id}','descartado')">✕ Descartar</button>
+    </div>
+  </div></div>`;
+}
+async function marcarLead(id,estado){
+  try{ await patchLead(id,{estado});
+    if(estado==='descartado'){ LEADS=(LEADS||[]).filter(x=>x.id!==id); }
+    else { const l=(LEADS||[]).find(x=>x.id===id); if(l) l.estado=estado; }
+    if(typeof toast==='function') toast('Actualizado'); render();
+  }catch(e){ if(typeof toast==='function') toast('No se pudo, probá de nuevo'); }
 }
 function ofertaCard(o){
   const del = ROLE==='admin' ? `<button class="eb" style="flex:none;align-self:flex-start" onclick="borrarPromo(${o.id})">✕</button>` : '';
@@ -533,12 +573,25 @@ function render(){
     vencimientos:'Socios por urgencia. Renovación de un toque por WhatsApp.',
     todos:'Directorio de los '+BI.socios+' socios. Buscá y editá.',
     promos:'🎁 Promociones activas del Club.',
-    leads:'Prospectos del embudo (por captar).',activacion:'Uso del Club por socio (por capturar).'};
+    leads:'Interesados que dejan sus datos en la web · llamalos y dales seguimiento.',activacion:'Uso del Club por socio (por capturar).'};
   $('cap').textContent=caps[tab]||'';
   if(tab==='tablero'){$('lista').innerHTML='';tablero();return;}
   $('tablero').innerHTML=''; Object.values(charts).forEach(c=>c&&c.destroy()); charts={};
   if(tab==='promos'){const nueva=ROLE==='admin'?`<button class="masbtn" style="margin-bottom:10px" onclick="nuevaPromo()">＋ Nueva promoción</button>`:'';$('lista').innerHTML=nueva+(OFERTAS.length?OFERTAS.map(ofertaCard).join(''):`<div class="vacio"><span class="em">🎁</span><b>Sin promociones activas</b><p>${ROLE==='admin'?'Creá la primera con el botón de arriba.':'Pronto habrá novedades.'}</p></div>`);return;}
-  if(tab==='leads'){$('lista').innerHTML=`<div class="vacio"><span class="em">🎯</span><b>Aún no capturás prospectos</b><p>Acá van los interesados que todavía no son socios (TMK, redes, referidos). Cuando los registrés, aparecen listos para llamar y dar seguimiento.</p></div>`;return;}
+  if(tab==='leads'){
+    if(LEADS===null){
+      if(!cargandoLeads){
+        cargandoLeads=true; $('lista').innerHTML='<div class="vacio"><span class="spin"></span> Cargando prospectos…</div>';
+        traerLeads().then(rows=>{LEADS=rows;cargandoLeads=false;if(tab==='leads')render();})
+          .catch(()=>{cargandoLeads=false;/* LEADS sigue null → reintenta al reentrar */ if(tab==='leads')$('lista').innerHTML=`<div class="vacio"><span class="em">😕</span><b>No pude cargar los prospectos</b><p>Puede ser la conexión. <b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;});
+      }
+      return;
+    }
+    const act=LEADS.filter(l=>l.estado!=='descartado');
+    if(!act.length){ $('lista').innerHTML=`<div class="vacio"><span class="em">🎯</span><b>Sin prospectos por ahora</b><p>Acá caen SOLOS los interesados que dejan sus datos en la web de Kuxtal. Cuando llegue uno, aparece listo para llamarlo por WhatsApp y darle seguimiento.</p></div>`; return; }
+    $('lista').innerHTML=act.map(leadCard).join('');
+    return;
+  }
   if(tab==='activacion'){$('lista').innerHTML=`<div class="vacio"><span class="em">🧳</span><b>Falta capturar el "uso del Club"</b><p>Saber qué socios ya viajaron/usaron beneficios revela quiénes están en riesgo de NO renovar — el dato que más mueve los +US$600K de 2028-2031. Cuando lo captures, esta pestaña se enciende sola.</p></div>`;return;}
   let items=filtrar();
   if(tab==='vencimientos'&&!items.length){$('lista').innerHTML=`<div class="vacio"><span class="em">✅</span><b>Nada por vencer en este rango</b><p>Probá ampliar el filtro de arriba.</p></div>`;return;}
