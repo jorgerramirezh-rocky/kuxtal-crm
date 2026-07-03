@@ -212,6 +212,7 @@
     <div class="tab" data-t="todos">Directorio</div>
     <div class="tab" data-t="promos">🎁 Promos</div>
     <div class="tab" data-t="leads">Prospectos</div>
+    <div class="tab" data-t="bot">🤖 Bot &amp; WhatsApp</div>
     <div class="tab" data-t="activacion">Activación</div>
   </div>
   <div class="search" id="search"><span class="ico">🔎</span><input id="buscar" placeholder="Buscar por nombre…"></div>
@@ -379,6 +380,31 @@ async function marcarLead(id,estado){
     else { const l=(LEADS||[]).find(x=>x.id===id); if(l) l.estado=estado; }
     if(typeof toast==='function') toast('Actualizado'); render();
   }catch(e){ if(typeof toast==='function') toast('No se pudo, probá de nuevo'); }
+}
+// ── Panel del Bot & WhatsApp (administración dentro del CRM) ──
+function botPanel(botLeads){
+  const FN="https://tevzfdiumfekvapamovw.supabase.co/functions/v1/kuxtal-bot";
+  const listado = botLeads.length ? botLeads.map(leadCard).join('')
+    : `<div class="vacio"><span class="em">💬</span><b>El bot aún no captó prospectos por acá</b><p>Cuando WhatsApp esté conectado, los interesados que le escriban aparecen acá solos.</p></div>`;
+  return `
+  <div class="ocard" style="align-items:flex-start"><div class="oemoji">🤖</div><div class="obody">
+    <div class="otit">El asistente de Kuxtal <span class="odesc" style="background:#e9f7ef;color:#1a8a52">Cerebro activo ✓</span> <span class="odesc" style="background:#fff3d6;color:#7a5f16">WhatsApp: por conectar</span></div>
+    <div class="odescr">Ya responde con la voz de Kuxtal (membresías, destinos, Kuxtal Club) y capta interesados directo acá. Falta conectarlo a WhatsApp — los pasos de Meta están abajo.</div>
+  </div></div>
+  <h3 style="margin:18px 0 10px;color:var(--kux)">🎯 Prospectos que captó el bot (${botLeads.length})</h3>
+  ${listado}
+  <h3 style="margin:24px 0 10px;color:var(--kux)">📲 Cómo conectar WhatsApp (guía de Meta)</h3>
+  <div class="ocard"><div class="obody" style="font-size:14.5px;line-height:1.75">
+    <b>1.</b> Entrá a <b>business.facebook.com</b> → creá/entrá a la cuenta Meta Business de Kuxtal.<br>
+    <b>2.</b> Empezá la <b>Verificación del negocio</b> (Centro de seguridad) — <i>es lo más lento, arrancala primero</i>.<br>
+    <b>3.</b> En <b>developers.facebook.com</b> creá una <b>App</b> tipo “Business” y agregale el producto <b>WhatsApp</b>.<br>
+    <b>4.</b> Registrá el <b>número de WhatsApp Business</b> (no puede estar en un WhatsApp normal).<br>
+    <b>5.</b> Copiá 4 datos: <b>Token de acceso</b>, <b>Phone Number ID</b>, <b>App Secret</b>, y elegí un <b>Verify Token</b> (una palabra que inventás).<br>
+    <b>6.</b> Configurá el <b>Webhook</b> con esta URL y suscribí el evento “messages”:<br>
+      <code style="background:var(--kux-l);padding:3px 7px;border-radius:6px;display:inline-block;margin:4px 0;word-break:break-all">${FN}</code><br>
+    <b>7.</b> Pasale esos 4 datos a tu asistente → los conecta y el bot queda <b>vivo en WhatsApp</b>.
+  </div></div>
+  <div class="insight full" style="margin-top:14px">🔒 El cerebro del bot está <b>aislado y protegido</b>: vive en la base de Kuxtal, no comparte datos con nadie. Cuando se ceda, se protege con llave — no se regala.</div>`;
 }
 function ofertaCard(o){
   const del = ROLE==='admin' ? `<button class="eb" style="flex:none;align-self:flex-start" onclick="borrarPromo(${o.id})">✕</button>` : '';
@@ -573,7 +599,7 @@ function render(){
     vencimientos:'Socios por urgencia. Renovación de un toque por WhatsApp.',
     todos:'Directorio de los '+BI.socios+' socios. Buscá y editá.',
     promos:'🎁 Promociones activas del Club.',
-    leads:'Interesados que dejan sus datos en la web · llamalos y dales seguimiento.',activacion:'Uso del Club por socio (por capturar).'};
+    leads:'Interesados que dejan sus datos en la web · llamalos y dales seguimiento.',bot:'El asistente de WhatsApp de Kuxtal: estado, prospectos que captó y cómo conectarlo.',activacion:'Uso del Club por socio (por capturar).'};
   $('cap').textContent=caps[tab]||'';
   if(tab==='tablero'){$('lista').innerHTML='';tablero();return;}
   $('tablero').innerHTML=''; Object.values(charts).forEach(c=>c&&c.destroy()); charts={};
@@ -582,14 +608,23 @@ function render(){
     if(LEADS===null){
       if(!cargandoLeads){
         cargandoLeads=true; $('lista').innerHTML='<div class="vacio"><span class="spin"></span> Cargando prospectos…</div>';
-        traerLeads().then(rows=>{LEADS=rows;cargandoLeads=false;if(tab==='leads')render();})
-          .catch(()=>{cargandoLeads=false;/* LEADS sigue null → reintenta al reentrar */ if(tab==='leads')$('lista').innerHTML=`<div class="vacio"><span class="em">😕</span><b>No pude cargar los prospectos</b><p>Puede ser la conexión. <b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;});
+        traerLeads().then(rows=>{LEADS=rows;cargandoLeads=false;if(tab==='leads'||tab==='bot')render();})
+          .catch(()=>{cargandoLeads=false;/* LEADS sigue null → reintenta al reentrar */ if(tab==='leads'||tab==='bot')$('lista').innerHTML=`<div class="vacio"><span class="em">😕</span><b>No pude cargar los prospectos</b><p>Puede ser la conexión. <b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;});
       }
       return;
     }
     const act=LEADS.filter(l=>l.estado!=='descartado');
     if(!act.length){ $('lista').innerHTML=`<div class="vacio"><span class="em">🎯</span><b>Sin prospectos por ahora</b><p>Acá caen SOLOS los interesados que dejan sus datos en la web de Kuxtal. Cuando llegue uno, aparece listo para llamarlo por WhatsApp y darle seguimiento.</p></div>`; return; }
     $('lista').innerHTML=act.map(leadCard).join('');
+    return;
+  }
+  if(tab==='bot'){
+    if(LEADS===null){
+      if(!cargandoLeads){ cargandoLeads=true; $('lista').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>'; traerLeads().then(rows=>{LEADS=rows;cargandoLeads=false;if(tab==='leads'||tab==='bot')render();}).catch(()=>{cargandoLeads=false;if(tab==='leads'||tab==='bot')$('lista').innerHTML=`<div class="vacio"><span class="em">😕</span><b>No pude cargar</b><p><b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;}); }
+      return;
+    }
+    const botLeads=LEADS.filter(l=>l.origen==='bot'&&l.estado!=='descartado');
+    $('lista').innerHTML=botPanel(botLeads);
     return;
   }
   if(tab==='activacion'){$('lista').innerHTML=`<div class="vacio"><span class="em">🧳</span><b>Falta capturar el "uso del Club"</b><p>Saber qué socios ya viajaron/usaron beneficios revela quiénes están en riesgo de NO renovar — el dato que más mueve los +US$600K de 2028-2031. Cuando lo captures, esta pestaña se enciende sola.</p></div>`;return;}
