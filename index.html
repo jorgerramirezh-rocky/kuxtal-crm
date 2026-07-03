@@ -168,6 +168,34 @@ footer{background:var(--surface);border-top:1px solid var(--line);padding:52px 0
 .xclose{position:absolute;top:14px;right:16px;background:var(--surface-2);border:1px solid var(--line);color:var(--ink);width:36px;height:36px;border-radius:10px;font-size:17px;cursor:pointer}
 .demo-flag{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:80;background:var(--navy-deep);color:#fff;font-size:12.5px;font-weight:600;padding:9px 16px;border-radius:999px;box-shadow:0 8px 24px -8px rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.14);display:flex;gap:8px;align-items:center;max-width:92vw}
 .demo-flag .dot{width:8px;height:8px;border-radius:50%;background:var(--lima)}
+
+/* ── Kuxtal Club (protagonismo) ── */
+.club{background:radial-gradient(120% 130% at 85% 0%,var(--navy-mid),var(--navy) 46%,var(--navy-deep));color:#fff}
+.club-grid{display:grid;grid-template-columns:.92fr 1.08fr;gap:46px;align-items:center}
+@media(max-width:860px){.club-grid{grid-template-columns:1fr;gap:32px}}
+.club .eyebrow{color:var(--lima)}
+.club h2{font-size:clamp(30px,4.6vw,48px);font-weight:800;margin-top:12px;letter-spacing:-.5px}
+.club .lede{color:rgba(255,255,255,.82);margin-top:14px;font-size:18px;max-width:46ch}
+.club-card{position:relative;overflow:hidden;border-radius:22px;padding:26px 24px;color:#fff;background:linear-gradient(135deg,#0b1c2e,#1b365d 55%,#2a5f8f);border:1px solid rgba(242,201,76,.55);box-shadow:0 26px 60px -18px rgba(0,0,0,.6)}
+.club-card::after{content:"";position:absolute;top:-40%;right:-25%;width:75%;height:180%;background:radial-gradient(closest-side,rgba(141,198,63,.22),transparent);transform:rotate(20deg)}
+.club-card .r1{display:flex;justify-content:space-between;align-items:center;position:relative;z-index:1}
+.club-card .kt{font-family:'League Gothic',sans-serif;letter-spacing:2px;font-size:21px}
+.club-card .nm{font-weight:800;font-size:22px;margin:22px 0 10px;position:relative;z-index:1}
+.club-card .chips{display:flex;align-items:center;gap:10px;position:relative;z-index:1}
+.club-card .vip{background:linear-gradient(135deg,#f2c94c,#e0a422);color:#3a2a00;font-weight:800;border-radius:8px;padding:3px 12px;font-size:13px;letter-spacing:.5px}
+.club-card .since{font-size:10px;letter-spacing:1.5px;opacity:.75}
+.club-card .no{font-size:12px;opacity:.7;margin-top:16px;letter-spacing:1px;position:relative;z-index:1;font-variant-numeric:tabular-nums}
+.club-steps{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.club-steps .st{display:flex;align-items:center;gap:8px;font-size:13px;color:rgba(255,255,255,.9);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px 12px}
+.club-steps .n{width:24px;height:24px;border-radius:50%;background:var(--lima);color:#0e2a00;display:grid;place-items:center;font-family:'League Gothic',sans-serif;font-size:14px}
+.club-benes{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-top:22px}
+@media(max-width:520px){.club-benes{grid-template-columns:1fr}}
+.bene{display:flex;gap:12px;align-items:flex-start;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:14px}
+.bene .ic{flex:none;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:rgba(141,198,63,.16);color:var(--lima)}
+.bene .ic svg{width:22px;height:22px}
+.bene b{font-size:15px;display:block}
+.bene span{font-size:12.5px;color:rgba(255,255,255,.66)}
+.club-cta{margin-top:24px}
 </style>
 </head>
 <body>
@@ -180,6 +208,7 @@ footer{background:var(--surface);border-top:1px solid var(--line);padding:52px 0
       <a class="nl" href="#nosotros">Nosotros</a>
       <a class="nl" href="#valores">Valores</a>
       <a class="nl" href="#ofrecemos">Qué ofrecemos</a>
+      <a class="nl" href="#club-band">Kuxtal Club</a>
       <button class="iconbtn" id="theme" title="Cambiar tema" aria-label="Cambiar tema">◐</button>
       <button class="btn btn-navy btn-sm" id="ing-top">Ingresar</button>
     </span>
@@ -302,6 +331,37 @@ footer{background:var(--surface);border-top:1px solid var(--line);padding:52px 0
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3 10h18"/><path d="M7 15h4"/></svg></div>
         <div><h3>Tu tarjeta digital</h3><p>Tu membresía vive en el teléfono: mostrás tu tarjeta, generás tu código y activás beneficios al instante.</p><span class="tag">Sin papeles</span></div>
       </article>
+    </div>
+  </div>
+</section>
+
+<!-- KUXTAL CLUB -->
+<section id="club-band" class="club">
+  <div class="wrap club-grid">
+    <div>
+      <div class="club-card">
+        <div class="r1"><span class="kt">KUXTAL TRAVELS</span><span style="color:var(--lima)">&#9992;</span></div>
+        <div class="nm">Tu tarjeta de socio</div>
+        <div class="chips"><span class="vip">KUXTAL CLUB</span><span class="since">MIEMBRO ACTIVO</span></div>
+        <div class="no">Cada destino, una historia</div>
+      </div>
+      <div class="club-steps">
+        <span class="st"><span class="n">1</span> Mostr&aacute;s tu tarjeta</span>
+        <span class="st"><span class="n">2</span> Activ&aacute;s tu c&oacute;digo</span>
+        <span class="st"><span class="n">3</span> Lo validan con QR</span>
+      </div>
+    </div>
+    <div>
+      <span class="eyebrow">El beneficio de todos los d&iacute;as</span>
+      <h2>Kuxtal Club</h2>
+      <p class="lede">Tu membres&iacute;a no espera a las vacaciones. Con Kuxtal Club disfrut&aacute;s precios preferenciales cerca de casa, todo el a&ntilde;o &mdash; y tu tarjeta vive en tu tel&eacute;fono.</p>
+      <div class="club-benes">
+        <div class="bene"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a2 2 0 0 0 2 2v9"/><path d="M6 3v4M9 3v4"/><path d="M17 3c-1.6 0-3 1.6-3 5s1.5 4 3 4v9"/></svg></span><div><b>Restaurantes</b><span>Descuentos en aliados gastron&oacute;micos.</span></div></div>
+        <div class="bene"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5"/><path d="M3 18h18M3 15h18"/><path d="M7 11V9a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2"/></svg></span><div><b>Hoteles</b><span>Tarifas de socio para tus escapadas.</span></div></div>
+        <div class="bene"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1 12H7L6 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg></span><div><b>Comercios</b><span>Beneficios en tiendas y servicios.</span></div></div>
+        <div class="bene"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H6a2 2 0 0 1-2-2 2 2 0 0 0 0-4z"/><path d="M14 6v12"/></svg></span><div><b>Parques y experiencias</b><span>Entretenimiento para la familia.</span></div></div>
+      </div>
+      <div class="club-cta"><a class="btn btn-primary" href="https://wa.me/50223696209" target="_blank" rel="noopener">Quiero mi Kuxtal Club</a></div>
     </div>
   </div>
 </section>
