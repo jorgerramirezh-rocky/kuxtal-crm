@@ -562,7 +562,10 @@ let comT; function setCom(id,v){ const l=localL(id); if(l)l.comentario=v; clearT
 async function cargarTodos(){
   $('cap').textContent='Todos los prospectos · avance por TMK.';
   $('cont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
-  todos=await getJSON("funnel_prospectos?select=*,funnel_agentes(nombre)&order=id.desc&limit=500");
+  // funnel_prospectos tiene 3 FK a funnel_agentes (tmk_id/vendedor_id/cerrador_id); sin
+  // nombrar el constraint el embed es ambiguo → PostgREST devuelve 300 y "Todos" salía vacío.
+  // Esta vista es "avance por TMK", así que se embebe por tmk_id.
+  todos=await getJSON("funnel_prospectos?select=*,funnel_agentes!funnel_prospectos_tmk_id_fkey(nombre)&order=id.desc&limit=500");
   if(!todos.length){ $('cont').innerHTML=`<div class="vacio"><b>Sin prospectos todavía</b><p>Subí una base en <b>Cargar base</b> y repartila.</p></div>`; return; }
   const porEstado={}; todos.forEach(l=>{const e=estDe(l.estado).etiqueta; porEstado[e]=(porEstado[e]||0)+1;});
   const resumen=Object.entries(porEstado).map(([k,v])=>`<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(k)}: ${v}</span>`).join('');
