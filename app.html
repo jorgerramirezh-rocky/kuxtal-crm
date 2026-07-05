@@ -328,7 +328,7 @@ const VALIDA={
   fecha:v=>(!v||/^\d{4}-\d{2}-\d{2}$/.test(v))?"":"Fecha inválida (AAAA-MM-DD).",
   num:v=>(v===''||v==null||(!isNaN(v)&&Number(v)>=0))?"":"Debe ser un número ≥ 0."
 };
-const motivoRevision=x=>{const m=[];if(x.dup)m.push('No. socio duplicado');if(!telOK(x.tel))m.push('teléfono');if(!dpiOK(x.dpi))m.push('DPI');if(!x.venc)m.push('sin vencimiento');return m;};
+const motivoRevision=x=>{const m=[];if(x.dup)m.push('No. socio duplicado');if(x.dupDpi)m.push('DPI duplicado (¿copropietario?)');if(!telOK(x.tel))m.push('teléfono');if(!dpiOK(x.dpi))m.push('DPI');if(!x.venc)m.push('sin vencimiento');return m;};
 const necesitaRevision=x=>motivoRevision(x).length>0;
 
 // ── Auth ──
@@ -364,8 +364,8 @@ async function traerSocios(reintento){
     copro:x.copropietario,dpi:x.dpi,tipo:x.tipo_norm||"Sin dato",closer:(x.closer_norm||x.closer),liner:x.liner,
     venc:x.vencimiento,dv:calcDv(x.vencimiento),ingreso:x.fecha_ingreso,anios:x.anios_servicio,
     total:Number(x.total_num)||0,total_texto:x.total_texto,estado:x.estado||""}));
-  const cnt={}; g.forEach(x=>{if(x.no)cnt[x.no]=(cnt[x.no]||0)+1;});
-  g.forEach(x=>x.dup=!!(x.no&&cnt[x.no]>1));
+  const cnt={}, cntDpi={}; g.forEach(x=>{if(x.no)cnt[x.no]=(cnt[x.no]||0)+1; const d=dpiDig(x.dpi); if(d.length===13)cntDpi[d]=(cntDpi[d]||0)+1;});
+  g.forEach(x=>{x.dup=!!(x.no&&cnt[x.no]>1); const d=dpiDig(x.dpi); x.dupDpi=!!(d.length===13&&cntDpi[d]>1);});
   return g;
 }
 async function patchSocio(id,body,reintento){
