@@ -103,6 +103,16 @@
   @keyframes sp{to{transform:rotate(360deg)}}
   #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(16px);background:var(--kux-d);color:#fff;padding:11px 17px;border-radius:11px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:.25s;z-index:70;max-width:90vw;text-align:center}
   #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  /* Analítica */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:9px;margin-bottom:12px}
+  .stat{background:#fff;border:1px solid var(--linea);border-radius:14px;padding:13px 14px;box-shadow:0 2px 8px rgba(15,36,56,.05)}
+  .stat .v{font-size:22px;font-weight:800;color:var(--kux);font-variant-numeric:tabular-nums;line-height:1}
+  .stat .k{font-size:11px;color:var(--gris);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:5px}
+  .bar{display:flex;align-items:center;gap:9px;margin-bottom:7px}
+  .bar .bl{flex:none;width:34%;font-size:12.5px;color:var(--tinta);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bar .bt{flex:1;height:20px;background:#eef2f6;border-radius:7px;overflow:hidden}
+  .bar .bf{height:100%;border-radius:7px;min-width:2px;transition:width .4s}
+  .bar .bv{flex:none;font-size:12px;color:var(--gris);font-weight:700;font-variant-numeric:tabular-nums;min-width:64px;text-align:right}
   @media (min-width:560px){ .fld{min-width:150px} }
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation-duration:.001s!important}}
 </style>
@@ -214,7 +224,7 @@ async function arrancar(){
 function pintarTabs(){
   const defs=[['midia','Mi día']];
   if(verTodo){ defs.push(['recepcion','Recepción']); defs.push(['cierre','Cierre']); defs.push(['postventa','Postventa']); defs.push(['reservas','Reservas']); defs.push(['todos','Todos']); }
-  if(esGerente){ defs.push(['cargar','Cargar base']); defs.push(['equipo','Equipo']); defs.push(['comis','Comisiones']); }
+  if(esGerente){ defs.push(['analitica','Analítica']); defs.push(['cargar','Cargar base']); defs.push(['equipo','Equipo']); defs.push(['comis','Comisiones']); }
   $('tabs').innerHTML=defs.map(([k,t])=>`<button class="tab ${tab===k?'on':''}" onclick="irTab('${k}')">${t}</button>`).join('');
 }
 async function irTab(k){ tab=k; pintarTabs();
@@ -227,6 +237,7 @@ async function irTab(k){ tab=k; pintarTabs();
   else if(k==='cargar'){ await vistaCargar(); }
   else if(k==='equipo'){ await vistaEquipo(); }
   else if(k==='comis'){ await vistaComisiones(); }
+  else if(k==='analitica'){ await vistaAnalitica(); }
 }
 function opAgentes(rol,sel){ return AGENTES.filter(a=>a.activo&&a.rol===rol).map(a=>`<option value="${a.id}" ${sel==a.id?'selected':''}>${esc(a.nombre)}</option>`).join(''); }
 
@@ -289,6 +300,7 @@ function cierreCard(l){
       <div class="fld"><label>Membresía</label><select id="mem${l.id}" onchange="var o=this.options[this.selectedIndex];document.getElementById('mon${l.id}').value=o.getAttribute('data-p')||''">${memb}</select></div>
       <div class="fld"><label>Plan de pago</label><select id="pln${l.id}">${plan}</select></div>
       <div class="fld"><label>Monto (US$)</label><input type="number" id="mon${l.id}" inputmode="decimal" value="${p0}"></div>
+      <div class="fld"><label>Vigencia (años)</label><select id="vig${l.id}"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select></div>
     </div>
     <div class="sub show">
       <div class="fld"><label>Digitador</label><select id="dig${l.id}"><option value="">—</option>${opAgentes('digitador')}</select></div>
@@ -297,16 +309,53 @@ function cierreCard(l){
     <button class="btn" onclick="cerrarContrato(${l.id},this)">Cerrar contrato ✍️</button>
   </div>`;
 }
+// ── CONTRATO IMPRIMIBLE (marca Kuxtal) ──
+function imprimirContrato(d){
+  const fmt=iso=>{try{return new Date(iso+'T12:00:00').toLocaleDateString('es-GT',{day:'2-digit',month:'long',year:'numeric'});}catch(e){return iso||'';}};
+  const hoy=hoyStr();
+  const venc=new Date(); venc.setFullYear(venc.getFullYear()+(Number(d.anios)||4));
+  const vencIso=venc.toISOString().slice(0,10);
+  const fila=(l,v)=>`<tr><td class="k">${esc(l)}</td><td class="v">${esc(v||'—')}</td></tr>`;
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Contrato Kuxtal · ${esc(d.nombre||'')}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=League+Gothic&display=swap" rel="stylesheet">
+<style>:root{--kux:#1b365d;--lima:#8dc63f;--lima-d:#6f9e12;--gris:#6b7688;--linea:#d9e0ea;}*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#0f2438;font-size:13px;line-height:1.5;padding:32px 34px;max-width:820px;margin:0 auto}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid var(--kux);padding-bottom:14px;margin-bottom:22px}
+.lg{font-family:'League Gothic',sans-serif;font-size:40px;letter-spacing:1px;color:var(--kux);line-height:.9}.lg .pl{color:var(--lima)}
+.tag{font-size:11px;color:var(--lima-d);font-weight:700;letter-spacing:1px;margin-top:2px}.doc{text-align:right}
+.doc .t{font-family:'League Gothic',sans-serif;font-size:24px;color:var(--kux);letter-spacing:.5px}.doc .m{font-size:12px;color:var(--gris);margin-top:3px}
+h2{font-family:'League Gothic',sans-serif;font-size:19px;color:var(--kux);letter-spacing:.5px;margin:22px 0 8px;border-left:4px solid var(--lima);padding-left:9px}
+table{width:100%;border-collapse:collapse}td{padding:7px 6px;border-bottom:1px solid var(--linea);vertical-align:top}td.k{color:var(--gris);font-weight:600;width:38%;font-size:12px}td.v{font-weight:700}
+.monto{background:var(--kux);color:#fff;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;margin-top:6px}.monto .n{font-family:'League Gothic',sans-serif;font-size:30px;color:var(--lima)}
+.firmas{display:flex;gap:40px;margin-top:52px}.firmas div{flex:1;text-align:center;border-top:1.5px solid #0f2438;padding-top:7px;font-size:12px;color:var(--gris)}
+.legal{margin-top:30px;font-size:10.5px;color:var(--gris);line-height:1.5;border-top:1px solid var(--linea);padding-top:12px}@media print{body{padding:0}@page{margin:16mm}}</style></head><body>
+<div class="hdr"><div><div class="lg">KUXTAL <span class="pl">✈</span></div><div class="tag">CADA DESTINO, UNA HISTORIA</div></div>
+<div class="doc"><div class="t">CONTRATO DE MEMBRESÍA</div><div class="m">No. de socio: <b>${esc(d.no_socio||'—')}</b></div><div class="m">Fecha: ${fmt(hoy)}</div></div></div>
+<h2>Datos del socio</h2><table>${fila('Nombre',d.nombre)}${fila('Teléfono',d.telefono)}</table>
+<h2>Membresía</h2><table>${fila('Tipo de membresía',d.membresia)}${fila('Vigencia',(Number(d.anios)||4)+' años')}${fila('Ingreso',fmt(hoy))}${fila('Vence',fmt(vencIso))}</table>
+<h2>Inversión y plan de pago</h2><table>${fila('Plan de pago',d.plan)}</table>
+<div class="monto"><span>Total de la membresía</span><span class="n">US$ ${Number(d.monto||0).toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>
+<h2>Equipo Kuxtal</h2><table>${fila('Vendedor (liner)',d.vendedor)}${fila('Cerrador (closer)',d.cerrador)}${fila('Digitador',d.digitador)}${fila('Verificador',d.verificador)}</table>
+<div class="firmas"><div>Firma del socio<br>${esc(d.nombre||'')}</div><div>Por Kuxtal Travels<br>${esc(d.cerrador||'')}</div></div>
+<div class="legal">Este contrato acredita la afiliación del socio al programa de membresías de Kuxtal Travels bajo el tipo y la vigencia arriba indicados. La membresía es válida desde la fecha de ingreso hasta su vencimiento y otorga acceso a los beneficios del club vigentes durante ese periodo. Documento generado electrónicamente por el sistema Kuxtal.</div></body></html>`;
+  const w=window.open('','_blank'); if(!w){ toast('Permití las ventanas emergentes para imprimir'); return; }
+  w.document.write(html); w.document.close(); w.focus(); setTimeout(()=>{ try{ w.print(); }catch(e){} }, 400);
+}
 async function cerrarContrato(id,btn){
   btn.disabled=true; btn.textContent='Cerrando…';
   const g=x=>{const e=$(x+id);return e?e.value:'';};
   const l=cierreLeads.find(x=>x.id===id)||{};
+  const agN=aid=>{const a=AGENTES.find(x=>x.id==aid);return a?a.nombre:'';};
   try{
+    const anios=Number(g('vig'))||4;
     const body={p_prospecto:id, p_membresia:g('mem'), p_plan:g('pln'), p_monto:Number(g('mon'))||0,
-      p_vendedor:l.vendedor_id||null, p_cerrador:l.cerrador_id||null, p_digitador:g('dig')?Number(g('dig')):null, p_verificador:g('ver')?Number(g('ver')):null};
+      p_vendedor:l.vendedor_id||null, p_cerrador:l.cerrador_id||null, p_digitador:g('dig')?Number(g('dig')):null, p_verificador:g('ver')?Number(g('ver')):null, p_anios:anios};
     const r=await api("rpc/funnel_cerrar_contrato",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     if(!r.ok){ toast('⚠️ No se pudo cerrar el contrato'); btn.disabled=false; btn.textContent='Cerrar contrato ✍️'; return; }
-    toast('✅ Contrato cerrado · comisiones generadas'); const c=$('cie'+id); if(c)c.remove();
+    let res={}; try{ res=await r.json(); }catch(e){}
+    imprimirContrato({ no_socio:res.no_socio, nombre:l.nombre, telefono:l.telefono, membresia:g('mem'), plan:g('pln'), monto:Number(g('mon'))||0, anios:anios,
+      vendedor:agN(l.vendedor_id), cerrador:agN(l.cerrador_id), digitador:agN(g('dig')), verificador:agN(g('ver')) });
+    toast('✅ Contrato cerrado · socio creado · comisiones generadas'); const c=$('cie'+id); if(c)c.remove();
   }catch(e){ toast('⚠️ Error al cerrar'); btn.disabled=false; btn.textContent='Cerrar contrato ✍️'; }
 }
 
@@ -321,6 +370,52 @@ async function vistaComisiones(){
   const nombreAg=id=>{const a=AGENTES.find(x=>x.id===id);return a?a.nombre:'(por rol)';};
   $('cont').innerHTML=`<div class="panel"><h3>Total en comisiones: $${total.toFixed(2)}</h3><div style="margin-top:8px">${Object.entries(porRol).map(([r,v])=>`<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(r)}: $${v.toFixed(2)}</span>`).join('')}</div></div>`+
     com.slice(0,150).map(c=>`<div class="basecard"><div><b>${esc(c.rol)}</b> · ${esc(nombreAg(c.beneficiario_id))}<div class="m">${c.funnel_contratos?('Contrato · '+esc(c.funnel_contratos.tipo_membresia||'')+' $'+(c.funnel_contratos.monto||0)):''}</div></div><span class="tag" style="background:#8dc63f22;color:#6f9e12">$${Number(c.monto||0).toFixed(2)}</span></div>`).join('');
+}
+
+// ── ANALÍTICA (gerencia) ──
+const barRow=(label,val,max,color,suf='')=>{
+  const w=max>0?Math.round(val/max*100):0;
+  return `<div class="bar"><div class="bl">${esc(label)}</div><div class="bt"><div class="bf" style="width:${w}%;background:${color||'var(--kux)'}"></div></div><div class="bv">${typeof val==='number'?val.toLocaleString('es-GT'):val}${suf}</div></div>`;
+};
+const grpBy=(arr,keyFn)=>{const m={};arr.forEach(x=>{const k=keyFn(x);if(k==null||k==='')return;m[k]=(m[k]||0)+1;});return m;};
+const topBars=(obj,color,n=8)=>Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,n).map(([k,v],_,a)=>barRow(k,v,a[0][1],color)).join('')||'<div class="cap">Sin datos.</div>';
+async function vistaAnalitica(){
+  $('cap').textContent='Analítica de gerencia · embudo, cierres, comisiones y bajas.';
+  $('cont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
+  if(!BASES.length) BASES=await getJSON("funnel_bases?select=id,nombre,tipo&limit=500");
+  const baseTipo={}; BASES.forEach(b=>baseTipo[b.id]=b.tipo||'(sin tipo)');
+  const nomAg=id=>{const a=AGENTES.find(x=>x.id===id);return a?a.nombre:'(sin asignar)';};
+  const P=await getJSON("funnel_prospectos?select=id,estado,etapa,califica,tmk_id,vendedor_id,cerrador_id,base_id,recepcion_en,actualizado_en,motivo_baja&limit=8000");
+  const COM=await getJSON("funnel_comisiones?select=rol,monto&limit=5000");
+  const total=P.length, contact=P.filter(p=>p.estado!=='nuevo').length, asis=P.filter(p=>p.recepcion_en).length, cal=P.filter(p=>p.califica===true).length;
+  const socios=P.filter(p=>p.etapa==='socio'), cerr=socios.length;
+  const pct=(a,b)=>b>0?Math.round(a/b*100)+'%':'—';
+  const stages=[['Nuevo',total,total],['Contactado',contact,total],['Asistió',asis,contact],['Calificó',cal,asis],['Cerró',cerr,cal]];
+  const funnelHTML=stages.map(([n,v,b],i)=>`<div class="bar"><div class="bl">${n}</div><div class="bt"><div class="bf" style="width:${total?Math.round(v/total*100):0}%;background:var(--kux)"></div></div><div class="bv">${v.toLocaleString('es-GT')}${i?' · '+pct(v,b):''}</div></div>`).join('');
+  const porDia=grpBy(socios,s=>String(s.actualizado_en||'').slice(0,10));
+  const diaHTML=Object.entries(porDia).sort((a,b)=>a[0]<b[0]?1:-1).slice(0,14).map(([d,v],_,a)=>barRow(d,v,Math.max(...a.map(x=>x[1])),'var(--lima-d)')).join('')||'<div class="cap">Sin cierres aún.</div>';
+  const porTMK=grpBy(socios,s=>nomAg(s.tmk_id)), porVend=grpBy(socios,s=>nomAg(s.vendedor_id)), porCerr=grpBy(socios,s=>nomAg(s.cerrador_id)), porBase=grpBy(socios,s=>baseTipo[s.base_id]||'(sin base)');
+  const convBaseAll=grpBy(P,p=>baseTipo[p.base_id]||'(sin base)');
+  const convBaseHTML=Object.entries(convBaseAll).sort((a,b)=>b[1]-a[1]).map(([t,tot])=>{const c=porBase[t]||0; return barRow(t+' ('+pct(c,tot)+')',c,Math.max(...Object.values(porBase),1),'var(--kux)');}).join('')||'<div class="cap">Sin datos.</div>';
+  const comRol={}; let comTot=0; COM.forEach(c=>{const m=Number(c.monto||0);comRol[c.rol]=(comRol[c.rol]||0)+m;comTot+=m;});
+  const comHTML=Object.entries(comRol).sort((a,b)=>b[1]-a[1]).map(([r,v],_,a)=>barRow(r,Math.round(v),Math.max(...a.map(x=>x[1])),'#6f9e12','$')).join('')||'<div class="cap">Sin comisiones.</div>';
+  const bajas=P.filter(p=>p.etapa==='baja'), motivos=grpBy(bajas,b=>b.motivo_baja||'(sin motivo)');
+  $('cont').innerHTML=`
+    <div class="stats">
+      <div class="stat"><div class="v">${total.toLocaleString('es-GT')}</div><div class="k">Prospectos</div></div>
+      <div class="stat"><div class="v">${cerr}</div><div class="k">Familias cerradas</div></div>
+      <div class="stat"><div class="v">${pct(cerr,total)}</div><div class="k">Conversión total</div></div>
+      <div class="stat"><div class="v">$${Math.round(comTot).toLocaleString('es-GT')}</div><div class="k">Comisiones</div></div>
+      <div class="stat"><div class="v">${bajas.length}</div><div class="k">Bajas</div></div>
+    </div>
+    <div class="panel"><h3>Embudo de conversión</h3><div class="h">De nuevo a socio · % vs. etapa previa.</div>${funnelHTML}</div>
+    <div class="panel"><h3>Familias cerradas por día</h3>${diaHTML}</div>
+    <div class="panel"><h3>Cerradas por TMK</h3>${topBars(porTMK,'var(--kux)')}</div>
+    <div class="panel"><h3>Cerradas por vendedor</h3>${topBars(porVend,'#245078')}</div>
+    <div class="panel"><h3>Cerradas por cerrador</h3>${topBars(porCerr,'#245078')}</div>
+    <div class="panel"><h3>Conversión por tipo de lead (base)</h3>${convBaseHTML}</div>
+    <div class="panel"><h3>Comisiones por rol</h3>${comHTML}</div>
+    <div class="panel"><h3>Retención · bajas y motivos</h3>${topBars(motivos,'var(--rojo)')}</div>`;
 }
 
 // ── POSTVENTA (bienvenida a socios nuevos + baja) ──
