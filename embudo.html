@@ -143,9 +143,10 @@ const LS="kux_sesion"; // comparte sesión con el CRM
 const WA='<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 0-8.6 15l-1.3 4.7 4.8-1.3A10 10 0 1 0 12 2zm0 1.8a8.2 8.2 0 0 1 6.9 12.6l-.2.3.8 2.8-2.9-.8-.3.2A8.2 8.2 0 1 1 12 3.8zm-3.1 3.7c-.2 0-.5.1-.7.4-.3.3-.9.9-.9 2.1s.9 2.5 1 2.6c.1.2 1.8 2.8 4.4 3.8 2.2.9 2.6.7 3.1.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2-.1-.1-.2-.2-.5-.3l-1.6-.8c-.2-.1-.4-.1-.5.1l-.7.9c-.1.2-.3.2-.5.1-.6-.2-1.4-.5-2.2-1.3-.6-.5-1-1.2-1.1-1.4-.1-.2 0-.3.1-.4l.4-.5c.1-.1.1-.3.2-.4 0-.2 0-.3 0-.4l-.7-1.7c-.2-.4-.4-.4-.5-.4z"/></svg>';
 const TEL='<svg viewBox="0 0 24 24"><path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.5.6.6 0 1 .5 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.5-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.5.1.4 0 .8-.3 1z"/></svg>';
 const GERENTES=['admin','gerente_general','gerente_ventas','gerente_tmk','supervisor_tmk','supervisor'];
+const VENTAS=['recepcion','vendedor','cerrador','reservaciones','servicio','digitador','verificador'];
 
-let SES=null, USER="", ROLE="invitado", esGerente=false, miAgente=null;
-let ESTADOS=[], RESTAS=[], AGENTES=[], BASES=[], leads=[], todos=[];
+let SES=null, USER="", ROLE="invitado", esGerente=false, verTodo=false, miAgente=null;
+let ESTADOS=[], RESTAS=[], AGENTES=[], MEMBS=[], PLANES=[], BASES=[], leads=[], todos=[], cierreLeads=[];
 let tab='midia', sub='pend';
 
 const $=id=>document.getElementById(id);
@@ -169,7 +170,7 @@ async function refrescar(){
   try{ const s=JSON.parse(raw); const d=await sbAuth("token?grant_type=refresh_token",{refresh_token:s.refresh_token}); guardarSes(d); return true; }
   catch(e){ localStorage.removeItem(LS); return false; }
 }
-function decodeUser(){ try{ const d=JSON.parse(atob(SES.access_token.split('.')[1])); USER=d.email||""; ROLE=(d.app_metadata&&d.app_metadata.role)||"invitado"; }catch(e){ USER=""; ROLE="invitado"; } esGerente=GERENTES.includes(ROLE); }
+function decodeUser(){ try{ const d=JSON.parse(atob(SES.access_token.split('.')[1])); USER=d.email||""; ROLE=(d.app_metadata&&d.app_metadata.role)||"invitado"; }catch(e){ USER=""; ROLE="invitado"; } esGerente=GERENTES.includes(ROLE); verTodo=esGerente||VENTAS.includes(ROLE); }
 async function login(){
   const b=$('entrar'); if(b.disabled) return;
   $('lerr').textContent=""; b.disabled=true; b.textContent="Entrando…";
@@ -197,28 +198,184 @@ async function arrancar(){
     ESTADOS=(await getJSON("funnel_estados?select=*&activo=eq.true&order=orden.asc"))||[];
     ESTADOS.forEach(e=>{ if(!/^#[0-9a-fA-F]{3,8}$/.test(String(e.color||''))) e.color='#8a94a6'; e.clave=String(e.clave||'').replace(/[^a-z0-9_]/gi,''); });
     RESTAS=(await getJSON("funnel_restaurantes?select=*&activo=eq.true&order=nombre.asc"))||[];
+    MEMBS=(await getJSON("funnel_membresias?select=*&activo=eq.true&order=orden.asc"))||[];
+    PLANES=(await getJSON("funnel_planes_pago?select=*&activo=eq.true&order=orden.asc"))||[];
+    if(verTodo) AGENTES=(await getJSON("funnel_agentes?select=*&order=nombre.asc"))||[];
     const ag=await getJSON("funnel_agentes?select=id,nombre,rol,email&email=eq."+encodeURIComponent(USER.toLowerCase()));
     miAgente=(ag&&ag[0])||null;
-    $('who').textContent=USER+" · "+(esGerente?'Gerencia':(miAgente?('TMK'):ROLE));
+    $('who').textContent=USER+" · "+(esGerente?'Gerencia':(VENTAS.includes(ROLE)?'Ventas':(miAgente?'TMK':ROLE)));
     $('load').style.display='none'; $('app').style.display='block';
-    tab = esGerente ? 'cargar' : 'midia';
+    tab = esGerente ? 'cargar' : (verTodo ? 'recepcion' : 'midia');
     pintarTabs(); await irTab(tab);
     return true;
   }catch(e){ $('load').style.display='none'; return false; }
 }
 
 function pintarTabs(){
-  const defs=[];
-  defs.push(['midia','Mi día']);
-  if(esGerente){ defs.push(['todos','Todos']); defs.push(['cargar','Cargar base']); defs.push(['equipo','Equipo']); }
+  const defs=[['midia','Mi día']];
+  if(verTodo){ defs.push(['recepcion','Recepción']); defs.push(['cierre','Cierre']); defs.push(['postventa','Postventa']); defs.push(['reservas','Reservas']); defs.push(['todos','Todos']); }
+  if(esGerente){ defs.push(['cargar','Cargar base']); defs.push(['equipo','Equipo']); defs.push(['comis','Comisiones']); }
   $('tabs').innerHTML=defs.map(([k,t])=>`<button class="tab ${tab===k?'on':''}" onclick="irTab('${k}')">${t}</button>`).join('');
 }
 async function irTab(k){ tab=k; pintarTabs();
   if(k==='midia'){ await cargarMiDia(); }
+  else if(k==='recepcion'){ await vistaRecepcion(); }
+  else if(k==='cierre'){ await vistaCierre(); }
+  else if(k==='postventa'){ await vistaPostventa(); }
+  else if(k==='reservas'){ await vistaReservas(); }
   else if(k==='todos'){ await cargarTodos(); }
   else if(k==='cargar'){ await vistaCargar(); }
   else if(k==='equipo'){ await vistaEquipo(); }
+  else if(k==='comis'){ await vistaComisiones(); }
 }
+function opAgentes(rol,sel){ return AGENTES.filter(a=>a.activo&&a.rol===rol).map(a=>`<option value="${a.id}" ${sel==a.id?'selected':''}>${esc(a.nombre)}</option>`).join(''); }
+
+// ── RECEPCIÓN (sala de ventas: validar + calificar al llegar) ──
+async function vistaRecepcion(){
+  $('cap').textContent='Recepción de sala: validá al que llega, calificá y asigná vendedor/cerrador.';
+  $('cont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
+  const list=await getJSON("funnel_prospectos?select=*&estado=eq.asistira&etapa=in.(telemarketing,presentacion)&order=presenta_en.asc.nullslast,id.asc");
+  if(!list.length){ $('cont').innerHTML=`<div class="vacio"><b>Nadie en recepción</b><p>Acá aparecen los prospectos que un TMK marcó como <b>Asistirá</b>. Cuando lleguen, los validás y calificás.</p></div>`; return; }
+  $('cont').innerHTML=list.map(recepCard).join('');
+}
+function recepCard(l){
+  const rest=(RESTAS.find(r=>r.id==l.restaurante_id)||{}).nombre||'';
+  return `<div class="lead" id="rec${l.id}" style="border-left-color:var(--amar)">
+    <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">${esc(l.telefono||'')}${rest?(' · '+esc(rest)):''}</div></div></div>
+    <div class="sub show" style="margin-top:12px">
+      <div class="fld"><label>Edad</label><input type="number" id="edad${l.id}" inputmode="numeric" value="${l.edad||''}"></div>
+      <div class="fld"><label>Estado civil</label><select id="ec${l.id}"><option value="">—</option><option ${l.estado_civil==='casado'?'selected':''}>casado</option><option ${l.estado_civil==='soltero'?'selected':''}>soltero</option><option ${l.estado_civil==='otro'?'selected':''}>otro</option></select></div>
+    </div>
+    <div class="sub show">
+      <div class="fld"><label>Tarjetas de crédito (cuántas)</label><input type="number" id="ntc${l.id}" inputmode="numeric" value="${l.tarjetas_credito||''}"></div>
+      <div class="fld"><label>Tipo de tarjetas</label><input id="ttc${l.id}" value="${esc(l.tipo_tarjetas||'')}" placeholder="Visa, Amex…"></div>
+    </div>
+    <div class="sub show">
+      <div class="fld"><label>Vendedor</label><select id="vend${l.id}"><option value="">Asignar…</option>${opAgentes('vendedor',l.vendedor_id)}</select></div>
+      <div class="fld"><label>Cerrador</label><select id="cerr${l.id}"><option value="">Asignar…</option>${opAgentes('cerrador',l.cerrador_id)}</select></div>
+    </div>
+    <div class="note"><textarea id="mot${l.id}" placeholder="Si NO califica, ¿por qué?">${esc(l.motivo_no||'')}</textarea></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn" style="margin:0;background:var(--verde)" onclick="recepcionar(${l.id},true,this)">Califica → a sala</button>
+      <button class="btn" style="margin:0;background:var(--rojo)" onclick="recepcionar(${l.id},false,this)">No califica</button>
+    </div>
+  </div>`;
+}
+async function recepcionar(id,ok,btn){
+  btn.disabled=true;
+  const g=x=>{const e=$(x+id);return e?e.value:'';};
+  const body={edad:g('edad')?Number(g('edad')):null, estado_civil:g('ec')||null, tarjetas_credito:g('ntc')?Number(g('ntc')):null, tipo_tarjetas:g('ttc')||null,
+    califica:ok, motivo_no:ok?null:(g('mot')||null), vendedor_id:g('vend')?Number(g('vend')):null, cerrador_id:g('cerr')?Number(g('cerr')):null,
+    recepcion_en:new Date().toISOString(), recepcionado_por:USER, etapa:ok?'sala':'baja'};
+  if(await patchLead(id,body)){ ev(id,'sala',ok?'Calificó → sala':'No califica'); toast(ok?'✅ Pasa a sala':'Marcado: no califica'); const c=$('rec'+id); if(c)c.remove(); }
+  else{ btn.disabled=false; toast('⚠️ No se pudo'); }
+}
+
+// ── CIERRE (contrato + comisiones) ──
+async function vistaCierre(){
+  $('cap').textContent='Sala de ventas: cerrá el contrato. Nace de la membresía + plan; genera las comisiones.';
+  $('cont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
+  cierreLeads=await getJSON("funnel_prospectos?select=*&etapa=eq.sala&califica=is.true&order=recepcion_en.asc.nullslast,id.asc");
+  if(!cierreLeads.length){ $('cont').innerHTML=`<div class="vacio"><b>Nadie en sala para cerrar</b><p>Acá caen los que calificaron en Recepción, listos para el contrato.</p></div>`; return; }
+  $('cont').innerHTML=cierreLeads.map(cierreCard).join('');
+}
+function cierreCard(l){
+  const memb=MEMBS.map((m,i)=>`<option value="${esc(m.tipo)}" data-p="${m.precio}">${esc(m.tipo)} · $${m.precio}</option>`).join('');
+  const plan=PLANES.map(p=>`<option>${esc(p.nombre)}</option>`).join('');
+  const p0=MEMBS[0]?MEMBS[0].precio:'';
+  return `<div class="lead" id="cie${l.id}" style="border-left-color:var(--verde)">
+    <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">Vendedor y cerrador asignados en recepción</div></div></div>
+    <div class="sub show" style="margin-top:12px">
+      <div class="fld"><label>Membresía</label><select id="mem${l.id}" onchange="var o=this.options[this.selectedIndex];document.getElementById('mon${l.id}').value=o.getAttribute('data-p')||''">${memb}</select></div>
+      <div class="fld"><label>Plan de pago</label><select id="pln${l.id}">${plan}</select></div>
+      <div class="fld"><label>Monto (US$)</label><input type="number" id="mon${l.id}" inputmode="decimal" value="${p0}"></div>
+    </div>
+    <div class="sub show">
+      <div class="fld"><label>Digitador</label><select id="dig${l.id}"><option value="">—</option>${opAgentes('digitador')}</select></div>
+      <div class="fld"><label>Verificador</label><select id="ver${l.id}"><option value="">—</option>${opAgentes('verificador')}</select></div>
+    </div>
+    <button class="btn" onclick="cerrarContrato(${l.id},this)">Cerrar contrato ✍️</button>
+  </div>`;
+}
+async function cerrarContrato(id,btn){
+  btn.disabled=true; btn.textContent='Cerrando…';
+  const g=x=>{const e=$(x+id);return e?e.value:'';};
+  const l=cierreLeads.find(x=>x.id===id)||{};
+  try{
+    const body={p_prospecto:id, p_membresia:g('mem'), p_plan:g('pln'), p_monto:Number(g('mon'))||0,
+      p_vendedor:l.vendedor_id||null, p_cerrador:l.cerrador_id||null, p_digitador:g('dig')?Number(g('dig')):null, p_verificador:g('ver')?Number(g('ver')):null};
+    const r=await api("rpc/funnel_cerrar_contrato",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    if(!r.ok){ toast('⚠️ No se pudo cerrar el contrato'); btn.disabled=false; btn.textContent='Cerrar contrato ✍️'; return; }
+    toast('✅ Contrato cerrado · comisiones generadas'); const c=$('cie'+id); if(c)c.remove();
+  }catch(e){ toast('⚠️ Error al cerrar'); btn.disabled=false; btn.textContent='Cerrar contrato ✍️'; }
+}
+
+// ── COMISIONES (gerencia) ──
+async function vistaComisiones(){
+  $('cap').textContent='Comisiones generadas por cada venta (por rol y persona). Se calculan solas al cerrar.';
+  $('cont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
+  const com=await getJSON("funnel_comisiones?select=rol,monto,beneficiario_id,funnel_contratos(tipo_membresia,monto)&order=id.desc&limit=300");
+  if(!com.length){ $('cont').innerHTML=`<div class="vacio"><b>Sin comisiones todavía</b><p>Se generan solas cuando cerrás un contrato en la pestaña Cierre.</p></div>`; return; }
+  const total=com.reduce((a,c)=>a+Number(c.monto||0),0);
+  const porRol={}; com.forEach(c=>{porRol[c.rol]=(porRol[c.rol]||0)+Number(c.monto||0);});
+  const nombreAg=id=>{const a=AGENTES.find(x=>x.id===id);return a?a.nombre:'(por rol)';};
+  $('cont').innerHTML=`<div class="panel"><h3>Total en comisiones: $${total.toFixed(2)}</h3><div style="margin-top:8px">${Object.entries(porRol).map(([r,v])=>`<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(r)}: $${v.toFixed(2)}</span>`).join('')}</div></div>`+
+    com.slice(0,150).map(c=>`<div class="basecard"><div><b>${esc(c.rol)}</b> · ${esc(nombreAg(c.beneficiario_id))}<div class="m">${c.funnel_contratos?('Contrato · '+esc(c.funnel_contratos.tipo_membresia||'')+' $'+(c.funnel_contratos.monto||0)):''}</div></div><span class="tag" style="background:#8dc63f22;color:#6f9e12">$${Number(c.monto||0).toFixed(2)}</span></div>`).join('');
+}
+
+// ── POSTVENTA (bienvenida a socios nuevos + baja) ──
+async function vistaPostventa(){
+  $('cap').textContent='Servicio al cliente: dale la bienvenida a los socios nuevos y registrá cómo los recibiste.';
+  $('cont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
+  const list=await getJSON("funnel_prospectos?select=*&etapa=eq.socio&order=actualizado_en.desc&limit=100");
+  if(!list.length){ $('cont').innerHTML=`<div class="vacio"><b>Sin socios nuevos</b><p>Acá aparecen los que cerraron contrato, para darles la bienvenida.</p></div>`; return; }
+  $('cont').innerHTML=list.map(pvCard).join('');
+}
+function pvCard(l){
+  const rec=['bien','alegre','molesto','con dudas'], done=l.postventa_contactado;
+  const call=telDig(l.telefono).length>=8?`<div class="lcall"><a class="ic wa" href="${waHref(l.telefono)}" target="_blank" rel="noopener">${WA}</a><a class="ic tel" href="${telHref(l.telefono)}">${TEL}</a></div>`:'';
+  return `<div class="lead" id="pv${l.id}" style="border-left-color:${done?'var(--verde)':'var(--kux)'}">
+    <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">${esc(l.telefono||'')}${done?(' · ✓ contactado'+(l.postventa_recepcion?(' ('+esc(l.postventa_recepcion)+')'):'')):''}</div></div>${call}</div>
+    <div class="lbl">¿Cómo recibió la bienvenida?</div>
+    <div class="estados">${rec.map(r=>`<button class="est ${l.postventa_recepcion===r?'on':''}" style="${l.postventa_recepcion===r?'background:var(--kux);color:#fff':''}" onclick="pvRecep(${l.id},'${r}')">${r}</button>`).join('')}</div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn" style="margin:0;flex:1;background:var(--verde)" onclick="pvContacto(${l.id},this)">${done?'Contactado ✓':'Marcar contactado'}</button>
+      <button class="btn" style="margin:0;flex:none;background:var(--rojo)" onclick="darBaja(${l.id},this)">Dar de baja</button>
+    </div>
+  </div>`;
+}
+async function pvRecep(id,r){ if(await patchLead(id,{postventa_recepcion:r})){ ev(id,'postventa','recepción: '+r); toast('Anotado: '+r); document.querySelectorAll('#pv'+id+' .est').forEach(x=>{const on=x.textContent===r;x.classList.toggle('on',on);x.style.background=on?'var(--kux)':'';x.style.color=on?'#fff':'';}); } }
+async function pvContacto(id,btn){ if(await patchLead(id,{postventa_contactado:true,postventa_en:new Date().toISOString()})){ ev(id,'postventa','contactado bienvenida'); toast('✅ Bienvenida registrada'); btn.textContent='Contactado ✓'; } }
+async function darBaja(id,btn){ const m=prompt('Motivo de la baja:'); if(m===null)return; if(await patchLead(id,{etapa:'baja',motivo_baja:m||null,baja_en:new Date().toISOString()})){ ev(id,'baja',m||'baja'); toast('Socio dado de baja'); const c=$('pv'+id); if(c)c.remove(); } }
+
+// ── RESERVAS ──
+async function vistaReservas(){
+  $('cap').textContent='Reservaciones: gestioná los viajes que piden los socios.';
+  $('cont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
+  window.__RES=await getJSON("funnel_reservas?select=*&order=id.desc&limit=100");
+  $('cont').innerHTML=`<div class="panel"><h3>Nueva reserva</h3>
+    <label>Socio (nombre)</label><input id="rsoc" placeholder="Nombre del socio">
+    <div class="row"><div><label>Destino</label><input id="rdest" placeholder="Cancún…"></div><div><label>Fecha</label><input id="rfec" type="date"></div><div><label>Personas</label><input id="rper" type="number" value="2" inputmode="numeric"></div></div>
+    <button class="btn" id="raddb" onclick="addReserva()">Crear reserva</button></div>
+    <div class="panel"><h3>Reservas (${window.__RES.length})</h3><div id="resList"></div></div>`;
+  pintarReservas();
+}
+function pintarReservas(){
+  const res=window.__RES||[], ESTR=['solicitada','confirmada','viajó','cancelada'];
+  const stSel='padding:8px 10px;border:1px solid var(--linea);border-radius:9px;background:#fff;font-size:12.5px;min-height:38px';
+  $('resList').innerHTML=res.length?res.map(r=>`<div class="basecard"><div><b>${esc(r.socio_nombre||'—')}</b> → ${esc(r.destino||'')}<div class="m">${r.fecha_viaje||''} · ${r.personas||1} pers.</div></div>
+    <select onchange="setReserva(${r.id},this.value)" style="${stSel}">${ESTR.map(e=>`<option ${r.estado===e?'selected':''}>${e}</option>`).join('')}</select></div>`).join('')
+    :`<div class="m" style="color:var(--gris);font-size:13px">Sin reservas todavía.</div>`;
+}
+async function addReserva(){
+  const soc=$('rsoc').value.trim(), dest=$('rdest').value.trim();
+  if(!soc||!dest){ toast('Poné socio y destino'); return; }
+  const b=$('raddb'); b.disabled=true; b.textContent='Creando…';
+  try{ const r=await api("funnel_reservas",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_nombre:soc,destino:dest,fecha_viaje:$('rfec').value||null,personas:Number($('rper').value)||1,gestionado_por:USER})});
+    if(!r.ok)throw 0; toast('✅ Reserva creada'); await vistaReservas();
+  }catch(e){ toast('⚠️ No se pudo'); } finally{ b.disabled=false; b.textContent='Crear reserva'; }
+}
+async function setReserva(id,estado){ try{ const r=await api("funnel_reservas?id=eq."+id,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({estado})}); toast(r.ok?'Actualizada':'⚠️ No se pudo'); }catch(e){ toast('⚠️ No se pudo'); } }
 
 // ── MI DÍA ──
 async function cargarMiDia(){
