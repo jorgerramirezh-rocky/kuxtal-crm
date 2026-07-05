@@ -222,6 +222,7 @@
   <div class="slogan">Cada destino, una historia · Business Intelligence</div>
   <div class="slogan" id="rolLabel" style="text-transform:none;letter-spacing:0;opacity:.9"></div>
   <button class="tourhelp" onclick="verTour()">¿Cómo funciona? ↻</button>
+  <a class="tourhelp" id="embLink" href="embudo.html" style="display:none;text-decoration:none">Embudo de ventas →</a>
 </div></header>
 
 <div class="wrap">
@@ -829,7 +830,7 @@ async function arrancar(){
     document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>ir(t.dataset.t));
     $('buscar').oninput=()=>{verLim=60;render()};
     if(ROLE==='cliente'){ await mostrarMiembro(); $('rolLabel').textContent=USER; maybeTour('cliente'); return true; }
-    kpis(); render(); $('rolLabel').textContent=USER+' · '+rolBonito(ROLE); maybeTour('staff'); return true;
+    kpis(); render(); $('rolLabel').textContent=USER+' · '+rolBonito(ROLE); { const el=$('embLink'); if(el) el.style.display='inline-block'; } maybeTour('staff'); return true;
   }catch(e){ $('load').style.display='none'; return false; }
 }
 

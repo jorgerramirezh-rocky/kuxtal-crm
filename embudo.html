@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Kuxtal · Embudo de ventas</title>
+<meta name="theme-color" content="#0f2438">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=League+Gothic&display=swap" rel="stylesheet">
+<style>
+  :root{--kux:#1b365d;--kux-d:#0f2438;--kux-l:#e9eef5;--lima:#8dc63f;--lima-d:#6f9e12;
+    --rojo:#e5484d;--amar:#f2a900;--verde:#22a06b;--gris:#8a94a6;--tinta:#0f2438;--papel:#f2f5f8;--linea:#e4e9ef;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{max-width:100%;overflow-x:hidden}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--papel);color:var(--tinta);font-size:16px;-webkit-font-smoothing:antialiased;line-height:1.45}
+  input,select,textarea,button{font-family:inherit}
+  .wrap{max-width:660px;margin:0 auto;padding:0 14px calc(48px + env(safe-area-inset-bottom))}
+  /* Header */
+  header{background:linear-gradient(125deg,var(--kux-d),var(--kux) 60%,#245078);color:#fff;padding:15px 14px 20px;padding-top:calc(15px + env(safe-area-inset-top))}
+  .hin{max-width:660px;margin:0 auto;display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  .brand .lg{font-family:'League Gothic',sans-serif;font-size:28px;letter-spacing:1px;line-height:.9}
+  .brand .pl{color:var(--lima)}
+  .brand .s{color:var(--lima);font-size:10.5px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;margin-top:3px}
+  .brand .who{font-size:12px;color:#c3d0df;margin-top:4px}
+  .out{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:10px;padding:9px 12px;font-size:12px;font-weight:600;cursor:pointer;min-height:40px}
+  .out:active{transform:scale(.96)}
+  /* Tabs */
+  .tabs{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;margin:14px 0 12px}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex:none;border:1px solid var(--linea);background:#fff;border-radius:11px;padding:10px 15px;font-size:13px;font-weight:600;color:var(--gris);cursor:pointer;white-space:nowrap;min-height:42px;display:flex;align-items:center;gap:7px}
+  .tab.on{background:var(--kux);color:#fff;border-color:var(--kux)}
+  .tab .n{font-size:11px;background:rgba(0,0,0,.08);border-radius:20px;padding:1px 7px;font-variant-numeric:tabular-nums}
+  .tab.on .n{background:rgba(255,255,255,.22)}
+  .subtabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-bottom:12px}
+  .subtabs::-webkit-scrollbar{display:none}
+  .st{flex:none;border:1px solid var(--linea);background:#fff;border-radius:9px;padding:8px 12px;font-size:12.5px;font-weight:600;color:var(--gris);cursor:pointer;min-height:38px}
+  .st.on{background:var(--kux-l);color:var(--kux-d);border-color:var(--kux);font-weight:700}
+  .cap{color:var(--gris);font-size:12px;margin:0 2px 12px;line-height:1.5}
+  /* Lead card */
+  .lead{background:#fff;border:1px solid var(--linea);border-left:4px solid var(--gris);border-radius:14px;padding:13px 14px;margin-bottom:11px;box-shadow:0 2px 8px rgba(15,36,56,.05)}
+  .ltop{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .lname{font-weight:700;font-size:16px;line-height:1.15;word-break:break-word}
+  .lmeta{font-size:12px;color:var(--gris);margin-top:3px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .src{font-size:10.5px;font-weight:700;border-radius:7px;padding:2px 7px;background:var(--kux-l);color:var(--kux)}
+  .lcall{display:flex;gap:7px;flex:none}
+  .ic{width:40px;height:40px;border-radius:11px;border:none;display:flex;align-items:center;justify-content:center;color:#fff;cursor:pointer;text-decoration:none}
+  .ic svg{width:19px;height:19px;fill:currentColor}
+  .ic.wa{background:#25d366}.ic.tel{background:var(--kux)}
+  .ic:active{transform:scale(.94)}
+  .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--gris);font-weight:700;margin:13px 0 7px}
+  .estados{display:flex;gap:6px;flex-wrap:wrap}
+  .est{border:1px solid var(--linea);background:#fafbfc;border-radius:9px;padding:8px 11px;font-size:12px;font-weight:600;color:var(--tinta);cursor:pointer;min-height:38px}
+  .est.on{color:#fff;border-color:transparent}
+  .est:active{transform:scale(.96)}
+  .sub{margin-top:12px;padding:12px;background:#f8fafb;border:1px solid var(--linea);border-radius:12px;display:none;gap:10px;flex-wrap:wrap}
+  .sub.show{display:flex}
+  .fld{flex:1;min-width:130px}
+  .fld label{display:block;font-size:11px;font-weight:700;color:var(--gris);margin-bottom:4px}
+  .fld input,.fld select,.fld textarea{width:100%;padding:10px 11px;border:1px solid var(--linea);border-radius:10px;font-size:15px;background:#fff;outline:none}
+  .fld input:focus,.fld select:focus,.fld textarea:focus{border-color:var(--kux);box-shadow:0 0 0 3px rgba(27,54,93,.1)}
+  .note{margin-top:11px}
+  .note textarea{width:100%;border:1px solid var(--linea);border-radius:11px;padding:10px 12px;font-size:15px;min-height:44px;resize:vertical;outline:none}
+  .note textarea:focus{border-color:var(--kux);box-shadow:0 0 0 3px rgba(27,54,93,.1)}
+  .pin{font-size:11.5px;color:var(--lima-d);font-weight:700;margin-top:9px;display:none;align-items:center;gap:5px}
+  .pin.show{display:flex}
+  .vacio{text-align:center;color:var(--gris);padding:36px 20px;background:#fff;border:1px dashed var(--linea);border-radius:16px}
+  .vacio b{display:block;color:var(--kux);font-size:15px;margin-bottom:5px}
+  .vacio p{font-size:13px;max-width:380px;margin:0 auto;line-height:1.5}
+  /* Panels (cargar base / equipo) */
+  .panel{background:#fff;border:1px solid var(--linea);border-radius:16px;padding:16px 16px 18px;margin-bottom:12px;box-shadow:0 2px 8px rgba(15,36,56,.05)}
+  .panel h3{font-size:15px;color:var(--kux);font-weight:800;margin-bottom:4px}
+  .panel .h{font-size:12.5px;color:var(--gris);margin-bottom:12px;line-height:1.5}
+  .panel label{display:block;font-size:11.5px;font-weight:700;color:var(--gris);margin:11px 0 5px}
+  .panel input,.panel select,.panel textarea{width:100%;padding:11px 12px;border:1px solid var(--linea);border-radius:11px;font-size:15px;outline:none;background:#fff}
+  .panel input:focus,.panel select:focus,.panel textarea:focus{border-color:var(--kux);box-shadow:0 0 0 3px rgba(27,54,93,.1)}
+  .panel textarea{min-height:120px;resize:vertical;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13.5px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .row>*{flex:1;min-width:120px}
+  .btn{background:var(--kux);color:#fff;border:none;border-radius:12px;padding:13px 16px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;margin-top:14px;width:100%}
+  .btn.lima{background:var(--lima-d)}
+  .btn:active{transform:scale(.98)} .btn:disabled{opacity:.55}
+  .basecard{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 13px;border:1px solid var(--linea);border-radius:12px;margin-bottom:8px;background:#fff;flex-wrap:wrap}
+  .basecard b{color:var(--kux)}
+  .basecard .m{font-size:12px;color:var(--gris)}
+  .agrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 12px;border:1px solid var(--linea);border-radius:11px;margin-bottom:8px;flex-wrap:wrap}
+  .agrow .an{font-weight:700} .agrow .ae{font-size:12px;color:var(--gris)}
+  .tag{font-size:10.5px;font-weight:800;border-radius:7px;padding:2px 8px;background:var(--kux-l);color:var(--kux);text-transform:uppercase;letter-spacing:.4px}
+  /* Login / load */
+  #gate{position:fixed;inset:0;z-index:50;background:linear-gradient(135deg,var(--kux-d),var(--kux),#245078);display:flex;align-items:center;justify-content:center;padding:20px}
+  .lbox{background:#fff;border-radius:22px;padding:30px 24px;width:100%;max-width:360px;box-shadow:0 24px 60px rgba(0,0,0,.35);text-align:center}
+  .lbox .lg{font-family:'League Gothic',sans-serif;font-size:42px;color:var(--kux);line-height:.9}
+  .lbox .pl{color:var(--lima)}
+  .lbox .s{font-family:'League Gothic',sans-serif;font-size:15px;letter-spacing:4px;color:var(--lima-d)}
+  .lbox p{color:var(--gris);font-size:12.5px;margin:6px 0 20px}
+  .lbox input{width:100%;padding:14px 15px;border:1px solid var(--linea);border-radius:12px;font-size:16px;margin-bottom:11px;outline:none}
+  .lbox input:focus{border-color:var(--kux);box-shadow:0 0 0 3px rgba(27,54,93,.12)}
+  .lbox button{width:100%;padding:15px;border:none;border-radius:12px;background:var(--kux);color:#fff;font-size:16px;font-weight:700;cursor:pointer;min-height:50px}
+  .lerr{color:var(--rojo);font-size:12.5px;margin-top:10px;min-height:16px}
+  #load{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:var(--papel);color:var(--gris);font-size:14px}
+  .spin{width:24px;height:24px;border:3px solid var(--kux-l);border-top-color:var(--kux);border-radius:50%;animation:sp .8s linear infinite;margin-right:10px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(16px);background:var(--kux-d);color:#fff;padding:11px 17px;border-radius:11px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:.25s;z-index:70;max-width:90vw;text-align:center}
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  @media (min-width:560px){ .fld{min-width:150px} }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation-duration:.001s!important}}
+</style>
+</head>
+<body>
+
+<div id="load"><span class="spin"></span> Cargando…</div>
+
+<div id="gate" style="display:none">
+  <div class="lbox">
+    <div><span class="lg">KUXTAL</span> <span class="s">TRAVELS</span> <span class="pl lg" style="font-size:24px">✈</span></div>
+    <p>Embudo de ventas · acceso del equipo</p>
+    <input id="u" type="email" placeholder="Usuario" autocomplete="username">
+    <input id="p" type="password" placeholder="Contraseña" autocomplete="current-password">
+    <button id="entrar" onclick="login()">Entrar</button>
+    <div class="lerr" id="lerr"></div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+<header><div class="hin">
+  <div class="brand"><div class="lg">KUXTAL <span class="pl">✈</span></div><div class="s">Embudo de ventas</div><div class="who" id="who"></div></div>
+  <button class="out" onclick="salir()">Salir</button>
+</div></header>
+<div class="wrap">
+  <div class="tabs" id="tabs"></div>
+  <div class="cap" id="cap"></div>
+  <div id="cont"></div>
+</div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SB_URL="https://tevzfdiumfekvapamovw.supabase.co";
+const SB_PUB="sb_publishable_MMVJjzrA1rHdnMWxl0zeMA_DTDTTGTJ";
+const LS="kux_sesion"; // comparte sesión con el CRM
+const WA='<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 0-8.6 15l-1.3 4.7 4.8-1.3A10 10 0 1 0 12 2zm0 1.8a8.2 8.2 0 0 1 6.9 12.6l-.2.3.8 2.8-2.9-.8-.3.2A8.2 8.2 0 1 1 12 3.8zm-3.1 3.7c-.2 0-.5.1-.7.4-.3.3-.9.9-.9 2.1s.9 2.5 1 2.6c.1.2 1.8 2.8 4.4 3.8 2.2.9 2.6.7 3.1.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2-.1-.1-.2-.2-.5-.3l-1.6-.8c-.2-.1-.4-.1-.5.1l-.7.9c-.1.2-.3.2-.5.1-.6-.2-1.4-.5-2.2-1.3-.6-.5-1-1.2-1.1-1.4-.1-.2 0-.3.1-.4l.4-.5c.1-.1.1-.3.2-.4 0-.2 0-.3 0-.4l-.7-1.7c-.2-.4-.4-.4-.5-.4z"/></svg>';
+const TEL='<svg viewBox="0 0 24 24"><path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.5.6.6 0 1 .5 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.5-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.5.1.4 0 .8-.3 1z"/></svg>';
+const GERENTES=['admin','gerente_general','gerente_ventas','gerente_tmk','supervisor_tmk','supervisor'];
+
+let SES=null, USER="", ROLE="invitado", esGerente=false, miAgente=null;
+let ESTADOS=[], RESTAS=[], AGENTES=[], BASES=[], leads=[], todos=[];
+let tab='midia', sub='pend';
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const telDig=t=>String(t||'').replace(/\D/g,'');
+const waHref=t=>'https://wa.me/502'+telDig(t);
+const telHref=t=>'tel:+502'+telDig(t);
+const toast=m=>{const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(t._);t._=setTimeout(()=>t.classList.remove('on'),2200);};
+const hoyStr=()=>new Date().toISOString().slice(0,10);
+const estDe=c=>ESTADOS.find(e=>e.clave===c)||{clave:c,etiqueta:c,color:'#8a94a6'};
+
+// ── Auth (mismo patrón que el CRM) ──
+async function sbAuth(path,body){
+  const r=await fetch(SB_URL+"/auth/v1/"+path,{method:"POST",headers:{apikey:SB_PUB,"Content-Type":"application/json"},body:JSON.stringify(body)});
+  const d=await r.json(); if(!r.ok) throw new Error(d.error_description||d.msg||"Error"); return d;
+}
+function guardarSes(d){ SES={access_token:d.access_token,refresh_token:d.refresh_token}; localStorage.setItem(LS,JSON.stringify(SES)); }
+function salir(){ localStorage.removeItem(LS); SES=null; location.reload(); }
+async function refrescar(){
+  const raw=localStorage.getItem(LS); if(!raw) return false;
+  try{ const s=JSON.parse(raw); const d=await sbAuth("token?grant_type=refresh_token",{refresh_token:s.refresh_token}); guardarSes(d); return true; }
+  catch(e){ localStorage.removeItem(LS); return false; }
+}
+function decodeUser(){ try{ const d=JSON.parse(atob(SES.access_token.split('.')[1])); USER=d.email||""; ROLE=(d.app_metadata&&d.app_metadata.role)||"invitado"; }catch(e){ USER=""; ROLE="invitado"; } esGerente=GERENTES.includes(ROLE); }
+async function login(){
+  const b=$('entrar'); if(b.disabled) return;
+  $('lerr').textContent=""; b.disabled=true; b.textContent="Entrando…";
+  try{ const d=await sbAuth("token?grant_type=password",{email:$('u').value.trim(),password:$('p').value}); guardarSes(d);
+    if(!await arrancar()){ mostrarLogin(); $('lerr').textContent="No se pudieron cargar los datos."; } }
+  catch(e){ mostrarLogin(); $('lerr').textContent="Usuario o contraseña incorrectos."; }
+  finally{ b.disabled=false; b.textContent="Entrar"; }
+}
+function mostrarLogin(){ $('load').style.display='none'; $('app').style.display='none'; $('gate').style.display='flex'; setTimeout(()=>$('p').focus(),80); }
+
+// ── REST helpers (con refresh en 401) ──
+async function api(path,opt,reint){
+  opt=opt||{}; opt.headers=Object.assign({apikey:SB_PUB,Authorization:"Bearer "+(SES?SES.access_token:"")},opt.headers||{});
+  const r=await fetch(SB_URL+"/rest/v1/"+path,opt);
+  if(r.status===401){ if(!reint && await refrescar()) return api(path,opt,true); throw new Error("sesión vencida"); }
+  return r;
+}
+async function getJSON(path){ const r=await api(path); if(!r.ok) return []; return await r.json(); }
+
+// ── Carga inicial ──
+async function arrancar(){
+  $('gate').style.display='none'; $('app').style.display='none'; $('load').style.display='flex';
+  try{
+    decodeUser();
+    ESTADOS=(await getJSON("funnel_estados?select=*&activo=eq.true&order=orden.asc"))||[];
+    ESTADOS.forEach(e=>{ if(!/^#[0-9a-fA-F]{3,8}$/.test(String(e.color||''))) e.color='#8a94a6'; e.clave=String(e.clave||'').replace(/[^a-z0-9_]/gi,''); });
+    RESTAS=(await getJSON("funnel_restaurantes?select=*&activo=eq.true&order=nombre.asc"))||[];
+    const ag=await getJSON("funnel_agentes?select=id,nombre,rol,email&email=eq."+encodeURIComponent(USER.toLowerCase()));
+    miAgente=(ag&&ag[0])||null;
+    $('who').textContent=USER+" · "+(esGerente?'Gerencia':(miAgente?('TMK'):ROLE));
+    $('load').style.display='none'; $('app').style.display='block';
+    tab = esGerente ? 'cargar' : 'midia';
+    pintarTabs(); await irTab(tab);
+    return true;
+  }catch(e){ $('load').style.display='none'; return false; }
+}
+
+function pintarTabs(){
+  const defs=[];
+  defs.push(['midia','Mi día']);
+  if(esGerente){ defs.push(['todos','Todos']); defs.push(['cargar','Cargar base']); defs.push(['equipo','Equipo']); }
+  $('tabs').innerHTML=defs.map(([k,t])=>`<button class="tab ${tab===k?'on':''}" onclick="irTab('${k}')">${t}</button>`).join('');
+}
+async function irTab(k){ tab=k; pintarTabs();
+  if(k==='midia'){ await cargarMiDia(); }
+  else if(k==='todos'){ await cargarTodos(); }
+  else if(k==='cargar'){ await vistaCargar(); }
+  else if(k==='equipo'){ await vistaEquipo(); }
+}
+
+// ── MI DÍA ──
+async function cargarMiDia(){
+  $('cap').textContent = miAgente ? ('Tu lista de hoy · '+esc(miAgente.nombre)) : 'Tu lista del día.';
+  $('cont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
+  if(!miAgente){
+    $('cont').innerHTML = esGerente
+      ? `<div class="vacio"><b>Sos gerencia</b><p>No tenés leads asignados a tu nombre. Usá <b>Cargar base</b> para subir prospectos y <b>Repartir</b> entre los TMK, y <b>Todos</b> para ver el avance.</p></div>`
+      : `<div class="vacio"><b>Todavía no estás en el equipo de TMK</b><p>Pedile a gerencia que te agregue en la pestaña Equipo con este correo: <b>${esc(USER)}</b>.</p></div>`;
+    return;
+  }
+  leads=await getJSON("funnel_prospectos?select=*&tmk_id=eq."+miAgente.id+"&order=recontacto_en.asc.nullslast,id.asc");
+  renderWork();
+}
+function pasa(l){ const e=estDe(l.estado);
+  if(sub==='pend') return l.estado==='nuevo'||l.estado==='no_contesta';
+  if(sub==='hoy') return e.dispara_recontacto && l.recontacto_en && String(l.recontacto_en).slice(0,10)<=hoyStr();
+  if(sub==='cont') return !!e.cuenta_como;
+  if(sub==='asi') return e.sig_etapa==='presentacion'||l.estado==='asistira';
+  return true;
+}
+function subbar(){
+  const cnt=f=>{const p=sub;sub=f;const n=leads.filter(pasa).length;sub=p;return n;};
+  return `<div class="subtabs">
+    ${[['pend','Pendientes'],['hoy','Recontactar hoy'],['cont','Contactados'],['asi','Asistirán']].map(([k,t])=>`<button class="st ${sub===k?'on':''}" onclick="sub='${k}';renderWork()">${t} (${cnt(k)})</button>`).join('')}
+  </div>`;
+}
+function renderWork(){
+  const list=leads.filter(pasa);
+  $('cont').innerHTML = subbar() + (list.length? list.map(cardHTML).join('')
+    : `<div class="vacio"><b>Nada por acá</b><p>${sub==='pend'?'Terminaste tus pendientes. ¡Bien!':'Sin registros en esta vista.'}</p></div>`);
+}
+function chipsEstado(l){
+  return ESTADOS.map(e=>{
+    const on=l.estado===e.clave;
+    return `<button class="est ${on?'on':''}" style="${on?('background:'+e.color+';'):''}" onclick="setEstado(${l.id},'${e.clave}')">${esc(e.etiqueta)}</button>`;
+  }).join('');
+}
+function cardHTML(l){
+  const e=estDe(l.estado);
+  const src=l.tipo_lead||(l.base_nombre||'');
+  const showRec=!!e.dispara_recontacto, showAsi=(e.sig_etapa==='presentacion'||l.estado==='asistira');
+  const rec=l.recontacto_en?String(l.recontacto_en):'';
+  const recD=rec.slice(0,10), recH=rec.slice(11,16);
+  const pres=l.presenta_en?String(l.presenta_en):''; const presD=pres.slice(0,10), presH=pres.slice(11,16);
+  const tel=telDig(l.telefono);
+  const call=tel.length>=8?`<a class="ic wa" href="${waHref(l.telefono)}" target="_blank" rel="noopener" onclick="ev(${l.id},'contacto','WhatsApp')">${WA}</a><a class="ic tel" href="${telHref(l.telefono)}" onclick="ev(${l.id},'contacto','Llamada')">${TEL}</a>`:'';
+  const rest=RESTAS.map(r=>`<option value="${r.id}" ${l.restaurante_id==r.id?'selected':''}>${esc(r.nombre)}</option>`).join('');
+  return `<div class="lead" style="border-left-color:${e.color}">
+    <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div>
+      <div class="lmeta">${src?`<span class="src">${esc(src)}</span> · `:''}${esc(l.telefono||'sin teléfono')}</div></div>
+      <div class="lcall">${call}</div></div>
+    <div class="lbl">Estado · editable</div>
+    <div class="estados">${chipsEstado(l)}</div>
+    <div class="sub ${showRec?'show':''}">
+      <div class="fld"><label>Recontactar — día</label><input type="date" value="${recD}" onchange="setRec(${l.id},this.value,null)"></div>
+      <div class="fld"><label>Hora</label><input type="time" value="${recH}" onchange="setRec(${l.id},null,this.value)"></div>
+    </div>
+    <div class="sub ${showAsi?'show':''}">
+      <div class="fld"><label>Restaurante</label><select onchange="setAsi(${l.id},'rest',this.value)"><option value="">Elegir…</option>${rest}</select></div>
+      <div class="fld"><label>Día</label><input type="date" value="${presD}" onchange="setAsi(${l.id},'presD',this.value)"></div>
+      <div class="fld"><label>Hora</label><input type="time" value="${presH}" onchange="setAsi(${l.id},'presH',this.value)"></div>
+    </div>
+    <div class="note"><textarea placeholder="Comentario del contacto…" onchange="setCom(${l.id},this.value)">${esc(l.comentario||'')}</textarea></div>
+    <div class="pin ${(showAsi&&l.restaurante_id)?'show':''}">✓ Presentación asignada</div>
+  </div>`;
+}
+function localL(id){ return leads.find(x=>x.id===id)||todos.find(x=>x.id===id); }
+async function patchLead(id,body){
+  try{ const r=await api("funnel_prospectos?id=eq."+id,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(Object.assign({actualizado_en:new Date().toISOString()},body))});
+    return r.ok; }catch(e){ toast('⚠️ Se cortó la conexión, probá de nuevo'); return false; }
+}
+async function ev(id,tipo,nota){ try{ await api("funnel_eventos",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({prospecto_id:id,tipo,actor:USER,payload:{nota}})}); }catch(e){} }
+async function setEstado(id,clave){ const l=localL(id); if(!l)return; const prev=l.estado; l.estado=clave;
+  const e=estDe(clave); if(e.dispara_recontacto&&!l.recontacto_en){ l.recontacto_en=hoyStr()+'T09:00:00'; }
+  renderWork();
+  if(await patchLead(id,{estado:clave,recontacto_en:l.recontacto_en})){ ev(id,'estado',estDe(clave).etiqueta); toast('Estado: '+estDe(clave).etiqueta); }
+  else{ l.estado=prev; renderWork(); toast('⚠️ No se pudo guardar'); }
+}
+async function setRec(id,d,h){ const l=localL(id); if(!l)return; const cur=(l.recontacto_en||(hoyStr()+'T09:00:00')); const D=d||cur.slice(0,10), H=h||cur.slice(11,16)||'09:00'; l.recontacto_en=D+'T'+H+':00';
+  if(await patchLead(id,{recontacto_en:l.recontacto_en})){ ev(id,'recontacto',l.recontacto_en); toast('Recontacto agendado'); } }
+async function setAsi(id,k,v){ const l=localL(id); if(!l)return;
+  if(k==='rest'){ l.restaurante_id=v?Number(v):null; if(await patchLead(id,{restaurante_id:l.restaurante_id})){ ev(id,'presentacion',{restaurante_id:l.restaurante_id}); toast('Restaurante asignado'); renderWork(); } }
+  else{ const cur=(l.presenta_en||(hoyStr()+'T19:00:00')); const D=k==='presD'?v:cur.slice(0,10), H=k==='presH'?v:cur.slice(11,16)||'19:00'; l.presenta_en=D+'T'+H+':00'; if(await patchLead(id,{presenta_en:l.presenta_en})) toast('Presentación agendada'); }
+}
+let comT; function setCom(id,v){ const l=localL(id); if(l)l.comentario=v; clearTimeout(comT); comT=setTimeout(()=>patchLead(id,{comentario:v}),400); }
+
+// ── TODOS (gerencia) ──
+async function cargarTodos(){
+  $('cap').textContent='Todos los prospectos · avance por TMK.';
+  $('cont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
+  todos=await getJSON("funnel_prospectos?select=*,funnel_agentes(nombre)&order=id.desc&limit=500");
+  if(!todos.length){ $('cont').innerHTML=`<div class="vacio"><b>Sin prospectos todavía</b><p>Subí una base en <b>Cargar base</b> y repartila.</p></div>`; return; }
+  const porEstado={}; todos.forEach(l=>{const e=estDe(l.estado).etiqueta; porEstado[e]=(porEstado[e]||0)+1;});
+  const resumen=Object.entries(porEstado).map(([k,v])=>`<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(k)}: ${v}</span>`).join('');
+  $('cont').innerHTML=`<div class="panel"><h3>${todos.length} prospectos</h3><div style="margin-top:8px">${resumen}</div></div>`+
+    todos.slice(0,200).map(l=>{const e=estDe(l.estado);const ag=l.funnel_agentes?l.funnel_agentes.nombre:'sin asignar';
+      return `<div class="basecard"><div><b>${esc(l.nombre)}</b><div class="m">${esc(l.telefono||'—')} · TMK: ${esc(ag)}</div></div><span class="tag" style="background:${e.color}22;color:${e.color}">${esc(e.etiqueta)}</span></div>`;}).join('');
+}
+
+// ── CARGAR BASE (gerencia) ──
+async function vistaCargar(){
+  $('cap').textContent='Subí una base de prospectos y repartila equitativamente entre los TMK.';
+  BASES=await getJSON("funnel_bases?select=*&order=id.desc&limit=20");
+  const activos=AGENTES.filter(a=>a.rol==='tmk'&&a.activo).length;
+  $('cont').innerHTML=`
+    <div class="panel">
+      <h3>Nueva base</h3>
+      <div class="h">Pegá una fila por prospecto: <b>Nombre, Teléfono</b> (el teléfono es opcional). Ej:<br>Familia López, 5541-2233</div>
+      <label>Nombre de la base</label><input id="bnom" placeholder="Ej. Julio · Aéreas Frías">
+      <div class="row"><div><label>Tipo</label><select id="btipo"><option value="frio">Frío</option><option value="web">Web</option><option value="referido">Referido</option><option value="exsocio">Ex-socio</option></select></div></div>
+      <label>Prospectos (uno por línea)</label>
+      <textarea id="brows" placeholder="Familia López, 5541-2233&#10;Familia Girón, 4102-8890"></textarea>
+      <button class="btn" id="bcrear" onclick="crearBase()">Crear base</button>
+    </div>
+    <div class="panel">
+      <h3>Bases cargadas</h3>
+      <div class="h">Repartí los prospectos SIN asignar entre los ${activos} TMK activos (equitativo). ${activos?'':'⚠️ No hay TMK activos — agregá en Equipo.'}</div>
+      <div id="baseList"></div>
+    </div>`;
+  pintarBases();
+}
+function pintarBases(){
+  $('baseList').innerHTML = BASES.length? BASES.map(b=>`<div class="basecard"><div><b>${esc(b.nombre)}</b><div class="m">${b.total} prospectos · ${esc(b.tipo)}</div></div><button class="btn lima" style="width:auto;margin:0;padding:10px 14px;min-height:40px" onclick="repartir(${b.id},this)">Repartir</button></div>`).join('')
+    : `<div class="m" style="color:var(--gris);font-size:13px">Todavía no hay bases.</div>`;
+}
+// (repartir con botón anti-doble-click más abajo)
+async function crearBase(){
+  const nom=$('bnom').value.trim(); const rows=$('brows').value.split('\n').map(l=>l.trim()).filter(Boolean);
+  if(!nom){ toast('Poné un nombre a la base'); return; }
+  if(!rows.length){ toast('Pegá al menos un prospecto'); return; }
+  const b=$('bcrear'); b.disabled=true; b.textContent='Creando…';
+  try{
+    const parsed=rows.map(r=>{const p=r.split(/[,\t;]/); return {nombre:(p[0]||'').trim()||'(sin nombre)', telefono:telDig(p[1]||'')||null};});
+    const rb=await api("funnel_bases",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify({nombre:nom,tipo:$('btipo').value,total:parsed.length,cargada_por:USER})});
+    if(!rb.ok) throw new Error('base '+rb.status);
+    const base=(await rb.json())[0];
+    const payload=parsed.map(p=>({base_id:base.id,nombre:p.nombre,telefono:p.telefono,estado:'nuevo'}));
+    for(let i=0;i<payload.length;i+=200){ const chunk=payload.slice(i,i+200); const rp=await api("funnel_prospectos",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(chunk)}); if(!rp.ok) throw new Error('prospectos '+rp.status); }
+    toast('✅ Base creada ('+parsed.length+')'); $('bnom').value='';$('brows').value='';
+    await vistaCargar();
+  }catch(e){ toast('⚠️ No se pudo ('+e.message+')'); }
+  finally{ b.disabled=false; b.textContent='Crear base'; }
+}
+async function repartir(baseId,btn){
+  if(btn){ btn.disabled=true; btn.textContent='Repartiendo…'; }
+  try{ const r=await api("rpc/funnel_repartir",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({p_base:baseId})});
+    if(!r.ok){ const t=await r.text(); toast('⚠️ '+(t.includes('TMK')?'No hay TMK activos — agregá en Equipo':'No se pudo repartir')); return; }
+    const n=await r.json(); toast(n>0?('✅ Repartidos '+n+' entre los TMK'):'Nada por repartir (ya estaban asignados)');
+  }catch(e){ toast('⚠️ No se pudo repartir'); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='Repartir'; } }
+}
+
+// ── EQUIPO (gerencia) ──
+async function vistaEquipo(){
+  $('cap').textContent='El equipo del embudo. Agregá a los TMK con su correo de login para que vean su día.';
+  AGENTES=await getJSON("funnel_agentes?select=*&order=id.asc");
+  $('cont').innerHTML=`
+    <div class="panel"><h3>Agregar al equipo</h3>
+      <label>Nombre</label><input id="anom" placeholder="Ej. Mery Gómez">
+      <label>Correo de login (con el que entra al sistema)</label><input id="aemail" type="email" placeholder="mery@kuxtal.app">
+      <div class="row">
+        <div><label>Rol</label><select id="arol"><option value="tmk">TMK (telemarketing)</option><option value="supervisor_tmk">Supervisor TMK</option><option value="gerente_tmk">Gerente TMK</option><option value="vendedor">Vendedor</option><option value="cerrador">Cerrador</option></select></div>
+        <div><label>Peso (reparto)</label><input id="apeso" type="number" value="1" min="1" inputmode="numeric"></div>
+      </div>
+      <button class="btn" id="aadd" onclick="addAgente()">Agregar</button>
+    </div>
+    <div class="panel"><h3>Equipo (${AGENTES.length})</h3><div id="agList"></div></div>`;
+  pintarAgentes();
+}
+function pintarAgentes(){
+  $('agList').innerHTML = AGENTES.length? AGENTES.map(a=>`<div class="agrow"><div><span class="an">${esc(a.nombre)}</span> <span class="tag">${esc(a.rol)}</span><div class="ae">${esc(a.email||'sin correo')} · peso ${a.peso}${a.activo?'':' · inactivo'}</div></div><button class="est" onclick="toggleAgente(${a.id},${a.activo})">${a.activo?'Desactivar':'Activar'}</button></div>`).join('')
+    : `<div class="m" style="color:var(--gris);font-size:13px">Sin agentes aún.</div>`;
+}
+async function addAgente(){
+  const nom=$('anom').value.trim(), email=$('aemail').value.trim().toLowerCase();
+  if(!nom||!email){ toast('Nombre y correo son obligatorios'); return; }
+  const b=$('aadd'); b.disabled=true; b.textContent='Agregando…';
+  try{ const r=await api("funnel_agentes",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({nombre:nom,email,rol:$('arol').value,peso:Number($('apeso').value)||1})});
+    if(!r.ok) throw new Error(r.status); toast('✅ Agregado'); await vistaEquipo();
+  }catch(e){ toast('⚠️ No se pudo (¿sos gerencia?)'); }
+  finally{ b.disabled=false; b.textContent='Agregar'; }
+}
+async function toggleAgente(id,activo){
+  try{ const r=await api("funnel_agentes?id=eq."+id,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({activo:!activo})});
+    if(r.ok){ const a=AGENTES.find(x=>x.id===id); if(a)a.activo=!activo; pintarAgentes(); } }catch(e){ toast('⚠️ No se pudo'); }
+}
+
+$('p')&&$('p').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
+(async function init(){ if(await refrescar()){ if(!await arrancar()) mostrarLogin(); } else mostrarLogin(); })();
+</script>
+</body>
+</html>
