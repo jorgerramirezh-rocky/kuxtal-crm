@@ -1,6 +1,12 @@
 name: QA Kuxtal (en la nube)
+# Corre la QA (responsive + 0 errores JS + piezas clave) en la nube.
+# pull_request: agregado para que esta prueba se ejecute SOBRE el PR — requisito
+# para que branch protection pueda EXIGIRLA como candado antes de mergear a main
+# (el push a main la corre igual, pero eso es DESPUÉS del merge; el gate real es en el PR).
 on:
   push:
+    branches: [ main ]
+  pull_request:
     branches: [ main ]
   workflow_dispatch:
 jobs:
