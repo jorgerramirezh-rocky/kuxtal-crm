@@ -11,7 +11,7 @@ try{
     const p=await b.newPage({viewport:{width:w,height:900}});
     const errs=[];p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});p.on('pageerror',e=>errs.push('PE '+e.message));
     await p.goto(base+'/index.html',{waitUntil:'networkidle'});await p.waitForTimeout(500);
-    const m=await p.evaluate(()=>({iw:innerWidth,sw:document.documentElement.scrollWidth,club:!!document.getElementById('club-band'),logo:!!document.querySelector('.nav-logo')}));
+    const m=await p.evaluate(()=>({iw:innerWidth,sw:document.documentElement.scrollWidth,club:!!document.getElementById('club'),logo:!!document.querySelector('.nav-logo')}));
     const re=errs.filter(e=>!/favicon/i.test(e)), ov=m.sw>m.iw+1;
     console.log(`index W${w}: overflow=${ov?'FAIL':'ok'} kuxtalClub=${m.club} logo=${m.logo} jsErrs=${re.length}`);
     if(ov){fail++;console.log('  ↳ desbordamiento',m.sw,'>',m.iw);}
