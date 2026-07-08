@@ -1279,7 +1279,7 @@ const TOURS={
   ],
   adminExtra:[
     {sel:'.tab[data-t="calidad"]',t:'🛡️ Calidad de datos',d:'El sistema detecta solo los datos por revisar (DPI, teléfono, vencimientos, duplicados) y los agrupa por prioridad. El equipo valida y limpia la base.'},
-    {sel:'.tab[data-t="roles"]',t:'⚙️ Roles y organigrama',d:'Tu consola de administración del HUB: roles y su jerarquía, la matriz de permisos y quién reporta a quién. Solo vos (admin) la ves.'}
+    {sel:'.tab[data-t="roles"]',t:'⚙️ Roles y organigrama',d:'Tu consola de administración del HUB: roles y su jerarquía, la matriz de permisos y —abajo— el <b>organigrama visual</b>: un árbol de quién le reporta a quién. Cambiá "Reporta a" en cualquier tarjeta y el equipo se reacomoda solo. Solo vos (admin) lo ves.'}
   ],
   cliente:[
     {sel:null,t:'¡Hola! Bienvenido al Club',d:'Esta es tu tarjeta digital de Kuxtal Club. Te muestro cómo usarla.'},
@@ -1294,7 +1294,7 @@ function maybeTour(kind){ try{ if(localStorage.getItem('kux_tour_'+ROLE)) return
 function verTour(){ iniciarTour(ROLE==='cliente'?'cliente':'staff'); }
 function iniciarTour(kind){
   tourList=(TOURS[kind==='cliente'?'cliente':'staff']||[]).slice();
-  if(kind!=='cliente'&&puedeEmbudo()&&tourList.length){ tourList.splice(tourList.length-1,0,{sel:'.tab[data-t="embudo"]',t:'🎯 Embudo de ventas',d:'Todo el proceso de venta —prospectos, recepción, cierre de contratos, reservas y analítica— ahora vive acá adentro, según tu rol.'}); }
+  if(kind!=='cliente'&&puedeEmbudo()&&tourList.length){ tourList.splice(tourList.length-1,0,{sel:'.tab[data-t="embudo"]',t:'🎯 Embudo de ventas',d:'Todo el proceso de venta —prospectos, recepción, cierre de contratos, reservas y analítica— ahora vive acá adentro, según tu rol. Si tenés gente a cargo, la pestaña <b>Mi equipo</b> te muestra el avance de quienes te reportan (según el organigrama).'}); }
   if(kind!=='cliente'&&esAdmin()&&tourList.length){ tourList.splice(tourList.length-1,0,...TOURS.adminExtra); }
   if(!tourList.length) return;
   tourKey='kux_tour_'+ROLE; tourI=0; $('tourOv').style.display='block'; pasoTour();
@@ -1398,7 +1398,7 @@ async function funArrancar(){
 function funPintarTabs(){
   const defs=[['midia','Mi día']];
   if(verTodo){ defs.push(['recepcion','Recepción']); defs.push(['cierre','Cierre']); defs.push(['postventa','Postventa']); defs.push(['reservas','Reservas']); defs.push(['todos','Todos']); }
-  if(esGerente){ defs.push(['analitica','Analítica']); defs.push(['cargar','Cargar base']); defs.push(['equipo','Equipo']); defs.push(['comis','Comisiones']); }
+  if(esGerente){ defs.push(['miequipo','Mi equipo']); defs.push(['analitica','Analítica']); defs.push(['cargar','Cargar base']); defs.push(['equipo','Equipo']); defs.push(['comis','Comisiones']); }
   $('funTabs').innerHTML=defs.map(([k,t])=>`<button class="tab ${funTab===k?'on':''}" onclick="funIrTab('${k}')">${t}</button>`).join('');
 }
 async function funIrTab(k){ funTab=k; funPintarTabs();
@@ -1409,6 +1409,7 @@ async function funIrTab(k){ funTab=k; funPintarTabs();
   else if(k==='reservas'){ await vistaReservas(); }
   else if(k==='todos'){ await cargarTodos(); }
   else if(k==='cargar'){ await vistaCargar(); }
+  else if(k==='miequipo'){ await vistaMiEquipo(); }
   else if(k==='equipo'){ await vistaEquipo(); }
   else if(k==='comis'){ await vistaComisiones(); }
   else if(k==='analitica'){ await vistaAnalitica(); }
@@ -1866,6 +1867,34 @@ async function repartir(baseId,btn){
 }
 
 // ── EQUIPO (gerencia) ──
+// ── MI EQUIPO (F5) · el árbol manda: usa funnel_ve_equipo() para ver SOLO a los que me reportan ──
+// Aditiva: lee prospectos que el supervisor YA puede leer (no cambia RLS). El motor de
+// "quién es mi equipo" vive en la base (recursivo, cycle-safe).
+async function rpcVeEquipo(){
+  try{ const r=await api("rpc/funnel_ve_equipo",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+    if(!r.ok) return null; return await r.json(); }catch(e){ return null; }
+}
+async function vistaMiEquipo(){
+  $('funCap').textContent='Mi equipo: el avance de las personas que me reportan (según el organigrama). El árbol manda.';
+  $('funCont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando tu equipo…</div>';
+  const ids=await rpcVeEquipo();
+  if(ids===null){ $('funCont').innerHTML=`<div class="vacio"><span class="em">😕</span><b>No pude leer tu equipo</b><p>Puede ser la conexión. <b onclick="funIrTab('miequipo')" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`; return; }
+  if(!ids.length){ $('funCont').innerHTML=`<div class="vacio"><span class="em">🌱</span><b>Todavía no tenés equipo</b><p>Pedí que te registren en el equipo con tu correo (<b>${esc(USER)}</b>) y que en <b>⚙️ Roles ▸ Organigrama</b> asignen quién te reporta.</p></div>`; return; }
+  if(!AGENTES.length) AGENTES=(await getJSON("funnel_agentes?select=*"))||[];
+  const P=await getJSON("funnel_prospectos?select=id,nombre,telefono,estado,etapa,tmk_id&tmk_id=in.("+ids.join(',')+")&order=id.desc&limit=2000");
+  const porAg={}; P.forEach(l=>{ (porAg[l.tmk_id]=porAg[l.tmk_id]||[]).push(l); });
+  const equipoAgs=AGENTES.filter(a=>ids.indexOf(a.id)>=0).sort(orgSort);
+  const filas=equipoAgs.map(a=>{
+    const arr=porAg[a.id]||[];
+    const cont=arr.filter(l=>{const e=estDe(l.estado);return e.cuenta_como;}).length;
+    const asis=arr.filter(l=>l.estado==='asistira'||l.etapa==='presentacion'||l.etapa==='sala').length;
+    return `<div class="basecard"><div><b>${esc(a.nombre)}</b> <span class="tag">${esc(a.rol||'')}</span>
+      <div class="m">${arr.length} prospectos · ${cont} contactados · ${asis} en presentación/sala</div></div><span class="tag">${arr.length}</span></div>`;
+  }).join('');
+  $('funCont').innerHTML=`<div class="panel"><h3>Mi equipo (${equipoAgs.length})</h3>
+    <div class="sub">${P.length} prospectos en total bajo tu línea. Reorganizá quién te reporta en <b>⚙️ Roles ▸ Organigrama</b>.</div></div>`+
+    (filas||`<div class="vacio"><b>Tu equipo aún no tiene prospectos</b><p>Cuando repartás base a tus TMK (Cargar base ▸ Repartir), su avance aparece acá.</p></div>`);
+}
 async function vistaEquipo(){
   $('funCap').textContent='El equipo del embudo. Agregá a los TMK con su correo de login para que vean su día.';
   AGENTES=await getJSON("funnel_agentes?select=*&order=id.asc");
