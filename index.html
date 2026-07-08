@@ -274,6 +274,22 @@ section{padding:74px 0}
 .cta p{color:rgba(255,255,255,.82);margin:18px auto 0;max-width:46ch;font-size:18px}
 .cta .row{display:flex;gap:13px;justify-content:center;flex-wrap:wrap;margin-top:30px}
 
+/* ══════════════ FORMULARIO "¿Querés saber más?" (leads · F2 Kaizen) ══════════════ */
+.lead-form{margin-top:36px;background:var(--surface);border:1px solid var(--line);border-radius:20px;
+  padding:26px 22px;box-shadow:var(--card-shadow);display:grid;grid-template-columns:1fr;gap:16px;max-width:720px}
+.lf-field{display:flex;flex-direction:column;gap:7px;min-width:0}
+.lf-field label{font-size:12.5px;font-weight:800;letter-spacing:.6px;color:var(--muted);text-transform:uppercase}
+.lf-field input{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--surface-2);
+  border:1.5px solid var(--line);border-radius:12px;padding:13px 15px;min-height:50px;transition:border-color .2s}
+.lf-field input::placeholder{color:var(--muted);opacity:.7}
+.lf-field input:focus{outline:none;border-color:var(--lima)}
+.lf-field input.mal{border-color:#c94f42}
+.lf-msg{font-size:14.5px;font-weight:700;min-height:1.4em;margin:0}
+.lf-msg.ok{color:var(--lima-deep)}
+.lf-msg.mal{color:#c94f42}
+@media(min-width:760px){.lead-form{grid-template-columns:1fr 1fr;align-items:end}
+  .lead-form .btn{grid-column:1/-1;justify-self:start}.lf-msg{grid-column:1/-1}}
+
 /* ══════════════ FOOTER (cielo nocturno) ══════════════ */
 footer{background:var(--navy-deep);color:rgba(255,255,255,.7);padding:60px 0 40px;border-top:1px solid rgba(255,255,255,.08)}
 .foot{display:flex;flex-direction:column;gap:34px;justify-content:space-between}
@@ -472,6 +488,29 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,.7);padding:60px 0 40p
   </div>
 </section>
 
+<!-- ¿QUERÉS SABER MÁS? (captura de interesados · F2 Kaizen) -->
+<section id="contacto" class="band">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Hablemos</span>
+      <h2>¿Querés saber más?</h2>
+      <p>Dejanos tu nombre y tu número, y una persona del equipo te escribe para contarte cómo funciona el club. Sin compromiso.</p>
+    </div>
+    <form id="leadForm" class="lead-form reveal d1" novalidate>
+      <div class="lf-field">
+        <label for="lf-nombre">Tu nombre</label>
+        <input id="lf-nombre" name="nombre" type="text" maxlength="80" autocomplete="name" placeholder="Ej. María López" required>
+      </div>
+      <div class="lf-field">
+        <label for="lf-tel">Tu teléfono (8 dígitos)</label>
+        <input id="lf-tel" name="telefono" type="tel" inputmode="numeric" maxlength="14" autocomplete="tel-national" placeholder="Ej. 5555 1234" required>
+      </div>
+      <button class="btn btn-primary" id="lf-btn" type="submit">Quiero que me contacten</button>
+      <p class="lf-msg" id="lf-msg" role="status" aria-live="polite"></p>
+    </form>
+  </div>
+</section>
+
 <footer>
   <div class="wrap foot">
     <div class="foot-brand">
@@ -554,6 +593,37 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,.7);padding:60px 0 40p
     }
   }else{
     var pl=document.getElementById('plane');if(pl){pl.style.opacity=1;pl.style.left='72%';pl.style.top='30%';pl.style.transform='rotate(-8deg)';}
+  }
+
+  /* formulario "¿Querés saber más?" → tabla leads (F2 Kaizen)
+     La llave es la PÚBLICA (anon) de Supabase: por diseño solo permite INSERTAR
+     un lead — no deja leer ni tocar nada más. */
+  var lf=document.getElementById('leadForm');
+  if(lf){
+    var LEADS_URL='https://tevzfdiumfekvapamovw.supabase.co/rest/v1/leads';
+    var SB_PUB='sb_publishable_MMVJjzrA1rHdnMWxl0zeMA_DTDTTGTJ';
+    var lfNom=document.getElementById('lf-nombre'),lfTel=document.getElementById('lf-tel'),
+        lfBtn=document.getElementById('lf-btn'),lfMsg=document.getElementById('lf-msg');
+    /* teléfono GT: 8 dígitos (acepta +502 adelante y espacios/guiones) */
+    function telGT(v){var d=(v||'').replace(/\D/g,'');if(d.length===11&&d.indexOf('502')===0)d=d.slice(3);return d.length===8?d:null;}
+    function lfAviso(texto,ok){lfMsg.textContent=texto;lfMsg.className='lf-msg '+(ok?'ok':'mal');}
+    lf.addEventListener('submit',function(e){
+      e.preventDefault();
+      if(lfBtn.disabled)return;
+      var n=lfNom.value.trim(),d=telGT(lfTel.value);
+      lfNom.classList.toggle('mal',!n);lfTel.classList.toggle('mal',!d);
+      if(!n){lfAviso('Contanos tu nombre, porfa.',false);lfNom.focus();return;}
+      if(!d){lfAviso('El teléfono va con 8 dígitos (ej. 5555 1234).',false);lfTel.focus();return;}
+      var prev=lfBtn.textContent;lfBtn.disabled=true;lfBtn.textContent='Enviando…';lfAviso('',true);
+      fetch(LEADS_URL,{method:'POST',
+        headers:{apikey:SB_PUB,Authorization:'Bearer '+SB_PUB,'Content-Type':'application/json',Prefer:'return=minimal'},
+        body:JSON.stringify({nombre:n,telefono:d,origen:'web',estado:'nuevo'})})
+      .then(function(r){if(!r.ok)throw 0;
+        lf.reset();lfBtn.textContent='¡Gracias! ✓';
+        lfAviso('Listo: recibimos tus datos y una persona del equipo te escribe en breve.',true);})
+      .catch(function(){lfBtn.disabled=false;lfBtn.textContent=prev;
+        lfAviso('Uy, no se pudo enviar. Probá de nuevo en un momento, o escribinos directo por WhatsApp (abajo).',false);});
+    });
   }
 
   /* PWA */
