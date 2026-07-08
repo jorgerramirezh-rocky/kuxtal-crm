@@ -206,19 +206,31 @@ function salir(){ localStorage.removeItem(LS); SES=null; location.reload(); }
 // socios; una compu del call center abierta no puede quedarlos mostrando para
 // siempre. Cualquier toque/tecla/scroll reinicia el reloj. (La regla "una vez
 // adentro, adentro" es de Espiga —app de consumidores—; esto es staff con PII.)
-const AL_MS=5*60*1000, AL_AVISO=30*1000; let alTimer=null, alCuenta=null, alBox=null;
+const AL_MS=5*60*1000, AL_AVISO=30*1000, AL_ACT='kux_lastact'; let alTimer=null, alCuenta=null, alBox=null;
+// La actividad se estampa en localStorage: como el CRM y el embudo comparten la MISMA
+// sesión (kux_sesion), un tab activo tiene que impedir que el reloj de OTRO tab cierre la
+// sesión compartida y eche a la agente en medio del trabajo (hallazgo QA 08-jul).
 function alReset(){ if(!SES) return; clearTimeout(alTimer); clearTimeout(alCuenta);
   if(alBox){ alBox.remove(); alBox=null; }
+  try{ localStorage.setItem(AL_ACT, String(Date.now())); }catch(_e){}
   alTimer=setTimeout(alAvisar, AL_MS-AL_AVISO); }
 function alAvisar(){ if(!SES) return;
+  // Antes de avisar/cerrar, mirá si OTRO tab tuvo actividad fresca: si sí, reprogramá.
+  let ult=0; try{ ult=Number(localStorage.getItem(AL_ACT))||0; }catch(_e){}
+  if(Date.now()-ult < AL_MS-AL_AVISO){ clearTimeout(alTimer); alTimer=setTimeout(alAvisar, AL_MS-AL_AVISO-(Date.now()-ult)); return; }
   alBox=document.createElement('div');
   alBox.style.cssText='position:fixed;right:16px;bottom:16px;z-index:9999;background:#1b365d;color:#fff;padding:14px 18px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.35);font:600 14px/1.4 system-ui;max-width:280px';
   alBox.textContent='¿Seguís ahí? Por seguridad, la sesión se cierra en 30 segundos.';
   const b=document.createElement('button'); b.textContent='Seguir trabajando';
   b.style.cssText='display:block;margin-top:10px;background:#8dc63f;color:#1b365d;border:0;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer';
   b.onclick=alReset; alBox.appendChild(b); document.body.appendChild(alBox);
-  alCuenta=setTimeout(salir, AL_AVISO); }
-['pointerdown','keydown','scroll','touchstart'].forEach(ev=>addEventListener(ev,alReset,{passive:true}));
+  // Al cerrar, última verificación cruzada de tabs: si otro tab sigue activo, NO cierres.
+  alCuenta=setTimeout(()=>{ let u=0; try{ u=Number(localStorage.getItem(AL_ACT))||0; }catch(_e){} if(Date.now()-u < AL_MS){ alReset(); } else { salir(); } }, AL_AVISO); }
+// capture:true → el scroll DENTRO de un modal/ficha (que no burbujea) igual reinicia el reloj;
+// 'wheel' cubre la rueda del mouse en desktop (leer una ficha larga sin clicks ya cuenta).
+['pointerdown','keydown','scroll','wheel','touchstart','mousemove'].forEach(ev=>addEventListener(ev,alReset,{passive:true,capture:true}));
+// Otro tab reportó actividad → reiniciá tu reloj (sesión compartida).
+addEventListener('storage',e=>{ if(e.key===AL_ACT && SES){ clearTimeout(alTimer); alTimer=setTimeout(alAvisar, AL_MS-AL_AVISO); } });
 async function refrescar(){
   const raw=localStorage.getItem(LS); if(!raw) return false;
   try{ const s=JSON.parse(raw); const d=await sbAuth("token?grant_type=refresh_token",{refresh_token:s.refresh_token}); guardarSes(d); return true; }
