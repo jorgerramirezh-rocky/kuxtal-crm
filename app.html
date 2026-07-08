@@ -712,8 +712,12 @@ function calcularBI(){
   let acc=0; const acum=meses.map(m=>{acc+=ingMesMap[m];return[lbl(m),Math.round(acc)];}).slice(-12);
   const topCloser=Object.fromEntries(Object.entries(revCloser).sort((a,b)=>b[1]-a[1]).slice(0,6));
   const closers=[...new Set(gente.map(x=>(x.closer||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  // F2 Kaizen: prospectos (leads que captan la web y el bot) → tarjeta del tablero
+  const leadsBI={nuevos:0,contactados:0,convertidos:0,cargado:LEADS!==null};
+  (LEADS||[]).forEach(l=>{const e=l.estado||'nuevo';
+    if(e==='nuevo')leadsBI.nuevos++; else if(e==='contactado')leadsBI.contactados++; else if(e==='convertido')leadsBI.convertidos++;});
   BI={socios,totalVentas,ticket,porVencer,enRiesgo,telMal,revisar,closers,porTipo,revTipo,revCloser:topCloser,vencAnio,
-    cartera:{'Vigentes':vig,'Vencidos':ven,'Sin fecha':sinf},ingMes,acum};
+    cartera:{'Vigentes':vig,'Vencidos':ven,'Sin fecha':sinf},ingMes,acum,leads:leadsBI};
 }
 
 // ── Render ──
@@ -796,9 +800,15 @@ function tablero(){
   const proxMes=gente.filter(x=>x.dv!=null&&x.dv>=0&&x.dv<=30).length;
   const olaMax=Math.max(0,...Object.entries(BI.vencAnio).filter(([y])=>y>='2028'&&y<='2031').map(([,v])=>v));
   const alerta=BI.revisar>0?`<div class="insight full" style="border-color:#f3b0ab;background:linear-gradient(135deg,#fdecea,#fff);color:#b3261e">⚠️ <b>${BI.revisar} socios</b> necesitan revisión (teléfono, DPI, fecha o No. de socio duplicado). <b onclick="verRevisar()" style="cursor:pointer;text-decoration:underline">Ver y corregir</b>.</div>`:'';
+  // F2 Kaizen: tarjeta de prospectos (leads web + bot) en el tablero
+  const lb=BI.leads||{nuevos:0,contactados:0,convertidos:0,cargado:false};
+  const leadN=(v,c,t)=>`<div style="flex:1;min-width:90px;background:var(--kux-l);border-radius:12px;padding:12px 8px;text-align:center"><b style="display:block;font-size:22px;color:${c};font-variant-numeric:tabular-nums">${v}</b><span style="font-size:11px;color:var(--gris)">${t}</span></div>`;
+  const prospectos=`<div class="panel full"><h3>🎯 Prospectos (interesados)</h3><div class="sub">Los que dejan sus datos en la web o le escriben al bot · <b onclick="ir('leads')" style="cursor:pointer;text-decoration:underline">ver y dar seguimiento</b></div>
+    ${lb.cargado?`<div style="display:flex;gap:10px;flex-wrap:wrap">${leadN(lb.nuevos,'#b5820b','Nuevos')}${leadN(lb.contactados,'var(--kux)','Contactados')}${leadN(lb.convertidos,'var(--lima-d)','Ya son socios')}</div>`:`<div class="sub">Cargando prospectos…</div>`}</div>`;
   $('tablero').innerHTML=`<div class="grid">
     <div class="insight full">🔔 <b>Lo urgente:</b> ${proxMes} socio(s) vencen en los próximos 30 días · <b>${money(BI.enRiesgo)}</b> en juego a 12 meses. Andá a <b onclick="ir('vencimientos')" style="cursor:pointer;text-decoration:underline">Renovaciones</b>.</div>
     ${alerta}
+    ${prospectos}
     <div class="panel full"><h3>🌊 La ola de renovaciones (socios por año)</h3><div class="sub">Cuántas membresías vencen cada año. Pico 2028-2031 (~${olaMax}/año). Rojo=vencido, amarillo=este año, azul=futuro.</div><div class="canvas-box"><canvas id="c6"></canvas></div></div>
     <div class="panel"><h3>Ingreso por mes (US$)</h3><div class="sub">Por mes de ingreso del socio (últimos 12)</div><div class="canvas-box"><canvas id="c1"></canvas></div></div>
     <div class="panel"><h3>Ingreso acumulado</h3><div class="sub">La curva de crecimiento</div><div class="canvas-box"><canvas id="c2"></canvas></div></div>
@@ -857,8 +867,9 @@ function render(){
   if(tab==='promos'){const nueva=ROLE==='admin'?`<button class="masbtn" style="margin-bottom:10px" onclick="nuevaPromo()">＋ Nueva promoción</button>`:'';$('lista').innerHTML=nueva+(OFERTAS.length?OFERTAS.map(ofertaCard).join(''):`<div class="vacio"><span class="em">🎁</span><b>Sin promociones activas</b><p>${ROLE==='admin'?'Creá la primera con el botón de arriba.':'Pronto habrá novedades.'}</p></div>`);return;}
   if(tab==='leads'){
     if(LEADS===null){
+      $('lista').innerHTML='<div class="vacio"><span class="spin"></span> Cargando prospectos…</div>';
       if(!cargandoLeads){
-        cargandoLeads=true; $('lista').innerHTML='<div class="vacio"><span class="spin"></span> Cargando prospectos…</div>';
+        cargandoLeads=true;
         traerLeads().then(rows=>{LEADS=rows;cargandoLeads=false;if(tab==='leads'||tab==='bot')render();})
           .catch(()=>{cargandoLeads=false;/* LEADS sigue null → reintenta al reentrar */ if(tab==='leads'||tab==='bot')$('lista').innerHTML=`<div class="vacio"><span class="em">😕</span><b>No pude cargar los prospectos</b><p>Puede ser la conexión. <b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;});
       }
@@ -871,7 +882,8 @@ function render(){
   }
   if(tab==='bot'){
     if(LEADS===null){
-      if(!cargandoLeads){ cargandoLeads=true; $('lista').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>'; traerLeads().then(rows=>{LEADS=rows;cargandoLeads=false;if(tab==='leads'||tab==='bot')render();}).catch(()=>{cargandoLeads=false;if(tab==='leads'||tab==='bot')$('lista').innerHTML=`<div class="vacio"><span class="em">😕</span><b>No pude cargar</b><p><b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;}); }
+      $('lista').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
+      if(!cargandoLeads){ cargandoLeads=true; traerLeads().then(rows=>{LEADS=rows;cargandoLeads=false;if(tab==='leads'||tab==='bot')render();}).catch(()=>{cargandoLeads=false;if(tab==='leads'||tab==='bot')$('lista').innerHTML=`<div class="vacio"><span class="em">😕</span><b>No pude cargar</b><p><b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;}); }
       return;
     }
     const botLeads=LEADS.filter(l=>l.origen==='bot'&&l.estado!=='descartado');
@@ -1058,6 +1070,11 @@ async function arrancar(){
   try{
     decodeUser();
     gente=await traerSocios(); OFERTAS=await traerOfertas(); calcularBI();
+    // F2 Kaizen: prospectos al tablero — cargan en paralelo, nunca frenan el arranque
+    if(ROLE!=='cliente'&&LEADS===null&&!cargandoLeads){ cargandoLeads=true;
+      traerLeads().then(rows=>{LEADS=rows;cargandoLeads=false;calcularBI();if(tab==='tablero'||tab==='leads'||tab==='bot')render();})
+        .catch(()=>{cargandoLeads=false;/* la pestaña Prospectos reintenta sola al entrar */});
+    }
     $('load').style.display='none'; $('app').style.display='block';
     document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>ir(t.dataset.t));
     $('buscar').oninput=()=>{verLim=60;render()};
