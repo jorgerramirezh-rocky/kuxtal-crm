@@ -113,6 +113,30 @@
   .bar .bt{flex:1;height:20px;background:#eef2f6;border-radius:7px;overflow:hidden}
   .bar .bf{height:100%;border-radius:7px;min-width:2px;transition:width .4s}
   .bar .bv{flex:none;font-size:12px;color:var(--gris);font-weight:700;font-variant-numeric:tabular-nums;min-width:64px;text-align:right}
+  /* Reservas: badge de estado + fila tocable */
+  .badge{font-size:11px;font-weight:800;border-radius:8px;padding:4px 9px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
+  .resrow{cursor:pointer}
+  .resrow:active{transform:scale(.99)}
+  /* Expediente (fólder del viaje) */
+  #expOv{position:fixed;inset:0;z-index:60;background:rgba(15,36,56,.55);display:none;align-items:flex-end;justify-content:center}
+  #expOv.on{display:flex}
+  .expcard{background:#fff;border-radius:18px 18px 0 0;width:100%;max-width:560px;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:18px 16px calc(18px + env(safe-area-inset-bottom));box-shadow:0 -12px 40px rgba(0,0,0,.3)}
+  @media (min-width:600px){ #expOv{align-items:center;padding:20px} .expcard{border-radius:18px;max-height:86vh} }
+  .exphd{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:4px}
+  .exphd h3{font-size:17px;color:var(--kux);font-weight:800;line-height:1.2;word-break:break-word}
+  .expx{width:44px;height:44px;flex:none;border:none;background:var(--kux-l);color:var(--kux);border-radius:12px;font-size:17px;font-weight:700;cursor:pointer}
+  .expx:active{transform:scale(.94)}
+  .expsec{margin-top:14px}
+  .expsec .t{font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--gris);font-weight:800;margin-bottom:7px;border-left:3px solid var(--lima);padding-left:7px}
+  .expcard input,.expcard select,.expcard textarea{min-height:44px}
+  .itrow{display:flex;gap:7px;margin-bottom:7px;align-items:center}
+  .itrow input{padding:10px 11px;border:1px solid var(--linea);border-radius:10px;font-size:15px;outline:none;background:#fff;min-width:0}
+  .itrow input:focus{border-color:var(--kux);box-shadow:0 0 0 3px rgba(27,54,93,.1)}
+  .itrow .d{width:74px;flex:none}
+  .itrow .det{flex:1}
+  .itrow .x{width:44px;height:44px;flex:none;border:1px solid var(--linea);background:#fff;color:var(--rojo);border-radius:10px;font-size:15px;cursor:pointer}
+  .itadd{border:1px dashed var(--kux);background:var(--kux-l);color:var(--kux);border-radius:10px;padding:10px 14px;font-size:13px;font-weight:700;cursor:pointer;min-height:44px;width:100%}
+  .expfoot{font-size:11.5px;color:var(--gris);margin-top:12px;text-align:center}
   @media (min-width:560px){ .fld{min-width:150px} }
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation-duration:.001s!important}}
 </style>
@@ -143,6 +167,8 @@
   <div id="cont"></div>
 </div>
 </div>
+
+<div id="expOv" role="dialog" aria-modal="true" aria-label="Expediente de la reserva"><div class="expcard" id="expCard"></div></div>
 
 <div id="toast"></div>
 
@@ -387,6 +413,7 @@ async function vistaAnalitica(){
   const nomAg=id=>{const a=AGENTES.find(x=>x.id===id);return a?a.nombre:'(sin asignar)';};
   const P=await getJSON("funnel_prospectos?select=id,estado,etapa,califica,tmk_id,vendedor_id,cerrador_id,base_id,recepcion_en,actualizado_en,motivo_baja&limit=8000");
   const COM=await getJSON("funnel_comisiones?select=rol,monto&limit=5000");
+  const LEXT=await getJSON("leads?select=estado&limit=5000"); // leads captados fuera del embudo (web/bot)
   const total=P.length, contact=P.filter(p=>p.estado!=='nuevo').length, asis=P.filter(p=>p.recepcion_en).length, cal=P.filter(p=>p.califica===true).length;
   const socios=P.filter(p=>p.etapa==='socio'), cerr=socios.length;
   const pct=(a,b)=>b>0?Math.round(a/b*100)+'%':'—';
@@ -400,14 +427,18 @@ async function vistaAnalitica(){
   const comRol={}; let comTot=0; COM.forEach(c=>{const m=Number(c.monto||0);comRol[c.rol]=(comRol[c.rol]||0)+m;comTot+=m;});
   const comHTML=Object.entries(comRol).sort((a,b)=>b[1]-a[1]).map(([r,v],_,a)=>barRow(r,Math.round(v),Math.max(...a.map(x=>x[1])),'#6f9e12','$')).join('')||'<div class="cap">Sin comisiones.</div>';
   const bajas=P.filter(p=>p.etapa==='baja'), motivos=grpBy(bajas,b=>b.motivo_baja||'(sin motivo)');
+  const porLeadEst=grpBy(LEXT,l=>l.estado||'(sin estado)');
+  const leadsDesglose=Object.entries(porLeadEst).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(k)}: ${v}</span>`).join('')||'<div class="cap" style="margin:0">Sin leads todavía.</div>';
   $('cont').innerHTML=`
     <div class="stats">
       <div class="stat"><div class="v">${total.toLocaleString('es-GT')}</div><div class="k">Prospectos</div></div>
+      <div class="stat"><div class="v">${LEXT.length.toLocaleString('es-GT')}</div><div class="k">Prospectos (leads)</div></div>
       <div class="stat"><div class="v">${cerr}</div><div class="k">Familias cerradas</div></div>
       <div class="stat"><div class="v">${pct(cerr,total)}</div><div class="k">Conversión total</div></div>
       <div class="stat"><div class="v">$${Math.round(comTot).toLocaleString('es-GT')}</div><div class="k">Comisiones</div></div>
       <div class="stat"><div class="v">${bajas.length}</div><div class="k">Bajas</div></div>
     </div>
+    <div class="panel"><h3>Prospectos (leads) · ${LEXT.length.toLocaleString('es-GT')}</h3><div class="h">Leads captados fuera del embudo (web/bot) · desglose por estado.</div>${leadsDesglose}</div>
     <div class="panel"><h3>Embudo de conversión</h3><div class="h">De nuevo a socio · % vs. etapa previa.</div>${funnelHTML}</div>
     <div class="panel"><h3>Familias cerradas por día</h3>${diaHTML}</div>
     <div class="panel"><h3>Cerradas por TMK</h3>${topBars(porTMK,'var(--kux)')}</div>
@@ -443,9 +474,16 @@ async function pvRecep(id,r){ if(await patchLead(id,{postventa_recepcion:r})){ e
 async function pvContacto(id,btn){ if(await patchLead(id,{postventa_contactado:true,postventa_en:new Date().toISOString()})){ ev(id,'postventa','contactado bienvenida'); toast('✅ Bienvenida registrada'); btn.textContent='Contactado ✓'; } }
 async function darBaja(id,btn){ const m=prompt('Motivo de la baja:'); if(m===null)return; if(await patchLead(id,{etapa:'baja',motivo_baja:m||null,baja_en:new Date().toISOString()})){ ev(id,'baja',m||'baja'); toast('Socio dado de baja'); const c=$('pv'+id); if(c)c.remove(); } }
 
-// ── RESERVAS ──
+// ── RESERVAS (expediente del viaje: "del post-it al fólder") ──
+// Estados provisionales validados por George; el equipo puede ajustar.
+const EST_RES=['solicitada','cotizada','confirmada','pagada','viajó','cancelada'];
+const EST_RES_C={solicitada:['#eef1f5','#50607a'],cotizada:['#fff3d6','#8a5800'],confirmada:['#e3edfa','#17559c'],pagada:['#e6f4ea','#1c7a45'],'viajó':['#eaf7d9','#4d7a06'],cancelada:['#fdeaea','#b3261e']};
+const badgeRes=e=>{const c=EST_RES_C[e]||EST_RES_C.solicitada;return `<span class="badge" style="background:${c[0]};color:${c[1]}">${esc(e||'solicitada')}</span>`;};
+// itinerario es jsonb: si viene malformado (string, objeto suelto, basura) NO rompe
+const itinDe=r=>{let it=r?r.itinerario:[];try{ if(typeof it==='string') it=JSON.parse(it); }catch(e){ it=[]; } return Array.isArray(it)?it.filter(t=>t&&typeof t==='object'):[];};
+
 async function vistaReservas(){
-  $('cap').textContent='Reservaciones: gestioná los viajes que piden los socios.';
+  $('cap').textContent='Reservaciones: tocá una reserva para abrir el fólder del viaje.';
   $('cont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
   window.__RES=await getJSON("funnel_reservas?select=*&order=id.desc&limit=100");
   $('cont').innerHTML=`<div class="panel"><h3>Nueva reserva</h3>
@@ -456,10 +494,12 @@ async function vistaReservas(){
   pintarReservas();
 }
 function pintarReservas(){
-  const res=window.__RES||[], ESTR=['solicitada','confirmada','viajó','cancelada'];
-  const stSel='padding:8px 10px;border:1px solid var(--linea);border-radius:9px;background:#fff;font-size:12.5px;min-height:38px';
-  $('resList').innerHTML=res.length?res.map(r=>`<div class="basecard"><div><b>${esc(r.socio_nombre||'—')}</b> → ${esc(r.destino||'')}<div class="m">${r.fecha_viaje||''} · ${r.personas||1} pers.</div></div>
-    <select onchange="setReserva(${r.id},this.value)" style="${stSel}">${ESTR.map(e=>`<option ${r.estado===e?'selected':''}>${e}</option>`).join('')}</select></div>`).join('')
+  const res=window.__RES||[];
+  const el=$('resList'); if(!el) return;
+  el.innerHTML=res.length?res.map(r=>`<div class="basecard resrow" onclick="abrirExp(${r.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')abrirExp(${r.id})">
+    <div><b>${esc(r.socio_nombre||'—')}</b> → ${esc(r.destino||'')}
+      <div class="m">${r.fecha_viaje||'sin fecha'}${r.fecha_regreso?(' → '+r.fecha_regreso):''} · ${r.personas||1} pers.${r.hotel?(' · 🏨 '+esc(r.hotel)):''}</div></div>
+    ${badgeRes(r.estado)}</div>`).join('')
     :`<div class="m" style="color:var(--gris);font-size:13px">Sin reservas todavía.</div>`;
 }
 async function addReserva(){
@@ -470,7 +510,64 @@ async function addReserva(){
     if(!r.ok)throw 0; toast('✅ Reserva creada'); await vistaReservas();
   }catch(e){ toast('⚠️ No se pudo'); } finally{ b.disabled=false; b.textContent='Crear reserva'; }
 }
-async function setReserva(id,estado){ try{ const r=await api("funnel_reservas?id=eq."+id,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({estado})}); toast(r.ok?'Actualizada':'⚠️ No se pudo'); }catch(e){ toast('⚠️ No se pudo'); } }
+
+// ── EXPEDIENTE (modal fólder) ──
+let EXP=null, EXP_IT=[];
+function abrirExp(id){
+  const r=(window.__RES||[]).find(x=>x.id===id); if(!r) return;
+  EXP=r; EXP_IT=itinDe(r).map(t=>({dia:t.dia==null?'':String(t.dia),detalle:t.detalle==null?'':String(t.detalle)}));
+  const opt=EST_RES.map(e=>`<option ${(r.estado||'solicitada')===e?'selected':''}>${e}</option>`).join('');
+  const cuando=r.actualizado_en?new Date(r.actualizado_en).toLocaleString('es-GT',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+  const ult=(r.actualizado_por||r.actualizado_en)?('Última edición: '+esc(r.actualizado_por||'—')+(cuando?(' · '+cuando):'')):'Sin ediciones registradas todavía.';
+  $('expCard').innerHTML=`
+    <div class="exphd"><div><h3>📁 ${esc(r.socio_nombre||'Reserva')}</h3><div style="margin-top:6px">${badgeRes(r.estado)}</div></div><button class="expx" onclick="cerrarExp()" aria-label="Cerrar">✕</button></div>
+    <div class="expsec"><div class="t">Estado</div><div class="fld"><select id="xest">${opt}</select></div></div>
+    <div class="expsec"><div class="t">Viaje</div>
+      <div class="row"><div class="fld"><label>Destino</label><input id="xdest" value="${esc(r.destino||'')}"></div><div class="fld"><label>Personas</label><input id="xper" type="number" min="1" inputmode="numeric" value="${r.personas||1}"></div></div>
+      <div class="row" style="margin-top:9px"><div class="fld"><label>Salida</label><input id="xfec" type="date" value="${r.fecha_viaje||''}"></div><div class="fld"><label>Regreso</label><input id="xreg" type="date" value="${r.fecha_regreso||''}"></div></div></div>
+    <div class="expsec"><div class="t">Presupuesto (Q quetzales)</div>
+      <div class="row"><div class="fld"><label>Cotizado</label><input id="xcot" type="number" step="0.01" min="0" inputmode="decimal" value="${r.presupuesto_cotizado==null?'':r.presupuesto_cotizado}"></div><div class="fld"><label>Pagado</label><input id="xpag" type="number" step="0.01" min="0" inputmode="decimal" value="${r.presupuesto_pagado==null?'':r.presupuesto_pagado}"></div></div></div>
+    <div class="expsec"><div class="t">Hotel</div>
+      <div class="row"><div class="fld"><label>Hotel</label><input id="xhot" value="${esc(r.hotel||'')}" placeholder="Nombre del hotel"></div><div class="fld"><label>No. de confirmación</label><input id="xcon" value="${esc(r.confirmacion||'')}" placeholder="Ej. ABC-1234"></div></div></div>
+    <div class="expsec"><div class="t">Itinerario</div><div id="xit"></div><button class="itadd" onclick="addTramo()">+ Agregar tramo</button></div>
+    <div class="expsec"><div class="t">Notas</div><div class="note" style="margin:0"><textarea id="xnot" placeholder="Notas del viaje…">${esc(r.notas||'')}</textarea></div></div>
+    <button class="btn lima" id="xguardar" onclick="guardarExp()">Guardar fólder</button>
+    <div class="expfoot">${ult}</div>`;
+  pintarTramos();
+  $('expOv').classList.add('on');
+  $('expCard').scrollTop=0;
+}
+function pintarTramos(){
+  $('xit').innerHTML=EXP_IT.length?EXP_IT.map((t,i)=>`<div class="itrow">
+    <input class="d" placeholder="Día" value="${esc(t.dia)}" oninput="EXP_IT[${i}].dia=this.value" aria-label="Día del tramo">
+    <input class="det" placeholder="Detalle (vuelo, traslado, tour…)" value="${esc(t.detalle)}" oninput="EXP_IT[${i}].detalle=this.value" aria-label="Detalle del tramo">
+    <button class="x" onclick="delTramo(${i})" aria-label="Quitar tramo">✕</button></div>`).join('')
+    :'<div style="color:var(--gris);font-size:12.5px;margin-bottom:8px">Sin tramos todavía — agregá el primero.</div>';
+}
+function addTramo(){ EXP_IT.push({dia:'',detalle:''}); pintarTramos(); const ins=document.querySelectorAll('#xit .d'); if(ins.length) ins[ins.length-1].focus(); }
+function delTramo(i){ EXP_IT.splice(i,1); pintarTramos(); }
+function cerrarExp(){ $('expOv').classList.remove('on'); EXP=null; }
+async function guardarExp(){
+  if(!EXP) return;
+  const b=$('xguardar'); b.disabled=true; b.textContent='Guardando…';
+  const num=v=>{const s=String(v==null?'':v).trim(); if(s==='')return null; const n=Number(s); return isFinite(n)?n:null;};
+  const it=EXP_IT.map(t=>({dia:String(t.dia||'').trim(),detalle:String(t.detalle||'').trim()})).filter(t=>t.dia||t.detalle);
+  const body={ estado:$('xest').value, destino:$('xdest').value.trim()||null, personas:Math.max(1,Number($('xper').value)||1),
+    fecha_viaje:$('xfec').value||null, fecha_regreso:$('xreg').value||null,
+    presupuesto_cotizado:num($('xcot').value), presupuesto_pagado:num($('xpag').value),
+    hotel:$('xhot').value.trim()||null, confirmacion:$('xcon').value.trim()||null,
+    itinerario:it, notas:$('xnot').value.trim()||null,
+    actualizado_en:new Date().toISOString(), actualizado_por:USER };
+  try{
+    const r=await api("funnel_reservas?id=eq."+EXP.id,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify(body)});
+    if(!r.ok) throw 0;
+    let fila=null; try{ fila=(await r.json())[0]; }catch(e){}
+    const i=(window.__RES||[]).findIndex(x=>x.id===EXP.id);
+    if(i>=0) window.__RES[i]=fila||Object.assign({},window.__RES[i],body);
+    pintarReservas(); cerrarExp(); toast('✅ Fólder guardado');
+  }catch(e){ toast('⚠️ No se pudo guardar'); }
+  finally{ b.disabled=false; b.textContent='Guardar fólder'; }
+}
 
 // ── MI DÍA ──
 async function cargarMiDia(){
@@ -663,6 +760,8 @@ async function toggleAgente(id,activo){
 }
 
 $('p')&&$('p').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
+$('expOv').addEventListener('click',e=>{ if(e.target===e.currentTarget) cerrarExp(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&$('expOv').classList.contains('on')) cerrarExp(); });
 (async function init(){ if(await refrescar()){ if(!await arrancar()) mostrarLogin(); } else mostrarLogin(); })();
 </script>
 </body>
