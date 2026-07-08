@@ -239,6 +239,20 @@
   .mcell:active{transform:scale(.9)}
   .minibtn{border:none;border-radius:11px;background:var(--kux);color:#fff;padding:10px 15px;font-size:13px;font-weight:700;cursor:pointer;min-height:42px}
   .minibtn:active{transform:scale(.97)}
+  /* ── F5 Kaizen: organigrama visual (árbol de quién reporta a quién) ── */
+  .orgtree{margin-top:2px}
+  .orgnode{margin:6px 0}
+  .orgcard{display:flex;align-items:center;gap:11px;background:#fff;border:1px solid var(--linea);border-left:3px solid var(--kux);border-radius:13px;padding:10px 12px;box-shadow:0 2px 8px rgba(15,36,56,.05);flex-wrap:wrap}
+  .orgav{flex:none;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;color:#fff;background:linear-gradient(135deg,var(--kux),#245078)}
+  .orginfo{flex:1 1 130px;min-width:0}
+  .orgname{font-weight:700;font-size:14.5px;color:var(--tinta);display:flex;align-items:center;gap:7px;flex-wrap:wrap;word-break:break-word}
+  .orgrol{font-size:11.5px;color:var(--gris);margin-top:2px;word-break:break-word}
+  .orgcount{flex:none;background:var(--lima);color:var(--kux-d);font-size:10.5px;font-weight:800;border-radius:20px;padding:1px 8px;min-width:20px;text-align:center}
+  .orgrep{flex:1 1 150px;min-width:128px;display:flex;flex-direction:column;gap:3px}
+  .orgrep span{font-size:10px;font-weight:700;color:var(--gris);text-transform:uppercase;letter-spacing:.4px}
+  .orgrep select{width:100%;padding:9px 10px;border:1px solid var(--linea);border-radius:10px;font-size:13px;background:#fff;color:var(--tinta);outline:none;min-height:40px;font-family:inherit;-webkit-tap-highlight-color:transparent}
+  .orgrep select:focus{border-color:var(--kux);box-shadow:0 0 0 3px rgba(27,54,93,.1)}
+  .orgkids{margin:4px 0 4px 16px;padding-left:14px;border-left:2px dashed var(--linea)}
   /* ── F4 Kaizen: el embudo vive DENTRO del CRM (estilos traídos de embudo.html) ── */
   #funWho{margin-bottom:6px}
   .lead{background:#fff;border:1px solid var(--linea);border-left:4px solid var(--gris);border-radius:14px;padding:13px 14px;margin-bottom:11px;box-shadow:0 2px 8px rgba(15,36,56,.05)}
@@ -735,27 +749,51 @@ function rolesPanel(){
   const matriz=`<div class="adminhead"><h3>🔐 Matriz de permisos</h3></div>
     <div class="tblwrap"><table class="dtbl mtx"><thead><tr><th class="roln">Rol</th>${cabecera}</tr></thead><tbody>${filasMtx}</tbody></table></div>
     <div class="cap" style="margin-top:8px">Tocá una celda para alternar: <b style="color:#1a8a54">✓ permitido</b> · <b style="color:#b3261e">✕ denegado</b> · <b>– sin definir</b>. La escritura la protege la base (solo admin).</div>`;
-  // C · Organigrama de personas
-  const agById=Object.fromEntries(agentes.map(a=>[a.id,a]));
-  let organi;
-  if(!agentes.length){
-    organi=`<div class="vacio"><span class="em">🌱</span><b>Organigrama listo para llenarse</b><p>Cuando agregues personas al equipo (tabla de agentes), acá vas a ver quién reporta a quién y podrás asignar supervisores.</p></div>`;
-  }else{
-    const filasAg=agentes.map(a=>{
-      const opts=`<option value="">— nadie —</option>`+agentes.filter(o=>o.id!==a.id).map(o=>`<option value="${o.id}" ${a.supervisor_id===o.id?'selected':''}>${esc(o.nombre)}</option>`).join('');
-      const ger=a.gerente_id&&agById[a.gerente_id]?esc(agById[a.gerente_id].nombre):'—';
-      return `<tr>
-        <td><b>${esc(a.nombre)}</b><div class="cla">${esc(a.email||'')}</div></td>
-        <td>${esc(a.rol||'—')}</td>
-        <td><select class="fb" style="min-width:130px" onchange="asignarSuper(${a.id},this.value)">${opts}</select></td>
-        <td>${ger}</td>
-      </tr>`;
-    }).join('');
-    organi=`<div class="tblwrap"><table class="dtbl wide"><thead><tr><th class="roln">Persona</th><th>Rol</th><th>Reporta a</th><th>Gerente</th></tr></thead><tbody>${filasAg}</tbody></table></div>
-      <div class="cap" style="margin-top:8px">${agentes.length} persona(s) en el equipo. Cambiá "Reporta a" para armar el organigrama.</div>`;
-  }
+  // C · Organigrama de personas — árbol visual editable (F5 Kaizen)
+  const organi = agentes.length
+    ? organigramaHTML(agentes)
+    : `<div class="vacio"><span class="em">🌱</span><b>Organigrama listo para llenarse</b><p>Cuando agregues personas al equipo (pestaña 🎯 Embudo ▸ Equipo), acá vas a ver el árbol de quién reporta a quién y vas a poder reorganizarlo.</p></div>`;
   const organiWrap=`<div class="adminhead"><h3>👥 Organigrama del equipo</h3></div>${organi}`;
   return tablaRoles+matriz+organiWrap;
+}
+// ── F5 · Organigrama visual (árbol) ──
+// Nivel del rol de una persona (para ordenar la cima arriba); usa la tabla de roles.
+function orgNivel(rolClave){ const r=ROLDATA&&ROLDATA.roles.find(x=>x.clave===rolClave); return r&&r.nivel!=null?r.nivel:-1; }
+// Mapa supervisor_id -> [reportes directos]
+function orgHijosDe(agentes){ const m={}; agentes.forEach(a=>{ const k=(a.supervisor_id==null?'_r':a.supervisor_id); (m[k]=m[k]||[]).push(a); }); return m; }
+// Todos los descendientes de un id (para no ofrecerlos como jefe: crearían un círculo)
+function orgDescend(id,hijosDe,acc){ acc=acc||new Set(); (hijosDe[id]||[]).forEach(h=>{ if(!acc.has(h.id)){ acc.add(h.id); orgDescend(h.id,hijosDe,acc); } }); return acc; }
+const orgSort=(a,b)=>{ const d=orgNivel(b.rol)-orgNivel(a.rol); return d!==0?d:(a.nombre||'').localeCompare(b.nombre||''); };
+function organigramaHTML(agentes){
+  const byId=Object.fromEntries(agentes.map(a=>[a.id,a]));
+  const hijosDe=orgHijosDe(agentes);
+  // Raíz = sin supervisor, o cuyo supervisor ya no existe (huérfano) → se muestra en la cima
+  const raices=agentes.filter(a=>a.supervisor_id==null || !byId[a.supervisor_id]).sort(orgSort);
+  const cuerpo=raices.map(a=>orgNodoHTML(a,agentes,hijosDe,new Set())).join('');
+  return `<div class="orgtree">${cuerpo}</div>
+    <div class="cap" style="margin-top:8px">${agentes.length} persona(s). Cambiá <b>"Reporta a"</b> en cualquier tarjeta para reorganizar el árbol; se guarda solo. Quien no tiene jefe queda en la cima.</div>`;
+}
+function orgNodoHTML(a,agentes,hijosDe,vistos){
+  if(vistos.has(a.id)) return '';           // corta ciclos al dibujar
+  vistos=new Set(vistos); vistos.add(a.id);
+  const desc=orgDescend(a.id,hijosDe);       // no pueden ser su jefe
+  const opts=`<option value="">— cima (nadie) —</option>`+agentes
+    .filter(o=>o.id!==a.id && !desc.has(o.id)).sort(orgSort)
+    .map(o=>`<option value="${o.id}" ${a.supervisor_id===o.id?'selected':''}>${esc(o.nombre)}${o.rol?(' · '+esc(o.rol)):''}</option>`).join('');
+  const ini=(a.nombre||'?').trim().charAt(0).toUpperCase()||'?';
+  const nkids=(hijosDe[a.id]||[]).length;
+  const badge=nkids?`<span class="orgcount" title="${nkids} reporte(s) directo(s)">${nkids}</span>`:'';
+  const hijos=(hijosDe[a.id]||[]).slice().sort(orgSort).map(h=>orgNodoHTML(h,agentes,hijosDe,vistos)).join('');
+  return `<div class="orgnode">
+    <div class="orgcard">
+      <div class="orgav">${esc(ini)}</div>
+      <div class="orginfo"><div class="orgname">${esc(a.nombre||'(sin nombre)')} ${badge}</div>
+        <div class="orgrol">${esc(a.rol||'—')}${a.email?(' · '+esc(a.email)):''}${a.activo===false?' · inactivo':''}</div></div>
+      <label class="orgrep"><span>Reporta a</span>
+        <select onchange="asignarSuper(${a.id},this.value)" aria-label="Reporta a — ${esc(a.nombre||'')}">${opts}</select></label>
+    </div>
+    ${hijos?`<div class="orgkids">${hijos}</div>`:''}
+  </div>`;
 }
 // Escritura genérica gateada por RLS (patrón de nuevaPromo)
 async function sbWrite(metodo,tabla,qs,body,reint){
@@ -779,7 +817,10 @@ async function togglePermiso(rolClave,permiso,estadoActual){
   if(ok){ render(); toast('✅ Permiso actualizado'); } else { toast('⚠️ No se pudo (¿sos admin?)'); }
 }
 async function asignarSuper(id,val){
-  const a=ROLDATA.agentes.find(x=>x.id===id); if(!a)return; const prev=a.supervisor_id; const nuevo=val?Number(val):null; a.supervisor_id=nuevo;
+  const a=ROLDATA.agentes.find(x=>x.id===id); if(!a)return; const prev=a.supervisor_id; const nuevo=val?Number(val):null;
+  // Defensa: nunca dejar que alguien reporte a sí mismo o a un subordinado suyo (crearía un círculo)
+  if(nuevo!==null){ const hijosDe=orgHijosDe(ROLDATA.agentes); if(nuevo===id || orgDescend(id,hijosDe).has(nuevo)){ toast('⚠️ Eso haría un círculo en el organigrama'); render(); return; } }
+  a.supervisor_id=nuevo;
   const ok=await sbWrite('PATCH','funnel_agentes','id=eq.'+id,{supervisor_id:nuevo});
   if(ok){ render(); toast('✅ Organigrama actualizado'); } else { a.supervisor_id=prev; render(); toast('⚠️ No se pudo (¿sos admin?)'); }
 }
