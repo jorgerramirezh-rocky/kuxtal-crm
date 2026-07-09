@@ -241,6 +241,13 @@ section{padding:74px 0}
   border-radius:999px;padding:4px 13px;font-size:12px;letter-spacing:.4px}
 .cc-slogan{position:absolute;left:24px;bottom:14px;z-index:2;font-family:"Fraunces",serif;font-style:italic;
   font-size:12.5px;color:rgba(255,255,255,.62)}
+/* Celular angosto: soltar la proporción fija (encimaba el "0042 · SOCIO ACTIVO" con
+   la insignia) y apilar la fila para que nada se corte ni se monte. */
+@media(max-width:440px){
+  .club-card{aspect-ratio:auto;transform:rotate(-1.5deg);padding-bottom:42px}
+  .cc-row{flex-direction:column;align-items:flex-start;gap:9px}
+  .cc-no{font-size:15px;letter-spacing:2px}
+}
 /* pasos */
 .club-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:22px}
 .st{display:flex;flex-direction:column;gap:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);
@@ -529,13 +536,13 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,.7);padding:60px 0 40p
       <div>
         <h4>Contacto</h4>
         <a href="https://wa.me/50223696209" target="_blank" rel="noopener">WhatsApp · 2369-6209</a>
-        <a href="#" id="ing-foot">Ingresar</a>
+        <a href="#" id="ing-foot">Acceso de socios</a>
       </div>
     </div>
   </div>
   <div class="wrap foot-base">
     <span>© Kuxtal Travels · Guatemala</span>
-    <span>Guatemala · Centroamérica</span>
+    <span>Guatemala · Centroamérica · <a href="#" id="ing-equipo" style="color:rgba(255,255,255,.42);text-decoration:underline">Soy del equipo</a></span>
   </div>
 </footer>
 
@@ -550,11 +557,15 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,.7);padding:60px 0 40p
     root.setAttribute('data-theme',c==='dark'?'light':'dark');
   });
 
-  /* ingresar → app */
-  function go(e){if(e)e.preventDefault();location.href='app.html';}
+  /* Ingresar → app. La vitrina es cara al SOCIO: "Ya soy socio/Ingresar" abre la
+     puerta de socio (#socio), NO el panel del equipo. El staff entra por la puerta
+     discreta "Soy del equipo" (#equipo). */
+  function goSocio(e){if(e)e.preventDefault();location.href='app.html#socio';}
+  function goEquipo(e){if(e)e.preventDefault();location.href='app.html#equipo';}
   ['ing-top','ing-hero','ing-club','ing-cta','ing-foot'].forEach(function(id){
-    var e=document.getElementById(id);if(e)e.addEventListener('click',go);
+    var e=document.getElementById(id);if(e)e.addEventListener('click',goSocio);
   });
+  var eq=document.getElementById('ing-equipo');if(eq)eq.addEventListener('click',goEquipo);
 
   /* CTA hero → club */
   var cc=document.getElementById('cta-club');

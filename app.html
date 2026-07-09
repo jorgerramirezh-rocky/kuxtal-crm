@@ -16,7 +16,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root{--kux:#1b365d;--kux-d:#0f2438;--kux-l:#e9eef5;--lima:#8dc63f;--lima-d:#6f9e12;
-    --rojo:#e5484d;--amar:#f2a900;--verde:#22a06b;--gris:#8a94a6;--tinta:#0f2438;--papel:#f4f6f8;--linea:#e6ebef;}
+    --rojo:#e5484d;--amar:#f2a900;--verde:#22a06b;--gris:#6b7688;--tinta:#0f2438;--papel:#f4f6f8;--linea:#e6ebef;}
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{max-width:100%;overflow-x:hidden}
   body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--papel);color:var(--tinta);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;font-size:16px;letter-spacing:.1px}
@@ -115,6 +115,12 @@
   .lbox button:hover{box-shadow:0 14px 30px rgba(27,54,93,.44)}
   .lbox button:active{transform:scale(.98)} .lbox button:disabled{opacity:.6}
   .lerr{color:var(--rojo);font-size:12.5px;margin-top:10px;min-height:16px}
+  .lsub{color:var(--gris);font-size:12.5px;line-height:1.5;margin:8px 0 20px}
+  .lsub b{display:block;color:var(--kux);font-size:14.5px;font-weight:800;letter-spacing:.2px;margin-bottom:3px}
+  .lbox .lhelp{display:block;margin-top:14px;color:var(--lima-d);font-size:13px;font-weight:700;text-decoration:none;line-height:1.4;padding:8px 4px;min-height:44px}
+  .lbox .lhelp:hover{text-decoration:underline}
+  .lbox .lswitch{width:auto;background:none;border:none;box-shadow:none;color:var(--gris);font-size:12.5px;font-weight:600;margin-top:10px;padding:10px;min-height:44px;text-decoration:underline}
+  .lbox .lswitch:hover{color:var(--kux);box-shadow:none;transform:none}
   #load{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:var(--papel);color:var(--gris);font-size:14px}
   .spin{width:26px;height:26px;border:3px solid var(--kux-l);border-top-color:var(--kux);border-radius:50%;animation:sp .8s linear infinite;margin-right:10px}
   @keyframes sp{to{transform:rotate(360deg)}}
@@ -352,11 +358,13 @@
 <div id="gate" style="display:none">
   <div class="lbox">
     <div><span class="lg">KUXTAL</span> <span class="tr">TRAVELS</span> <span class="pl">✈</span></div>
-    <p>Panel del equipo · acceso privado</p>
-    <input id="u" type="email" placeholder="Usuario" autocomplete="username" value="equipo@kuxtal.app">
-    <input id="p" type="password" placeholder="Contraseña" autocomplete="current-password">
-    <button id="entrar" onclick="login()">Entrar</button>
+    <p class="lsub" id="gateSub"><b>Kuxtal Club · Acceso de socios</b>Entrá con el correo y la clave de tu cuenta del club.</p>
+    <input id="u" type="email" placeholder="Tu correo" autocomplete="username">
+    <input id="p" type="password" placeholder="Tu clave" autocomplete="current-password">
+    <button id="entrar" onclick="login()">Entrar a mi tarjeta</button>
     <div class="lerr" id="lerr"></div>
+    <a class="lhelp" id="gateHelp" href="https://wa.me/50223696209?text=Hola%2C%20soy%20socio%20de%20Kuxtal%20Travels%20y%20quiero%20activar%20mi%20acceso%20al%20Club" target="_blank" rel="noopener">¿Todavía no tenés acceso? Pedilo por WhatsApp →</a>
+    <button type="button" class="lswitch" id="gateSwitch" onclick="toggleGateMode()">Soy del equipo</button>
   </div>
 </div>
 
@@ -1333,8 +1341,29 @@ function cerrarTour(){ $('tourOv').style.display='none'; if(tourKey) try{ localS
 window.addEventListener('resize',()=>{ if(!tourAbierto())return; const s=tourList[tourI]; const el=s&&s.sel?document.querySelector(s.sel):null; ubicarSpot(el); ubicarCard(el); });
 document.addEventListener('keydown',e=>{ if(!tourAbierto())return; if(e.key==='Escape'){cerrarTour();} else if(e.key==='Enter'){e.preventDefault();siguienteTour();} });
 
-function mostrarLogin(){ $('load').style.display='none'; $('app').style.display='none'; $('gate').style.display='flex'; setTimeout(()=>$('p').focus(),100); }
+// ── Puerta honesta: modo socio (público, por defecto) vs equipo (staff, discreto) ──
+// Ambos modos usan el MISMO login (correo+clave → Supabase Auth). El rol lo decide
+// el servidor por el JWT (app_metadata.role) y la RLS filtra qué ve cada quien; el
+// modo solo cambia el marco honesto, no da ni quita permisos. NUNCA se precarga correo.
+let gateMode='socio';
+function setGateMode(m){
+  gateMode=(m==='equipo')?'equipo':'socio';
+  const sub=$('gateSub'), btn=$('entrar'), help=$('gateHelp'), sw=$('gateSwitch');
+  if(gateMode==='equipo'){
+    sub.innerHTML='<b>Panel del equipo · acceso privado</b>Solo para personal de Kuxtal Travels.';
+    btn.textContent='Entrar'; if(help)help.style.display='none';
+    if(sw)sw.textContent='¿Sos socio? Acceso de socios';
+  }else{
+    sub.innerHTML='<b>Kuxtal Club · Acceso de socios</b>Entrá con el correo y la clave de tu cuenta del club.';
+    btn.textContent='Entrar a mi tarjeta'; if(help)help.style.display='';
+    if(sw)sw.textContent='Soy del equipo';
+  }
+}
+function toggleGateMode(){ setGateMode(gateMode==='equipo'?'socio':'equipo'); $('u').focus(); }
+function mostrarLogin(){ $('load').style.display='none'; $('app').style.display='none'; $('gate').style.display='flex';
+  setGateMode(location.hash==='#equipo'?'equipo':'socio'); setTimeout(()=>$('u').focus(),100); }
 $('p').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
+$('u').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('p').focus();}});
 $('modal').addEventListener('click',e=>{if(e.target.id==='modal')cerrarModal();});
 $('ficha').addEventListener('click',e=>{if(e.target.id==='ficha')cerrarFicha();});
 $('tarjeta').addEventListener('click',e=>{if(e.target.id==='tarjeta')cerrarTarjeta();});
