@@ -16,7 +16,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root{--kux:#1b365d;--kux-d:#0f2438;--kux-l:#e9eef5;--lima:#8dc63f;--lima-d:#6f9e12;
-    --rojo:#e5484d;--amar:#f2a900;--verde:#22a06b;--gris:#6b7688;--tinta:#0f2438;--papel:#f4f6f8;--linea:#e6ebef;}
+    --rojo:#e5484d;--amar:#f2a900;--verde:#22a06b;--gris:#6b7688;--tinta:#0f2438;--rojo-t:#b0121c;--gold-t:#7e5c06;--papel:#f4f6f8;--linea:#e6ebef;}
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{max-width:100%;overflow-x:hidden}
   body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--papel);color:var(--tinta);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;font-size:16px;letter-spacing:.1px}
@@ -45,7 +45,7 @@
   .stat:hover{transform:translateY(-3px);box-shadow:0 8px 22px rgba(15,36,56,.14)} .stat:active{transform:scale(.98)}
   .stat b{display:block;font-size:clamp(17px,5.4vw,22px);line-height:1.1;font-variant-numeric:tabular-nums;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .stat span{font-size:clamp(9px,2.6vw,11px);color:var(--gris)}
-  .stat.rojo b{color:var(--rojo)} .stat.lima b{color:var(--lima-d)} .stat.gold b{color:#b5820b}
+  .stat.rojo b{color:var(--rojo-t)} .stat.lima b{color:var(--lima-d)} .stat.gold b{color:var(--gold-t)}
   /* TABS */
   .tabs{display:flex;gap:6px;margin:0 0 12px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
   .tabs::-webkit-scrollbar{display:none}
@@ -57,9 +57,11 @@
   .search input:focus{border-color:var(--kux);box-shadow:0 0 0 3px rgba(27,54,93,.1)}
   .search .ico{position:absolute;left:13px;top:13px;color:var(--gris)}
   .cap{color:var(--gris);font-size:12px;margin:0 2px 12px;line-height:1.45}
-  .filtros{display:flex;gap:6px;margin:0 0 12px;flex-wrap:wrap}
+  .filtros,#filtros{display:flex;gap:6px;margin:0 0 12px;flex-wrap:wrap}
   .fb{border:1px solid var(--linea);background:#fff;border-radius:10px;padding:11px 14px;font-size:12.5px;font-weight:600;color:var(--gris);cursor:pointer;min-height:44px}
   .fb.on{background:var(--kux);color:#fff;border-color:var(--kux)} .fb:active{transform:scale(.97)}
+  /* Foco visible por teclado (accesibilidad) */
+  .tab:focus-visible,.stat:focus-visible,[role="button"]:focus-visible{outline:2px solid var(--kux);outline-offset:2px}
   /* GRID de gráficas: 1 col en cel, 2 en pantalla mayor */
   .grid{display:grid;grid-template-columns:1fr;gap:12px}
   .panel{min-width:0;background:#fff;border:1px solid var(--linea);border-radius:18px;padding:15px;box-shadow:0 3px 14px rgba(15,36,56,.05);opacity:0;transform:translateY(14px);animation:rise .5s ease forwards}
@@ -79,7 +81,7 @@
   .nombre{font-weight:700;font-size:15.5px;word-break:break-word}
   .meta{font-size:12.5px;color:var(--gris);margin-top:2px;word-break:break-word;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .der{text-align:right;font-size:12px;font-weight:700;flex:none;white-space:nowrap}
-  .der.r{color:var(--rojo)}.der.a{color:var(--amar)}.der.v{color:var(--verde)}.der.g{color:var(--gris)}
+  .der.r{color:#B0121C}.der.a{color:#7E5C06}.der.v{color:#1F6B41}.der.g{color:var(--gris)}
   .acciones{display:flex;gap:7px;margin-top:11px;flex-wrap:wrap;align-items:center}
   .btn-c{color:#fff;border:none;border-radius:11px;padding:10px 14px;font-size:13.5px;font-weight:700;cursor:pointer;text-decoration:none;min-height:42px;display:inline-flex;align-items:center;justify-content:center;transition:transform .14s,box-shadow .14s,filter .14s}
   .btn-c.wa,.btn-c.tel{box-shadow:0 5px 14px rgba(15,36,56,.16)}
@@ -90,7 +92,7 @@
   .eb.on{background:var(--kux-l);border-color:var(--kux);color:var(--kux-d);font-weight:700}
   .eb:active{transform:scale(.95)}
   .chip{font-size:10.5px;border-radius:7px;padding:3px 7px;font-weight:700;white-space:nowrap}
-  .chip.vip{background:#eaf3ff;color:var(--kux)}.chip.exc{background:#efe6ff;color:#6b3fb0}.chip.gold{background:#fff3d6;color:#b5820b}.chip.reg{background:#f1f3f5;color:var(--gris)}
+  .chip.vip{background:#eaf3ff;color:var(--kux)}.chip.exc{background:#efe6ff;color:#6b3fb0}.chip.gold{background:#fff3d6;color:#7E570F}.chip.reg{background:#f1f3f5;color:var(--gris)}
   .warn{background:#fdecea;color:#b3261e;font-size:10.5px;border-radius:7px;padding:3px 7px;font-weight:700}
   .vacio{text-align:center;color:var(--gris);padding:44px 22px;background:#fff;border:1px dashed var(--linea);border-radius:18px}
   .vacio .em{font-size:32px;display:inline-flex;align-items:center;justify-content:center;width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--kux-l),#fff);box-shadow:inset 0 0 0 1px var(--linea);margin:0 auto 12px}
@@ -114,7 +116,7 @@
   .lbox button{width:100%;padding:15px;border:none;border-radius:12px;background:linear-gradient(135deg,var(--kux),#245078);color:#fff;font-size:16px;font-weight:700;cursor:pointer;min-height:50px;box-shadow:0 10px 24px rgba(27,54,93,.34);transition:box-shadow .15s,transform .15s}
   .lbox button:hover{box-shadow:0 14px 30px rgba(27,54,93,.44)}
   .lbox button:active{transform:scale(.98)} .lbox button:disabled{opacity:.6}
-  .lerr{color:var(--rojo);font-size:12.5px;margin-top:10px;min-height:16px}
+  .lerr{color:var(--rojo-t);font-size:12.5px;margin-top:10px;min-height:16px}
   .lsub{color:var(--gris);font-size:12.5px;line-height:1.5;margin:8px 0 20px}
   .lsub b{display:block;color:var(--kux);font-size:14.5px;font-weight:800;letter-spacing:.2px;margin-bottom:3px}
   .lbox .lhelp{display:block;margin-top:14px;color:var(--lima-d);font-size:13px;font-weight:700;text-decoration:none;line-height:1.4;padding:8px 4px;min-height:44px}
@@ -134,7 +136,7 @@
   .mcard label{display:block;font-size:12px;font-weight:700;color:var(--gris);margin:12px 0 5px}
   .mcard input,.mcard select{width:100%;padding:12px 13px;border:1px solid var(--linea);border-radius:11px;font-size:16px;outline:none;background:#fff}
   .mcard input:focus,.mcard select:focus{border-color:var(--kux);box-shadow:0 0 0 3px rgba(27,54,93,.1)}
-  .ferr{color:var(--rojo);font-size:12px;margin-top:5px;min-height:15px}
+  .ferr{color:var(--rojo-t);font-size:12px;margin-top:5px;min-height:15px}
   .macc{display:flex;gap:10px;margin-top:20px}
   .macc button{flex:1;padding:14px;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;min-height:50px;border:none}
   .mcancel{background:#fff;border:1px solid var(--linea)!important;color:var(--tinta)}
@@ -216,10 +218,10 @@
   @media (prefers-reduced-motion:reduce){#tourSpot,#tourCard{transition:none;animation:none}}
   /* ── Admin: Calidad de datos + Roles/Organigrama ── */
   .sevhead{display:flex;align-items:center;gap:8px;margin:16px 2px 9px;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px}
-  .sevhead.alta{color:var(--rojo)} .sevhead.media{color:#b5820b} .sevhead.baja{color:var(--gris)}
+  .sevhead.alta{color:var(--rojo-t)} .sevhead.media{color:var(--gold-t)} .sevhead.baja{color:var(--gris)}
   .sevcount{background:var(--kux-l);color:var(--kux-d);border-radius:20px;padding:2px 10px;font-size:11px}
   .qcard{border-left:4px solid var(--linea)}
-  .qcard.alta{border-left-color:var(--rojo)} .qcard.media{border-left-color:var(--amar)} .qcard.baja{border-left-color:var(--gris)}
+  .qcard.alta{border-left-color:var(--rojo-t)} .qcard.media{border-left-color:var(--amar)} .qcard.baja{border-left-color:var(--gris)}
   .qtipo{font-size:10.5px;font-weight:800;border-radius:7px;padding:3px 8px;background:var(--kux-l);color:var(--kux-d);white-space:nowrap}
   .qdet{font-size:13px;margin-top:7px;color:var(--tinta);line-height:1.45;word-break:break-word}
   .adminhead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:20px 2px 9px}
@@ -345,7 +347,7 @@
   .itrow input:focus{border-color:var(--kux);box-shadow:0 0 0 3px rgba(27,54,93,.1)}
   .itrow .d{width:74px;flex:none}
   .itrow .det{flex:1}
-  .itrow .x{width:44px;height:44px;flex:none;border:1px solid var(--linea);background:#fff;color:var(--rojo);border-radius:10px;font-size:15px;cursor:pointer}
+  .itrow .x{width:44px;height:44px;flex:none;border:1px solid var(--linea);background:#fff;color:var(--rojo-t);border-radius:10px;font-size:15px;cursor:pointer}
   .itadd{border:1px dashed var(--kux);background:var(--kux-l);color:var(--kux);border-radius:10px;padding:10px 14px;font-size:13px;font-weight:700;cursor:pointer;min-height:44px;width:100%}
   .expfoot{font-size:11.5px;color:var(--gris);margin-top:12px;text-align:center}
   @media (min-width:560px){ .fld{min-width:150px} }
@@ -378,22 +380,22 @@
 
 <div class="wrap">
   <div class="stats">
-    <div class="stat lima" onclick="ir('tablero')"><b id="k1">$0</b><span>Ventas totales</span></div>
-    <div class="stat gold" onclick="ir('tablero')"><b id="k2">$0</b><span>Ticket prom.</span></div>
-    <div class="stat" onclick="ir('todos')"><b id="k3">0</b><span>Socios</span></div>
-    <div class="stat rojo" onclick="ir('vencimientos')"><b id="k4">0</b><span>Por vencer 12m</span></div>
+    <div class="stat lima" role="button" tabindex="0" onclick="ir('tablero')"><b id="k1">$0</b><span>Ventas totales</span></div>
+    <div class="stat gold" role="button" tabindex="0" onclick="ir('tablero')"><b id="k2">$0</b><span>Ticket prom.</span></div>
+    <div class="stat" role="button" tabindex="0" onclick="ir('todos')"><b id="k3">0</b><span>Socios</span></div>
+    <div class="stat rojo" role="button" tabindex="0" onclick="ir('vencimientos')"><b id="k4">0</b><span>Por vencer 12m</span></div>
   </div>
   <div class="tabs">
-    <div class="tab on" data-t="tablero">Tablero BI</div>
-    <div class="tab" data-t="vencimientos">Renovaciones</div>
-    <div class="tab" data-t="todos">Directorio</div>
-    <div class="tab" data-t="promos">🎁 Promos</div>
-    <div class="tab" data-t="leads">Prospectos</div>
-    <div class="tab" data-t="bot">🤖 Bot &amp; WhatsApp</div>
-    <div class="tab" data-t="activacion">Activación</div>
-    <div class="tab" data-t="embudo" id="tabEmbudo" style="display:none">🎯 Embudo</div>
-    <div class="tab" data-t="calidad" id="tabCalidad" style="display:none">🛡️ Calidad</div>
-    <div class="tab" data-t="roles" id="tabRoles" style="display:none">⚙️ Roles</div>
+    <div class="tab on" data-t="tablero" role="button" tabindex="0">Tablero BI</div>
+    <div class="tab" data-t="vencimientos" role="button" tabindex="0">Renovaciones</div>
+    <div class="tab" data-t="todos" role="button" tabindex="0">Directorio</div>
+    <div class="tab" data-t="promos" role="button" tabindex="0">🎁 Promos</div>
+    <div class="tab" data-t="leads" role="button" tabindex="0">Prospectos</div>
+    <div class="tab" data-t="bot" role="button" tabindex="0">🤖 Bot &amp; WhatsApp</div>
+    <div class="tab" data-t="activacion" role="button" tabindex="0">Activación</div>
+    <div class="tab" data-t="embudo" id="tabEmbudo" role="button" tabindex="0" style="display:none">🎯 Embudo</div>
+    <div class="tab" data-t="calidad" id="tabCalidad" role="button" tabindex="0" style="display:none">🛡️ Calidad</div>
+    <div class="tab" data-t="roles" id="tabRoles" role="button" tabindex="0" style="display:none">⚙️ Roles</div>
   </div>
   <div class="search" id="search"><span class="ico">🔎</span><input id="buscar" placeholder="Buscar por nombre…"></div>
   <div class="cap" id="cap"></div>
@@ -609,7 +611,7 @@ function botPanel(botLeads){
     : `<div class="vacio"><span class="em">💬</span><b>El bot aún no captó prospectos por acá</b><p>Cuando WhatsApp esté conectado, los interesados que le escriban aparecen acá solos.</p></div>`;
   return `
   <div class="ocard" style="align-items:flex-start"><div class="oemoji">🤖</div><div class="obody">
-    <div class="otit">El asistente de Kuxtal <span class="odesc" style="background:#e9f7ef;color:#1a8a52">Cerebro activo ✓</span> <span class="odesc" style="background:#fff3d6;color:#7a5f16">WhatsApp: por conectar</span></div>
+    <div class="otit">El asistente de Kuxtal <span class="odesc" style="background:#eef1f5;color:#33465e">Asistente en construcción</span> <span class="odesc" style="background:#fff3d6;color:#7a5f16">WhatsApp: por conectar</span></div>
     <div class="odescr">Ya responde con la voz de Kuxtal (membresías, destinos, Kuxtal Club) y capta interesados directo acá. Falta conectarlo a WhatsApp — los pasos de Meta están abajo.</div>
   </div></div>
   <h3 style="margin:18px 0 10px;color:var(--kux)">🎯 Prospectos que captó el bot (${botLeads.length})</h3>
@@ -688,7 +690,7 @@ function calidadPanel(){
   const tipos=[...new Set(ALERTAS.map(a=>a.tipo))].sort((a,b)=>ALERTAS.filter(x=>x.tipo===b).length-ALERTAS.filter(x=>x.tipo===a).length);
   const arr = caF ? ALERTAS.filter(a=>a.tipo===caF) : ALERTAS;
   if(!ALERTAS.length){ return `<div class="vacio"><span class="em">✨</span><b>¡Base impecable!</b><p>No detectamos datos por revisar. Cuando aparezca una inconsistencia (DPI, teléfono, vencimiento…), se muestra acá sola.</p></div>`; }
-  const resumen=`<div class="insight full" style="margin-bottom:12px">🛡️ <b>Detectamos ${ALERTAS.length} focos</b> de datos por revisar. Así el equipo valida y limpia la base: <b style="color:var(--rojo)">${cA} altas</b> · <b style="color:#b5820b">${cM} medias</b> · <b style="color:var(--gris)">${cB} bajas</b>. Detectar → alertar → validar.</div>`;
+  const resumen=`<div class="insight full" style="margin-bottom:12px">🛡️ <b>Detectamos ${ALERTAS.length} focos</b> de datos por revisar. Así el equipo valida y limpia la base: <b style="color:var(--rojo-t)">${cA} altas</b> · <b style="color:var(--gold-t)">${cM} medias</b> · <b style="color:var(--gris)">${cB} bajas</b>. Detectar → alertar → validar.</div>`;
   const filtro=`<div class="filtros"><div class="fpill ${caF===''?'on':''}" onclick="caF='';render()">Todas (${ALERTAS.length})</div>`+
     tipos.map(t=>`<div class="fpill ${caF===t?'on':''}" onclick="caF='${t}';render()">${esc(tipoTxt(t))} (${ALERTAS.filter(x=>x.tipo===t).length})</div>`).join('')+`</div>`;
   let cuerpo='';
@@ -697,22 +699,30 @@ function calidadPanel(){
     cuerpo+=`<div class="sevhead ${sev}">${SEV_LBL[sev]} <span class="sevcount">${g.length}</span></div>`;
     cuerpo+=g.map((a,i)=>{
       const verSocio=gente.some(x=>x.id===a.socio_id)?`<button class="fb" onclick="abrirFicha(${a.socio_id})">👤 Ver socio</button>`:'';
-      return `<div class="card qcard ${sev}" style="animation-delay:${Math.min(i,16)*25}ms"><div class="top"><div class="who">
+      const rk=revKey(a); const done=REVISADAS.has(rk);
+      return `<div class="card qcard ${sev}${done?' isrev':''}" data-rk="${esc(rk)}" style="animation-delay:${Math.min(i,16)*25}ms${done?';opacity:.55':''}"><div class="top"><div class="who">
         <div class="nombre">${esc(a.nombre||'(sin nombre)')}</div>
         <div class="meta"><span class="qtipo">${esc(tipoTxt(a.tipo))}</span> · Socio #${esc(a.no_socio||'—')}</div>
       </div></div>
       <div class="qdet">${esc(a.detalle||'')}</div>
-      <div class="acciones" style="margin-top:10px">${verSocio}<button class="fb" onclick="marcarRevisada(this)">✓ Marcar revisada</button></div></div>`;
+      <div class="acciones" style="margin-top:10px">${verSocio}<button class="fb" onclick="marcarRevisada(this)"${done?' disabled style="opacity:.7"':''}>${done?'Revisada ✓':'✓ Marcar revisada'}</button></div></div>`;
     }).join('');
   });
   if(!arr.length) cuerpo=`<div class="vacio"><span class="em">🔎</span><b>Sin alertas de ese tipo</b><p>Cambiá el filtro de arriba.</p></div>`;
   return resumen+filtro+cuerpo;
 }
-// Marcar revisada = por ahora SOLO visual (no hay tabla de estado; no se tocan datos de socios)
+// Marcar revisada = marca visual que PERSISTE en este dispositivo (localStorage).
+// No toca datos de socios ni el servidor, pero SÍ sobrevive al refresco (ya no miente).
+const RKEY='kux_revisadas';
+function loadRevisadas(){ try{ return new Set(JSON.parse(localStorage.getItem(RKEY)||'[]')); }catch(e){ return new Set(); } }
+let REVISADAS=loadRevisadas();
+const revKey=a=>`${a.tipo||''}|${a.socio_id||a.no_socio||a.nombre||''}|${a.detalle||''}`;
 function marcarRevisada(btn){
-  const c=btn.closest('.card'); if(c){ c.style.opacity='.5'; }
+  const c=btn.closest('.card'); const rk=c?c.getAttribute('data-rk'):null;
+  if(rk){ REVISADAS.add(rk); try{ localStorage.setItem(RKEY,JSON.stringify([...REVISADAS])); }catch(e){} }
+  if(c){ c.style.opacity='.55'; c.classList.add('isrev'); }
   btn.textContent='Revisada ✓'; btn.disabled=true; btn.style.opacity='.7';
-  toast('Marcada como revisada (visual · pendiente de guardar estado)');
+  toast('Marcada como revisada');
 }
 
 // ── SECCIÓN 2 · Roles y organigrama (solo admin) ──
@@ -978,7 +988,7 @@ function tablero(){
   const lb=BI.leads||{nuevos:0,contactados:0,convertidos:0,cargado:false};
   const leadN=(v,c,t)=>`<div style="flex:1;min-width:90px;background:var(--kux-l);border-radius:12px;padding:12px 8px;text-align:center"><b style="display:block;font-size:22px;color:${c};font-variant-numeric:tabular-nums">${v}</b><span style="font-size:11px;color:var(--gris)">${t}</span></div>`;
   const prospectos=`<div class="panel full"><h3>🎯 Prospectos (interesados)</h3><div class="sub">Los que dejan sus datos en la web o le escriben al bot · <b onclick="ir('leads')" style="cursor:pointer;text-decoration:underline">ver y dar seguimiento</b></div>
-    ${lb.cargado?`<div style="display:flex;gap:10px;flex-wrap:wrap">${leadN(lb.nuevos,'#b5820b','Nuevos')}${leadN(lb.contactados,'var(--kux)','Contactados')}${leadN(lb.convertidos,'var(--lima-d)','Ya son socios')}</div>`:`<div class="sub">Cargando prospectos…</div>`}</div>`;
+    ${lb.cargado?`<div style="display:flex;gap:10px;flex-wrap:wrap">${leadN(lb.nuevos,'#7e5c06','Nuevos')}${leadN(lb.contactados,'var(--kux)','Contactados')}${leadN(lb.convertidos,'var(--lima-d)','Ya son socios')}</div>`:`<div class="sub">Cargando prospectos…</div>`}</div>`;
   $('tablero').innerHTML=`<div class="grid">
     <div class="insight full">🔔 <b>Lo urgente:</b> ${proxMes} socio(s) vencen en los próximos 30 días · <b>${money(BI.enRiesgo)}</b> en juego a 12 meses. Andá a <b onclick="ir('vencimientos')" style="cursor:pointer;text-decoration:underline">Renovaciones</b>.</div>
     ${alerta}
@@ -993,17 +1003,17 @@ function tablero(){
   </div>`;
   Object.values(charts).forEach(c=>c&&c.destroy()); charts={};
   try{
-  const NAVY='#1b365d',LIMA='#8dc63f',AMAR='#f2a900',ROJO='#e5484d',MOR='#7d4bc4';
+  const NAVY='#1b365d',LIMA='#8dc63f',AMAR='#f2a900',ROJO='#e5484d',MOR='#4d6b8f';
   const c1=$('c1').getContext('2d');
   charts.c1=new Chart(c1,{type:'bar',data:{labels:BI.ingMes.map(x=>x[0]),datasets:[{data:BI.ingMes.map(x=>x[1]),backgroundColor:gGrad(c1,'#2a5a8a',NAVY),borderRadius:6}]},options:baseOpt({plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>money0(v)}}}})});
   const c2=$('c2').getContext('2d');
   charts.c2=new Chart(c2,{type:'line',data:{labels:BI.acum.map(x=>x[0]),datasets:[{data:BI.acum.map(x=>x[1]),borderColor:LIMA,backgroundColor:gGrad(c2,'rgba(141,198,63,.35)','rgba(141,198,63,0)'),fill:true,tension:.4,pointRadius:0,borderWidth:3}]},options:baseOpt({plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>money0(v)}}}})});
   charts.c4=new Chart($('c4'),{type:'bar',data:{labels:Object.keys(BI.revCloser),datasets:[{data:Object.values(BI.revCloser),backgroundColor:LIMA,borderRadius:6}]},options:baseOpt({onClick:(e,el)=>{if(el.length){dirCloser=Object.keys(BI.revCloser)[el[0].index];dirTipo='';ir('todos');}},indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>money0(v)}}}})});
-  charts.c5=new Chart($('c5'),{type:'doughnut',data:{labels:Object.keys(BI.revTipo),datasets:[{data:Object.values(BI.revTipo),backgroundColor:[NAVY,MOR,AMAR,'#c7ccd4','#9aa4b2'],borderWidth:0}]},options:baseOpt({cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:11,font:{size:10}}}}})});
-  charts.c9=new Chart($('c9'),{type:'doughnut',data:{labels:Object.keys(BI.porTipo),datasets:[{data:Object.values(BI.porTipo),backgroundColor:[NAVY,MOR,AMAR,'#c7ccd4','#9aa4b2'],borderWidth:0}]},options:baseOpt({onClick:(e,el)=>{if(el.length){dirTipo=Object.keys(BI.porTipo)[el[0].index];dirCloser='';ir('todos');}},cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:11,font:{size:10}}}}})});
+  charts.c5=new Chart($('c5'),{type:'doughnut',data:{labels:Object.keys(BI.revTipo),datasets:[{data:Object.values(BI.revTipo),backgroundColor:[NAVY,MOR,AMAR,'#c7ccd4','#9aa4b2'],borderWidth:2,borderColor:'#fff'}]},options:baseOpt({cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:11,font:{size:10}}}}})});
+  charts.c9=new Chart($('c9'),{type:'doughnut',data:{labels:Object.keys(BI.porTipo),datasets:[{data:Object.values(BI.porTipo),backgroundColor:[NAVY,MOR,AMAR,'#c7ccd4','#9aa4b2'],borderWidth:2,borderColor:'#fff'}]},options:baseOpt({onClick:(e,el)=>{if(el.length){dirTipo=Object.keys(BI.porTipo)[el[0].index];dirCloser='';ir('todos');}},cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:11,font:{size:10}}}}})});
   const vaK=Object.keys(BI.vencAnio).sort();
   charts.c6=new Chart($('c6'),{type:'bar',data:{labels:vaK,datasets:[{data:vaK.map(y=>BI.vencAnio[y]),backgroundColor:vaK.map(y=>{const yy=+y,ty=HOY.getFullYear();return yy<ty?ROJO:yy<=ty+1?AMAR:NAVY;}),borderRadius:6}]},options:baseOpt({plugins:{legend:{display:false}},scales:{y:{ticks:{precision:0}}}})});
-  charts.c7=new Chart($('c7'),{type:'doughnut',data:{labels:Object.keys(BI.cartera),datasets:[{data:Object.values(BI.cartera),backgroundColor:['#22a06b',ROJO,'#c7ccd4'],borderWidth:0}]},options:baseOpt({cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:11,font:{size:10}}}}})});
+  charts.c7=new Chart($('c7'),{type:'doughnut',data:{labels:Object.keys(BI.cartera),datasets:[{data:Object.values(BI.cartera),backgroundColor:['#22a06b',ROJO,'#c7ccd4'],borderWidth:2,borderColor:'#fff'}]},options:baseOpt({cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:11,font:{size:10}}}}})});
   }catch(e){console.warn('charts fallaron',e);}
 }
 
@@ -1340,6 +1350,12 @@ function siguienteTour(){ tourI++; if(tourI>=tourList.length) cerrarTour(); else
 function cerrarTour(){ $('tourOv').style.display='none'; if(tourKey) try{ localStorage.setItem(tourKey,'1'); }catch(e){} }
 window.addEventListener('resize',()=>{ if(!tourAbierto())return; const s=tourList[tourI]; const el=s&&s.sel?document.querySelector(s.sel):null; ubicarSpot(el); ubicarCard(el); });
 document.addEventListener('keydown',e=>{ if(!tourAbierto())return; if(e.key==='Escape'){cerrarTour();} else if(e.key==='Enter'){e.preventDefault();siguienteTour();} });
+// Accesibilidad de teclado: Enter/Espacio activan los divs con role="button" (pestañas, KPIs)
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Enter'&&e.key!==' '&&e.key!=='Spacebar')return;
+  const el=e.target;
+  if(el&&el.getAttribute&&el.getAttribute('role')==='button'){ e.preventDefault(); el.click(); }
+});
 
 // ── Puerta honesta: modo socio (público, por defecto) vs equipo (staff, discreto) ──
 // Ambos modos usan el MISMO login (correo+clave → Supabase Auth). El rol lo decide
