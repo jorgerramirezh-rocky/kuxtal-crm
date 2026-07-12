@@ -21,6 +21,8 @@
   html,body{max-width:100%;overflow-x:hidden}
   body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--papel);color:var(--tinta);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;font-size:16px;letter-spacing:.1px}
   img,canvas{max-width:100%}
+  /* ── Íconos de línea (un solo set, grosor coherente) — NO chocar con .ic 40/50px ── */
+  .svic{width:1em;height:1em;display:inline-block;vertical-align:-.14em;flex:none;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
   /* ── HEADER ── */
   header{position:relative;background:linear-gradient(120deg,var(--kux-d),var(--kux),#245078,var(--kux));background-size:300% 300%;animation:grad 12s ease infinite;color:#fff;padding:14px 14px 22px;padding-top:calc(14px + env(safe-area-inset-top));border-radius:0 0 22px 22px;box-shadow:0 10px 28px rgba(15,36,56,.2)}
   @keyframes grad{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
@@ -95,7 +97,7 @@
   .chip.vip{background:#eaf3ff;color:var(--kux)}.chip.exc{background:#efe6ff;color:#6b3fb0}.chip.gold{background:#fff3d6;color:#7E570F}.chip.reg{background:#f1f3f5;color:var(--gris)}
   .warn{background:#fdecea;color:#b3261e;font-size:10.5px;border-radius:7px;padding:3px 7px;font-weight:700}
   .vacio{text-align:center;color:var(--gris);padding:44px 22px;background:#fff;border:1px dashed var(--linea);border-radius:18px}
-  .vacio .em{font-size:32px;display:inline-flex;align-items:center;justify-content:center;width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--kux-l),#fff);box-shadow:inset 0 0 0 1px var(--linea);margin:0 auto 12px}
+  .vacio .em{font-size:30px;color:var(--kux);display:inline-flex;align-items:center;justify-content:center;width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--kux-l),#fff);box-shadow:inset 0 0 0 1px var(--linea);margin:0 auto 12px}
   .vacio b{color:var(--kux);font-size:16px;display:block;margin-bottom:4px}
   .vacio p{font-size:13px;line-height:1.5;max-width:360px;margin:0 auto}
   .insight{background:linear-gradient(135deg,#fffaf0,#fff);border:1px solid #f2d98a;border-radius:16px;padding:13px 15px;font-size:12.5px;color:#7a5f16;line-height:1.5}
@@ -355,11 +357,47 @@
 </head>
 <body>
 
+<!-- ── Sprite de íconos de línea (Lucide/Feather · grid 24 · stroke 1.9 · round) ── -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<g stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+<symbol id="ic-plane" viewBox="0 0 24 24"><path d="M17.8 19.2 16 11l3.5-3.5a2.12 2.12 0 0 0-3-3L13 8 4.8 6.2a1 1 0 0 0-.9.3l-.9.9a1 1 0 0 0 .3 1.6L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 2.5 5.6a1 1 0 0 0 1.6.3l.9-.9a1 1 0 0 0 .3-.9z"/></symbol>
+<symbol id="ic-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+<symbol id="ic-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+<symbol id="ic-alert" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></symbol>
+<symbol id="ic-alert-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></symbol>
+<symbol id="ic-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+<symbol id="ic-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
+<symbol id="ic-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></symbol>
+<symbol id="ic-chart" viewBox="0 0 24 24"><path d="M3 3v18h18M18 17V9M13 17V5M8 17v-3"/></symbol>
+<symbol id="ic-user" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+<symbol id="ic-users" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+<symbol id="ic-hierarchy" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v3M5 17v-3M19 17v-3M5 14h14M12 10v4"/></symbol>
+<symbol id="ic-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+<symbol id="ic-gift" viewBox="0 0 24 24"><path d="M20 12v9H4v-9M2 7h20v5H2zM12 21V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></symbol>
+<symbol id="ic-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></symbol>
+<symbol id="ic-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+<symbol id="ic-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></symbol>
+<symbol id="ic-phone" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></symbol>
+<symbol id="ic-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/></symbol>
+<symbol id="ic-luggage" viewBox="0 0 24 24"><rect x="5" y="7" width="14" height="14" rx="2"/><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3M9 11v6M15 11v6"/></symbol>
+<symbol id="ic-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+<symbol id="ic-edit" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+<symbol id="ic-note" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></symbol>
+<symbol id="ic-bot" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><circle cx="12" cy="6" r="2"/><path d="M12 8v3M4 15h1M19 15h1M9.5 15.5v-1M14.5 15.5v-1"/></symbol>
+<symbol id="ic-sprout" viewBox="0 0 24 24"><path d="M7 20h10M12 20v-8"/><path d="M12 12c0-3-2-5-5-5 0 3 2 5 5 5zM12 12c0-3 2-5 5-5 0 3-2 5-5 5z"/></symbol>
+<symbol id="ic-ticket" viewBox="0 0 24 24"><path d="M2 9V7a1 1 0 0 1 1-1h18a1 1 0 0 1 1 1v2a2 2 0 0 0 0 4v2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a2 2 0 0 0 0-4z"/><path d="M13 6v2M13 11v2M13 16v2"/></symbol>
+<symbol id="ic-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2z"/></symbol>
+<symbol id="ic-hotel" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="1"/><path d="M9 6h.01M15 6h.01M9 10h.01M15 10h.01M9 14h.01M15 14h.01M10 22v-3a2 2 0 0 1 4 0v3"/></symbol>
+<symbol id="ic-wave" viewBox="0 0 24 24"><path d="M2 12c1.5 0 2.5-2 4-2s2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2.5-2 4-2"/><path d="M2 17c1.5 0 2.5-2 4-2s2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2.5-2 4-2"/></symbol>
+<symbol id="ic-bookmark" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></symbol>
+<symbol id="ic-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></symbol>
+</g></defs></svg>
+
 <div id="load"><span class="spin"></span> Cargando…</div>
 
 <div id="gate" style="display:none">
   <div class="lbox">
-    <div><span class="lg">KUXTAL</span> <span class="tr">TRAVELS</span> <span class="pl">✈</span></div>
+    <div><span class="lg">KUXTAL</span> <span class="tr">TRAVELS</span> <span class="pl"><svg class="svic" aria-hidden="true"><use href="#ic-plane"/></svg></span></div>
     <p class="lsub" id="gateSub"><b>Kuxtal Club · Acceso de socios</b>Entrá con el correo y la clave de tu cuenta del club.</p>
     <input id="u" type="email" placeholder="Tu correo" autocomplete="username">
     <input id="p" type="password" placeholder="Tu clave" autocomplete="current-password">
@@ -372,7 +410,7 @@
 
 <div id="app" style="display:none">
 <header><button class="out" onclick="salir()">Salir</button><div class="hwrap">
-  <div class="logo"><span class="lg">KUXTAL</span><span class="tr">TRAVELS</span><span class="pl">✈</span></div>
+  <div class="logo"><span class="lg">KUXTAL</span><span class="tr">TRAVELS</span><span class="pl"><svg class="svic" aria-hidden="true"><use href="#ic-plane"/></svg></span></div>
   <div class="slogan">Cada destino, una historia · Business Intelligence</div>
   <div class="slogan" id="rolLabel" style="text-transform:none;letter-spacing:0;opacity:.9"></div>
   <button class="tourhelp" onclick="verTour()">¿Cómo funciona? ↻</button>
@@ -389,15 +427,15 @@
     <div class="tab on" data-t="tablero" role="button" tabindex="0">Tablero BI</div>
     <div class="tab" data-t="vencimientos" role="button" tabindex="0">Renovaciones</div>
     <div class="tab" data-t="todos" role="button" tabindex="0">Directorio</div>
-    <div class="tab" data-t="promos" role="button" tabindex="0">🎁 Promos</div>
+    <div class="tab" data-t="promos" role="button" tabindex="0"><svg class="svic" aria-hidden="true"><use href="#ic-gift"/></svg> Promos</div>
     <div class="tab" data-t="leads" role="button" tabindex="0">Prospectos</div>
-    <div class="tab" data-t="bot" role="button" tabindex="0">🤖 Bot &amp; WhatsApp</div>
+    <div class="tab" data-t="bot" role="button" tabindex="0"><svg class="svic" aria-hidden="true"><use href="#ic-bot"/></svg> Bot &amp; WhatsApp</div>
     <div class="tab" data-t="activacion" role="button" tabindex="0">Activación</div>
-    <div class="tab" data-t="embudo" id="tabEmbudo" role="button" tabindex="0" style="display:none">🎯 Embudo</div>
-    <div class="tab" data-t="calidad" id="tabCalidad" role="button" tabindex="0" style="display:none">🛡️ Calidad</div>
-    <div class="tab" data-t="roles" id="tabRoles" role="button" tabindex="0" style="display:none">⚙️ Roles</div>
+    <div class="tab" data-t="embudo" id="tabEmbudo" role="button" tabindex="0" style="display:none"><svg class="svic" aria-hidden="true"><use href="#ic-target"/></svg> Embudo</div>
+    <div class="tab" data-t="calidad" id="tabCalidad" role="button" tabindex="0" style="display:none"><svg class="svic" aria-hidden="true"><use href="#ic-shield"/></svg> Calidad</div>
+    <div class="tab" data-t="roles" id="tabRoles" role="button" tabindex="0" style="display:none"><svg class="svic" aria-hidden="true"><use href="#ic-settings"/></svg> Roles</div>
   </div>
-  <div class="search" id="search"><span class="ico">🔎</span><input id="buscar" placeholder="Buscar por nombre…"></div>
+  <div class="search" id="search"><span class="ico"><svg class="svic" aria-hidden="true"><use href="#ic-search"/></svg></span><input id="buscar" placeholder="Buscar por nombre, No. de socio o DPI…"></div>
   <div class="cap" id="cap"></div>
   <div id="filtros"></div>
   <div id="tablero"></div>
@@ -579,21 +617,21 @@ async function patchLead(id,body,reintento){
 function leadWA(tel){ const d=(tel||'').replace(/\D/g,''); const n=(d.length===11&&d.indexOf('502')===0)?d.slice(3):d; return n.length>=8?('https://wa.me/502'+n):'#'; }
 function leadCard(l){
   const est=l.estado||'nuevo';
-  const badge = est==='convertido'?'<span class="odesc" style="background:#e9f7ef;color:#1a8a52">Ya es socio 🎉</span>'
+  const badge = est==='convertido'?'<span class="odesc" style="background:#e9f7ef;color:#1a8a52"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> Ya es socio</span>'
     : est==='contactado'?'<span class="odesc" style="background:#eaf3ff;color:#245078">Contactado</span>'
     : '<span class="odesc" style="background:#fff3d6;color:#7a5f16">Nuevo</span>';
   let f=''; try{ f=new Date(l.creado_en).toLocaleDateString('es-GT',{day:'2-digit',month:'short'}); }catch(e){}
   const cerrado = est==='convertido'||est==='contactado';
   const wa=leadWA(l.telefono);
-  return `<div class="ocard"><div class="oemoji">🎯</div><div class="obody">
+  return `<div class="ocard"><div class="oemoji"><svg class="svic" aria-hidden="true"><use href="#ic-target"/></svg></div><div class="obody">
     <div class="otit">${esc(l.nombre||'Interesado')} ${badge}</div>
-    <div class="odescr">📱 ${esc(l.telefono||'—')}${l.email?(' · '+esc(l.email)):''} · vino de ${esc(l.origen||'web')}</div>
+    <div class="odescr"><svg class="svic" aria-hidden="true"><use href="#ic-phone"/></svg> ${esc(l.telefono||'—')}${l.email?(' · '+esc(l.email)):''} · vino de ${esc(l.origen||'web')}</div>
     <div class="ometa">Llegó ${f}</div>
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-      ${wa!=='#'?`<a class="fb" href="${wa}" target="_blank" rel="noopener">💬 WhatsApp</a>`:''}
-      ${!cerrado?`<button class="fb" onclick="marcarLead('${l.id}','contactado')">✅ Contactado</button>`:''}
-      ${est!=='convertido'?`<button class="fb" onclick="marcarLead('${l.id}','convertido')">🎉 Ya es socio</button>`:''}
-      <button class="fb" onclick="marcarLead('${l.id}','descartado')">✕ Descartar</button>
+      ${wa!=='#'?`<a class="fb" href="${wa}" target="_blank" rel="noopener"><svg class="svic" aria-hidden="true"><use href="#ic-chat"/></svg> WhatsApp</a>`:''}
+      ${!cerrado?`<button class="fb" onclick="marcarLead('${l.id}','contactado')"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> Contactado</button>`:''}
+      ${est!=='convertido'?`<button class="fb" onclick="marcarLead('${l.id}','convertido')"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> Ya es socio</button>`:''}
+      <button class="fb" onclick="marcarLead('${l.id}','descartado')"><svg class="svic" aria-hidden="true"><use href="#ic-x"/></svg> Descartar</button>
     </div>
   </div></div>`;
 }
@@ -608,15 +646,15 @@ async function marcarLead(id,estado){
 function botPanel(botLeads){
   const FN="https://tevzfdiumfekvapamovw.supabase.co/functions/v1/kuxtal-bot";
   const listado = botLeads.length ? botLeads.map(leadCard).join('')
-    : `<div class="vacio"><span class="em">💬</span><b>El bot aún no captó prospectos por acá</b><p>Cuando WhatsApp esté conectado, los interesados que le escriban aparecen acá solos.</p></div>`;
+    : `<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-chat"/></svg></span><b>El bot aún no captó prospectos por acá</b><p>Cuando WhatsApp esté conectado, los interesados que le escriban aparecen acá solos.</p></div>`;
   return `
-  <div class="ocard" style="align-items:flex-start"><div class="oemoji">🤖</div><div class="obody">
+  <div class="ocard" style="align-items:flex-start"><div class="oemoji"><svg class="svic" aria-hidden="true"><use href="#ic-bot"/></svg></div><div class="obody">
     <div class="otit">El asistente de Kuxtal <span class="odesc" style="background:#eef1f5;color:#33465e">Asistente en construcción</span> <span class="odesc" style="background:#fff3d6;color:#7a5f16">WhatsApp: por conectar</span></div>
     <div class="odescr">Ya responde con la voz de Kuxtal (membresías, destinos, Kuxtal Club) y capta interesados directo acá. Falta conectarlo a WhatsApp — los pasos de Meta están abajo.</div>
   </div></div>
-  <h3 style="margin:18px 0 10px;color:var(--kux)">🎯 Prospectos que captó el bot (${botLeads.length})</h3>
+  <h3 style="margin:18px 0 10px;color:var(--kux)"><svg class="svic" aria-hidden="true"><use href="#ic-target"/></svg> Prospectos que captó el bot (${botLeads.length})</h3>
   ${listado}
-  <h3 style="margin:24px 0 10px;color:var(--kux)">📲 Cómo conectar WhatsApp (guía de Meta)</h3>
+  <h3 style="margin:24px 0 10px;color:var(--kux)"><svg class="svic" aria-hidden="true"><use href="#ic-phone"/></svg> Cómo conectar WhatsApp (guía de Meta)</h3>
   <div class="ocard"><div class="obody" style="font-size:14.5px;line-height:1.75">
     <b>1.</b> Entrá a <b>business.facebook.com</b> → creá/entrá a la cuenta Meta Business de Kuxtal.<br>
     <b>2.</b> Empezá la <b>Verificación del negocio</b> (Centro de seguridad) — <i>es lo más lento, arrancala primero</i>.<br>
@@ -627,10 +665,10 @@ function botPanel(botLeads){
       <code style="background:var(--kux-l);padding:3px 7px;border-radius:6px;display:inline-block;margin:4px 0;word-break:break-all">${FN}</code><br>
     <b>7.</b> Pasale esos 4 datos a tu asistente → los conecta y el bot queda <b>vivo en WhatsApp</b>.
   </div></div>
-  <div class="insight full" style="margin-top:14px">🔒 El cerebro del bot está <b>aislado y protegido</b>: vive en la base de Kuxtal, no comparte datos con nadie. Cuando se ceda, se protege con llave — no se regala.</div>`;
+  <div class="insight full" style="margin-top:14px"><svg class="svic" aria-hidden="true"><use href="#ic-lock"/></svg> El cerebro del bot está <b>aislado y protegido</b>: vive en la base de Kuxtal, no comparte datos con nadie. Cuando se ceda, se protege con llave — no se regala.</div>`;
 }
 function ofertaCard(o){
-  const del = ROLE==='admin' ? `<button class="eb" style="flex:none;align-self:flex-start" onclick="borrarPromo(${o.id})">✕</button>` : '';
+  const del = ROLE==='admin' ? `<button class="eb" style="flex:none;align-self:flex-start" aria-label="Quitar promoción" onclick="borrarPromo(${o.id})"><svg class="svic" aria-hidden="true"><use href="#ic-x"/></svg></button>` : '';
   return `<div class="ocard"><div class="oemoji">${esc(o.emoji||'✈️')}</div><div class="obody"><div class="otit">${esc(o.titulo)} ${o.descuento?`<span class="odesc">${esc(o.descuento)}</span>`:''}</div><div class="odescr">${esc(o.descripcion||'')}</div><div class="ometa">${o.tipo_objetivo==='todos'?'Para todos los socios':'Exclusivo '+esc(o.tipo_objetivo)}${o.vigencia_hasta?' · hasta '+fechaTxt(o.vigencia_hasta):''}</div></div>${del}</div>`;
 }
 function nuevaPromo(){
@@ -651,15 +689,23 @@ async function guardarPromo(){
   const tit=$('p_tit').value.trim(); if(!tit){ $('p_err').textContent='Poné un título.'; return; }
   const body={emoji:$('p_emoji').value.trim()||'✈️',titulo:tit,descripcion:$('p_desc').value.trim()||null,descuento:$('p_dto').value.trim()||null,tipo_objetivo:$('p_tipo').value,vigencia_hasta:$('p_venc').value||null,activa:true};
   const btn=$('p_save'); btn.disabled=true; btn.textContent='Creando…';
-  try{ const r=await fetch(SB_URL+"/rest/v1/ofertas",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(body)}); if(!r.ok) throw 0;
-    OFERTAS=await traerOfertas(); cerrarPromo(); render(); toast('✅ Promo creada'); }
+  try{
+    const r=await fetch(SB_URL+"/rest/v1/ofertas",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify(body)});
+    if(!r.ok) throw 0;
+    // Aparece YA (admin y cliente filtran OFERTAS por tipo_objetivo): insertá lo que devolvió el POST.
+    let nueva=null; try{ const arr=await r.json(); nueva=Array.isArray(arr)?arr[0]:arr; }catch(_e){}
+    if(!nueva) nueva=Object.assign({id:'tmp'+Date.now(),creado_en:new Date().toISOString()},body);
+    OFERTAS.unshift(nueva); cerrarPromo(); render(); toast('Promo creada');
+    // Reconciliá con el servidor, pero NUNCA borres la lista si la relectura falla o viene vacía.
+    try{ const fresca=await traerOfertas(); if(Array.isArray(fresca)&&fresca.length){ OFERTAS=fresca; render(); } }catch(_e){}
+  }
   catch(e){ $('p_err').textContent='No se pudo crear (¿sos admin?).'; }
   finally{ btn.disabled=false; btn.textContent='Crear'; }
 }
 async function borrarPromo(id){
   if(ROLE!=='admin' || !confirm('¿Quitar esta promoción?')) return;
   try{ const r=await fetch(SB_URL+"/rest/v1/ofertas?id=eq."+id,{method:"DELETE",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,Prefer:"return=minimal"}}); if(!r.ok) throw 0;
-    OFERTAS=await traerOfertas(); render(); toast('Promo quitada'); }catch(e){ toast('⚠️ No se pudo'); }
+    OFERTAS=OFERTAS.filter(o=>o.id!==id); render(); toast('Promo quitada'); }catch(e){ toast('No se pudo'); }
 }
 // ── Admin: Calidad de datos + Roles/Organigrama (gateado a admin) ──
 let ALERTAS=null, cargandoCal=false, caF='';
@@ -669,7 +715,7 @@ const TIPO_LBL={dpi_duplicado:'DPI duplicado',dpi_invalido:'DPI inválido',telef
 const PERM_LBL={ver_socios:'Ver socios',editar_socios:'Editar socios',cerrar_contrato:'Cerrar contrato',ver_comisiones:'Ver comisiones',gestionar_comisiones:'Gestionar comisiones',gestionar_roles:'Gestionar roles',ver_reportes:'Ver reportes'};
 const SEV_LBL={alta:'Prioridad alta',media:'Prioridad media',baja:'Prioridad baja'};
 const tipoTxt=t=>TIPO_LBL[t]||t;
-const noAdminHTML=()=>`<div class="vacio"><span class="em">🔒</span><b>Sección solo para administración</b><p>Esta consola es exclusiva del rol Admin.</p></div>`;
+const noAdminHTML=()=>`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-lock"/></svg></span><b>Sección solo para administración</b><p>Esta consola es exclusiva del rol Admin.</p></div>`;
 
 // Lector genérico con auto-refresh de sesión (mismo patrón que el resto del CRM)
 async function sbGet(tabla,qs,reint){
@@ -682,15 +728,15 @@ async function sbGet(tabla,qs,reint){
 async function cargarAlertas(){
   cargandoCal=true; $('lista').innerHTML='<div class="vacio"><span class="spin"></span> Analizando la base…</div>';
   try{ ALERTAS=await sbGet('kuxtal_alertas_calidad','select=*'); cargandoCal=false; if(tab==='calidad')render(); }
-  catch(e){ cargandoCal=false; if(tab==='calidad')$('lista').innerHTML=`<div class="vacio"><span class="em">😕</span><b>No pude leer las alertas</b><p>Puede ser la conexión. <b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`; }
+  catch(e){ cargandoCal=false; if(tab==='calidad')$('lista').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude leer las alertas</b><p>Puede ser la conexión. <b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`; }
 }
 function calidadPanel(){
   const cnt=s=>ALERTAS.filter(a=>a.severidad===s).length;
   const cA=cnt('alta'),cM=cnt('media'),cB=cnt('baja');
   const tipos=[...new Set(ALERTAS.map(a=>a.tipo))].sort((a,b)=>ALERTAS.filter(x=>x.tipo===b).length-ALERTAS.filter(x=>x.tipo===a).length);
   const arr = caF ? ALERTAS.filter(a=>a.tipo===caF) : ALERTAS;
-  if(!ALERTAS.length){ return `<div class="vacio"><span class="em">✨</span><b>¡Base impecable!</b><p>No detectamos datos por revisar. Cuando aparezca una inconsistencia (DPI, teléfono, vencimiento…), se muestra acá sola.</p></div>`; }
-  const resumen=`<div class="insight full" style="margin-bottom:12px">🛡️ <b>Detectamos ${ALERTAS.length} focos</b> de datos por revisar. Así el equipo valida y limpia la base: <b style="color:var(--rojo-t)">${cA} altas</b> · <b style="color:var(--gold-t)">${cM} medias</b> · <b style="color:var(--gris)">${cB} bajas</b>. Detectar → alertar → validar.</div>`;
+  if(!ALERTAS.length){ return `<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-sparkle"/></svg></span><b>¡Base impecable!</b><p>No detectamos datos por revisar. Cuando aparezca una inconsistencia (DPI, teléfono, vencimiento…), se muestra acá sola.</p></div>`; }
+  const resumen=`<div class="insight full" style="margin-bottom:12px"><svg class="svic" aria-hidden="true"><use href="#ic-shield"/></svg> <b>Detectamos ${ALERTAS.length} focos</b> de datos por revisar. Así el equipo valida y limpia la base: <b style="color:var(--rojo-t)">${cA} altas</b> · <b style="color:var(--gold-t)">${cM} medias</b> · <b style="color:var(--gris)">${cB} bajas</b>. Detectar → alertar → validar.</div>`;
   const filtro=`<div class="filtros"><div class="fpill ${caF===''?'on':''}" onclick="caF='';render()">Todas (${ALERTAS.length})</div>`+
     tipos.map(t=>`<div class="fpill ${caF===t?'on':''}" onclick="caF='${t}';render()">${esc(tipoTxt(t))} (${ALERTAS.filter(x=>x.tipo===t).length})</div>`).join('')+`</div>`;
   let cuerpo='';
@@ -698,17 +744,17 @@ function calidadPanel(){
     const g=arr.filter(a=>a.severidad===sev); if(!g.length)return;
     cuerpo+=`<div class="sevhead ${sev}">${SEV_LBL[sev]} <span class="sevcount">${g.length}</span></div>`;
     cuerpo+=g.map((a,i)=>{
-      const verSocio=gente.some(x=>x.id===a.socio_id)?`<button class="fb" onclick="abrirFicha(${a.socio_id})">👤 Ver socio</button>`:'';
+      const verSocio=gente.some(x=>x.id===a.socio_id)?`<button class="fb" onclick="abrirFicha(${a.socio_id})"><svg class="svic" aria-hidden="true"><use href="#ic-user"/></svg> Ver socio</button>`:'';
       const rk=revKey(a); const done=REVISADAS.has(rk);
       return `<div class="card qcard ${sev}${done?' isrev':''}" data-rk="${esc(rk)}" style="animation-delay:${Math.min(i,16)*25}ms${done?';opacity:.55':''}"><div class="top"><div class="who">
         <div class="nombre">${esc(a.nombre||'(sin nombre)')}</div>
         <div class="meta"><span class="qtipo">${esc(tipoTxt(a.tipo))}</span> · Socio #${esc(a.no_socio||'—')}</div>
       </div></div>
       <div class="qdet">${esc(a.detalle||'')}</div>
-      <div class="acciones" style="margin-top:10px">${verSocio}<button class="fb" onclick="marcarRevisada(this)"${done?' disabled style="opacity:.7"':''}>${done?'Revisada ✓':'✓ Marcar revisada'}</button></div></div>`;
+      <div class="acciones" style="margin-top:10px">${verSocio}<button class="fb" onclick="marcarRevisada(this)"${done?' disabled style="opacity:.7"':''}>${done?'Revisada <svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg>':'<svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> Marcar revisada'}</button></div></div>`;
     }).join('');
   });
-  if(!arr.length) cuerpo=`<div class="vacio"><span class="em">🔎</span><b>Sin alertas de ese tipo</b><p>Cambiá el filtro de arriba.</p></div>`;
+  if(!arr.length) cuerpo=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-search"/></svg></span><b>Sin alertas de ese tipo</b><p>Cambiá el filtro de arriba.</p></div>`;
   return resumen+filtro+cuerpo;
 }
 // Marcar revisada = marca visual que PERSISTE en este dispositivo (localStorage).
@@ -721,7 +767,7 @@ function marcarRevisada(btn){
   const c=btn.closest('.card'); const rk=c?c.getAttribute('data-rk'):null;
   if(rk){ REVISADAS.add(rk); try{ localStorage.setItem(RKEY,JSON.stringify([...REVISADAS])); }catch(e){} }
   if(c){ c.style.opacity='.55'; c.classList.add('isrev'); }
-  btn.textContent='Revisada ✓'; btn.disabled=true; btn.style.opacity='.7';
+  btn.innerHTML='Revisada <svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg>'; btn.disabled=true; btn.style.opacity='.7';
   toast('Marcada como revisada');
 }
 
@@ -735,7 +781,7 @@ async function cargarRoles(){
       sbGet('funnel_agentes','select=*&order=nombre.asc')
     ]);
     ROLDATA={roles,permisos,agentes}; cargandoRoles=false; if(tab==='roles')render();
-  }catch(e){ cargandoRoles=false; if(tab==='roles')$('lista').innerHTML=`<div class="vacio"><span class="em">😕</span><b>No pude cargar los roles</b><p><b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`; }
+  }catch(e){ cargandoRoles=false; if(tab==='roles')$('lista').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar los roles</b><p><b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`; }
 }
 const rolNombre=clave=>{const r=ROLDATA.roles.find(x=>x.clave===clave);return r?r.nombre:(clave||'—');};
 function rolesPanel(){
@@ -749,7 +795,7 @@ function rolesPanel(){
     <td><span class="pill ${r.es_gerente?'on':''}" onclick="toggleRolFlag('${esc(r.clave)}','es_gerente',${!r.es_gerente})">${r.es_gerente?'Sí':'No'}</span></td>
     <td><span class="pill ${r.activo?'on':''}" onclick="toggleRolFlag('${esc(r.clave)}','activo',${!r.activo})">${r.activo?'Activo':'Inactivo'}</span></td>
   </tr>`).join('');
-  const tablaRoles=`<div class="adminhead"><h3>🏛️ Roles y jerarquía (${roles.length})</h3><button class="minibtn" onclick="nuevoRol()">＋ Nuevo rol</button></div>
+  const tablaRoles=`<div class="adminhead"><h3><svg class="svic" aria-hidden="true"><use href="#ic-hierarchy"/></svg> Roles y jerarquía (${roles.length})</h3><button class="minibtn" onclick="nuevoRol()">＋ Nuevo rol</button></div>
     <div class="tblwrap"><table class="dtbl wide"><thead><tr><th class="roln">Rol</th><th>Nivel</th><th>Reporta a</th><th>Staff</th><th>Gerente</th><th>Estado</th></tr></thead><tbody>${filasRol}</tbody></table></div>
     <div class="cap" style="margin-top:8px">Nivel = altura en la jerarquía (0 cliente → 100 admin). Tocá una etiqueta para cambiarla. Los cambios exigen permiso de admin.</div>`;
   // B · Matriz de permisos (rol × permiso)
@@ -759,19 +805,19 @@ function rolesPanel(){
   const filasMtx=rolesStaff.map(r=>{
     const celdas=perms.map(p=>{
       const row=permisos.find(x=>x.rol_clave===r.clave&&x.permiso===p);
-      const st=row?(row.permitido?'yes':'no'):'na', ico=st==='yes'?'✓':st==='no'?'✕':'–';
+      const st=row?(row.permitido?'yes':'no'):'na', ico=st==='yes'?'<svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg>':st==='no'?'<svg class="svic" aria-hidden="true"><use href="#ic-x"/></svg>':'–';
       return `<td><button class="mcell ${st}" title="${esc(r.nombre)} · ${esc(PERM_LBL[p]||p)}" onclick="togglePermiso('${esc(r.clave)}','${esc(p)}','${st}')">${ico}</button></td>`;
     }).join('');
     return `<tr><td class="roln"><b>${esc(r.nombre)}</b></td>${celdas}</tr>`;
   }).join('');
-  const matriz=`<div class="adminhead"><h3>🔐 Matriz de permisos</h3></div>
+  const matriz=`<div class="adminhead"><h3><svg class="svic" aria-hidden="true"><use href="#ic-lock"/></svg> Matriz de permisos</h3></div>
     <div class="tblwrap"><table class="dtbl mtx"><thead><tr><th class="roln">Rol</th>${cabecera}</tr></thead><tbody>${filasMtx}</tbody></table></div>
-    <div class="cap" style="margin-top:8px">Tocá una celda para alternar: <b style="color:#1a8a54">✓ permitido</b> · <b style="color:#b3261e">✕ denegado</b> · <b>– sin definir</b>. La escritura la protege la base (solo admin).</div>`;
+    <div class="cap" style="margin-top:8px">Tocá una celda para alternar: <b style="color:#1a8a54"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> permitido</b> · <b style="color:#b3261e"><svg class="svic" aria-hidden="true"><use href="#ic-x"/></svg> denegado</b> · <b>– sin definir</b>. La escritura la protege la base (solo admin).</div>`;
   // C · Organigrama de personas — árbol visual editable (F5 Kaizen)
   const organi = agentes.length
     ? organigramaHTML(agentes)
-    : `<div class="vacio"><span class="em">🌱</span><b>Organigrama listo para llenarse</b><p>Cuando agregues personas al equipo (pestaña 🎯 Embudo ▸ Equipo), acá vas a ver el árbol de quién reporta a quién y vas a poder reorganizarlo.</p></div>`;
-  const organiWrap=`<div class="adminhead"><h3>👥 Organigrama del equipo</h3></div>${organi}`;
+    : `<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-sprout"/></svg></span><b>Organigrama listo para llenarse</b><p>Cuando agregues personas al equipo (pestaña Embudo ▸ Equipo), acá vas a ver el árbol de quién reporta a quién y vas a poder reorganizarlo.</p></div>`;
+  const organiWrap=`<div class="adminhead"><h3><svg class="svic" aria-hidden="true"><use href="#ic-users"/></svg> Organigrama del equipo</h3></div>${organi}`;
   return tablaRoles+matriz+organiWrap;
 }
 // ── F5 · Organigrama visual (árbol) ──
@@ -824,7 +870,7 @@ async function sbWrite(metodo,tabla,qs,body,reint){
 async function toggleRolFlag(clave,campo,valor){
   const r=ROLDATA.roles.find(x=>x.clave===clave); if(!r)return; const prev=r[campo]; r[campo]=valor; render();
   const ok=await sbWrite('PATCH','funnel_roles','clave=eq.'+encodeURIComponent(clave),{[campo]:valor});
-  if(ok){ toast('✅ Actualizado'); } else { r[campo]=prev; render(); toast('⚠️ No se pudo (¿sos admin?)'); }
+  if(ok){ toast('Actualizado'); } else { r[campo]=prev; render(); toast('No se pudo (¿sos admin?)'); }
 }
 async function togglePermiso(rolClave,permiso,estadoActual){
   const nuevo = estadoActual!=='yes'; // yes→no, no→yes, na→yes
@@ -832,15 +878,15 @@ async function togglePermiso(rolClave,permiso,estadoActual){
   let ok;
   if(existe){ ok=await sbWrite('PATCH','funnel_permisos','rol_clave=eq.'+encodeURIComponent(rolClave)+'&permiso=eq.'+encodeURIComponent(permiso),{permitido:nuevo}); if(ok)existe.permitido=nuevo; }
   else{ ok=await sbWrite('POST','funnel_permisos','',{rol_clave:rolClave,permiso:permiso,permitido:nuevo}); if(ok)ROLDATA.permisos.push({rol_clave:rolClave,permiso:permiso,permitido:nuevo}); }
-  if(ok){ render(); toast('✅ Permiso actualizado'); } else { toast('⚠️ No se pudo (¿sos admin?)'); }
+  if(ok){ render(); toast('Permiso actualizado'); } else { toast('No se pudo (¿sos admin?)'); }
 }
 async function asignarSuper(id,val){
   const a=ROLDATA.agentes.find(x=>x.id===id); if(!a)return; const prev=a.supervisor_id; const nuevo=val?Number(val):null;
   // Defensa: nunca dejar que alguien reporte a sí mismo o a un subordinado suyo (crearía un círculo)
-  if(nuevo!==null){ const hijosDe=orgHijosDe(ROLDATA.agentes); if(nuevo===id || orgDescend(id,hijosDe).has(nuevo)){ toast('⚠️ Eso haría un círculo en el organigrama'); render(); return; } }
+  if(nuevo!==null){ const hijosDe=orgHijosDe(ROLDATA.agentes); if(nuevo===id || orgDescend(id,hijosDe).has(nuevo)){ toast('Eso haría un círculo en el organigrama'); render(); return; } }
   a.supervisor_id=nuevo;
   const ok=await sbWrite('PATCH','funnel_agentes','id=eq.'+id,{supervisor_id:nuevo});
-  if(ok){ render(); toast('✅ Organigrama actualizado'); } else { a.supervisor_id=prev; render(); toast('⚠️ No se pudo (¿sos admin?)'); }
+  if(ok){ render(); toast('Organigrama actualizado'); } else { a.supervisor_id=prev; render(); toast('No se pudo (¿sos admin?)'); }
 }
 function nuevoRol(){
   if(!esAdmin())return;
@@ -867,7 +913,7 @@ async function guardarRol(){
   const body={clave:cla,nombre:nom,nivel:niv===''?null:Number(niv),rol_superior:$('r_sup').value||null,es_staff:$('r_staff').checked,es_gerente:$('r_ger').checked,activo:true};
   const btn=$('r_save'); btn.disabled=true; btn.textContent='Creando…';
   const ok=await sbWrite('POST','funnel_roles','',body);
-  if(ok){ ROLDATA.roles.push(body); ROLDATA.roles.sort((a,b)=>(b.nivel||0)-(a.nivel||0)); cerrarRol(); render(); toast('✅ Rol creado'); }
+  if(ok){ ROLDATA.roles.push(body); ROLDATA.roles.sort((a,b)=>(b.nivel||0)-(a.nivel||0)); cerrarRol(); render(); toast('Rol creado'); }
   else{ $('r_err').textContent='No se pudo crear (¿sos admin?).'; }
   btn.disabled=false; btn.textContent='Crear rol';
 }
@@ -922,7 +968,7 @@ function marcar(id,val){
   const x=gente.find(g=>g.id===id); if(!x)return; const prev=x.estado;
   x.estado=x.estado===val?"":val; render();
   patchSocio(id,{estado:x.estado}).then(()=>{ addInter(id,'estado','Estado: '+(x.estado||'(limpiado)')); toast(x.estado?('Marcado: '+val):'Estado limpiado'); })
-    .catch(()=>{ x.estado=prev; render(); toast("⚠️ No se pudo guardar"); });
+    .catch(()=>{ x.estado=prev; render(); toast("No se pudo guardar"); });
 }
 
 // ── Editar socio ──
@@ -937,7 +983,7 @@ function abrirEdit(id){
   set('f_copro',x.copro); set('f_celcopro',telDig(x.cel_copro)); set('f_closer',x.closer);
   ['f_telerr','f_dpierr','f_ingerr','f_vencerr','f_anioserr','f_totalerr','f_celcoproerr'].forEach(e=>$(e).textContent="");
   const mot=motivoRevision(x), mb=$('f_motivo');
-  if(mot.length){mb.style.display='block';mb.textContent='⚠️ Por revisar: '+mot.join(' · ');} else mb.style.display='none';
+  if(mot.length){mb.style.display='block';mb.textContent='Por revisar: '+mot.join(' · ');} else mb.style.display='none';
   $('modal').style.display='flex';
 }
 function cerrarModal(){ $('modal').style.display='none'; editId=null; }
@@ -972,8 +1018,8 @@ async function guardarEdit(){
     if(camb.length) addInter(editId,'edicion','Editó: '+camb.join(', '));
     Object.assign(x,{n:nombre||"(sin nombre)",tel:tel,dpi:dpi,tipo:tipo,ingreso:ing,venc:venc,dv:calcDv(venc),
       anios:anios===''?null:Number(anios),total:total===''?0:Number(total),copro:copro,cel_copro:celc,closer:closer});
-    calcularBI(); cerrarModal(); kpis(); render(); toast("✅ Guardado");
-  }catch(e){ toast("⚠️ No se pudo guardar"); }
+    calcularBI(); cerrarModal(); kpis(); render(); toast("Guardado");
+  }catch(e){ toast("No se pudo guardar"); }
   finally{ btn.disabled=false; btn.textContent="Guardar"; }
 }
 
@@ -983,22 +1029,22 @@ const baseOpt=extra=>Object.assign({responsive:true,maintainAspectRatio:false,an
 function tablero(){
   const proxMes=gente.filter(x=>x.dv!=null&&x.dv>=0&&x.dv<=30).length;
   const olaMax=Math.max(0,...Object.entries(BI.vencAnio).filter(([y])=>y>='2028'&&y<='2031').map(([,v])=>v));
-  const alerta=BI.revisar>0?`<div class="insight full" style="border-color:#f3b0ab;background:linear-gradient(135deg,#fdecea,#fff);color:#b3261e">⚠️ <b>${BI.revisar} socios</b> necesitan revisión (teléfono, DPI, fecha o No. de socio duplicado). <b onclick="verRevisar()" style="cursor:pointer;text-decoration:underline">Ver y corregir</b>.</div>`:'';
+  const alerta=BI.revisar>0?`<div class="insight full" style="border-color:#f3b0ab;background:linear-gradient(135deg,#fdecea,#fff);color:#b3261e"><svg class="svic" aria-hidden="true"><use href="#ic-alert"/></svg> <b>${BI.revisar} socios</b> necesitan revisión (teléfono, DPI, fecha o No. de socio duplicado). <b onclick="verRevisar()" style="cursor:pointer;text-decoration:underline">Ver y corregir</b>.</div>`:'';
   // F2 Kaizen: tarjeta de prospectos (leads web + bot) en el tablero
   const lb=BI.leads||{nuevos:0,contactados:0,convertidos:0,cargado:false};
   const leadN=(v,c,t)=>`<div style="flex:1;min-width:90px;background:var(--kux-l);border-radius:12px;padding:12px 8px;text-align:center"><b style="display:block;font-size:22px;color:${c};font-variant-numeric:tabular-nums">${v}</b><span style="font-size:11px;color:var(--gris)">${t}</span></div>`;
-  const prospectos=`<div class="panel full"><h3>🎯 Prospectos (interesados)</h3><div class="sub">Los que dejan sus datos en la web o le escriben al bot · <b onclick="ir('leads')" style="cursor:pointer;text-decoration:underline">ver y dar seguimiento</b></div>
+  const prospectos=`<div class="panel full"><h3><svg class="svic" aria-hidden="true"><use href="#ic-target"/></svg> Prospectos (interesados)</h3><div class="sub">Los que dejan sus datos en la web o le escriben al bot · <b onclick="ir('leads')" style="cursor:pointer;text-decoration:underline">ver y dar seguimiento</b></div>
     ${lb.cargado?`<div style="display:flex;gap:10px;flex-wrap:wrap">${leadN(lb.nuevos,'#7e5c06','Nuevos')}${leadN(lb.contactados,'var(--kux)','Contactados')}${leadN(lb.convertidos,'var(--lima-d)','Ya son socios')}</div>`:`<div class="sub">Cargando prospectos…</div>`}</div>`;
   $('tablero').innerHTML=`<div class="grid">
-    <div class="insight full">🔔 <b>Lo urgente:</b> ${proxMes} socio(s) vencen en los próximos 30 días · <b>${money(BI.enRiesgo)}</b> en juego a 12 meses. Andá a <b onclick="ir('vencimientos')" style="cursor:pointer;text-decoration:underline">Renovaciones</b>.</div>
+    <div class="insight full"><svg class="svic" aria-hidden="true"><use href="#ic-bell"/></svg> <b>Lo urgente:</b> ${proxMes} socio(s) vencen en los próximos 30 días · <b>${money(BI.enRiesgo)}</b> en juego a 12 meses. Andá a <b onclick="ir('vencimientos')" style="cursor:pointer;text-decoration:underline">Renovaciones</b>.</div>
     ${alerta}
     ${prospectos}
-    <div class="panel full"><h3>🌊 La ola de renovaciones (socios por año)</h3><div class="sub">Cuántas membresías vencen cada año. Pico 2028-2031 (~${olaMax}/año). Rojo=vencido, amarillo=este año, azul=futuro.</div><div class="canvas-box"><canvas id="c6"></canvas></div></div>
+    <div class="panel full"><h3><svg class="svic" aria-hidden="true"><use href="#ic-wave"/></svg> La ola de renovaciones (socios por año)</h3><div class="sub">Cuántas membresías vencen cada año. Pico 2028-2031 (~${olaMax}/año). Rojo=vencido, amarillo=este año, azul=futuro.</div><div class="canvas-box"><canvas id="c6"></canvas></div></div>
     <div class="panel"><h3>Ingreso por mes (US$)</h3><div class="sub">Por mes de ingreso del socio (últimos 12)</div><div class="canvas-box"><canvas id="c1"></canvas></div></div>
     <div class="panel"><h3>Ingreso acumulado</h3><div class="sub">La curva de crecimiento</div><div class="canvas-box"><canvas id="c2"></canvas></div></div>
-    <div class="panel"><h3>Ingreso por closer (US$)</h3><div class="sub">Quién genera más venta · 👆 tocá una barra para filtrar</div><div class="canvas-box"><canvas id="c4"></canvas></div></div>
+    <div class="panel"><h3>Ingreso por closer (US$)</h3><div class="sub">Quién genera más venta · tocá una barra para filtrar</div><div class="canvas-box"><canvas id="c4"></canvas></div></div>
     <div class="panel"><h3>Ingreso por tipo (US$)</h3><div class="sub">VIP domina la cartera</div><div class="canvas-box"><canvas id="c5"></canvas></div></div>
-    <div class="panel"><h3>Socios por tipo</h3><div class="sub">Cómo se reparte la membresía · 👆 tocá para filtrar</div><div class="canvas-box"><canvas id="c9"></canvas></div></div>
+    <div class="panel"><h3>Socios por tipo</h3><div class="sub">Cómo se reparte la membresía · tocá para filtrar</div><div class="canvas-box"><canvas id="c9"></canvas></div></div>
     <div class="panel"><h3>Estado de la cartera</h3><div class="sub">Vigentes · vencidos · sin fecha</div><div class="canvas-box"><canvas id="c7"></canvas></div></div>
   </div>`;
   Object.values(charts).forEach(c=>c&&c.destroy()); charts={};
@@ -1019,18 +1065,27 @@ function tablero(){
 
 function filtrar(){
   if(tab==='vencimientos'){ const lim=vf===9999?1e9:vf; return gente.filter(x=>x.dv!=null&&x.dv<=lim).sort((a,b)=>a.dv-b.dv); }
-  if(tab==='todos'){ const q=($('buscar').value||'').toLowerCase(); let r=gente.filter(x=>x.n.toLowerCase().includes(q)); if(dirF==='revisar') r=r.filter(necesitaRevision); if(dirTipo) r=r.filter(x=>x.tipo===dirTipo); if(dirCloser) r=r.filter(x=>(x.closer||'').trim()===dirCloser); return r; }
+  if(tab==='todos'){
+    const raw=($('buscar').value||'').trim(), q=raw.toLowerCase(), qd=raw.replace(/\D/g,'');
+    let r=gente.filter(x=>{
+      if(!raw) return true;
+      const porNombre=x.n.toLowerCase().includes(q);
+      const porNo=String(x.no||'').toLowerCase().includes(q);
+      const porDpi=qd.length>0 && dpiDig(x.dpi).includes(qd);
+      return porNombre||porNo||porDpi;
+    });
+    if(dirF==='revisar') r=r.filter(necesitaRevision); if(dirTipo) r=r.filter(x=>x.tipo===dirTipo); if(dirCloser) r=r.filter(x=>(x.closer||'').trim()===dirCloser); return r; }
   return [];
 }
 function tarjeta(x,idx){
   const s=sem(x.dv), d=`style="animation-delay:${Math.min(idx,20)*30}ms"`;
   const ok=telOK(x.tel);
-  const telInfo = x.tel?(ok?fmtTel(x.tel):`${esc(x.tel)} <span class="warn">revisar ☎</span>`):`<span class="warn">sin teléfono</span>`;
+  const telInfo = x.tel?(ok?fmtTel(x.tel):`${esc(x.tel)} <span class="warn">revisar <svg class="svic" aria-hidden="true"><use href="#ic-phone"/></svg></span>`):`<span class="warn">sin teléfono</span>`;
   const wa = ok?`<a class="btn-c wa" target="_blank" rel="noopener" href="${waHref(x.tel)}?text=${encodeURIComponent(msgWA(x))}">WhatsApp</a>`:'';
   const tel = ok?`<a class="btn-c tel" href="${telHref(x.tel)}">Llamar</a>`:'';
-  const editar=puedeEditar()?`<button class="btn-c edit" onclick="abrirEdit(${x.id})">✎ Editar</button>`:'';
+  const editar=puedeEditar()?`<button class="btn-c edit" onclick="abrirEdit(${x.id})"><svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Editar</button>`:'';
   const btns=['contactado','renovó','no responde','no renovó'].map(e=>`<button class="eb ${x.estado===e?'on':''}" onclick="marcar(${x.id},'${e}')">${e}</button>`).join('');
-  return `<div class="card" ${d}><div class="top"><span class="dot ${s.c}"></span><div class="who"><div class="nombre" onclick="abrirFicha(${x.id})" style="cursor:pointer">${esc(x.n)}</div><div class="meta">${telInfo} <span class="chip ${chipTipo(x.tipo)}">${esc(x.tipo)}</span>${x.closer?' · '+esc(x.closer):''}${necesitaRevision(x)?' <span class="warn">⚠️ revisar</span>':''}</div></div><div class="der ${s.c}">${s.t}</div></div><div class="acciones">${wa}${tel}${editar}<div class="estados">${btns}</div></div></div>`;
+  return `<div class="card" ${d}><div class="top"><span class="dot ${s.c}"></span><div class="who"><div class="nombre" onclick="abrirFicha(${x.id})" style="cursor:pointer">${esc(x.n)}</div><div class="meta">${telInfo} <span class="chip ${chipTipo(x.tipo)}">${esc(x.tipo)}</span>${x.closer?' · '+esc(x.closer):''}${necesitaRevision(x)?' <span class="warn"><svg class="svic" aria-hidden="true"><use href="#ic-alert"/></svg> revisar</span>':''}</div></div><div class="der ${s.c}">${s.t}</div></div><div class="acciones">${wa}${tel}${editar}<div class="estados">${btns}</div></div></div>`;
 }
 function render(){
   // F4: el embudo es una pestaña que vive en su propio contenedor
@@ -1047,44 +1102,44 @@ function render(){
   $('filtros').innerHTML = tab==='vencimientos'
     ? [['Vencidos',-1],['30 días',30],['90 días',90],['12 meses',365],['Todos',9999]].map(([t,v])=>`<div class="fb ${vf===v?'on':''}" onclick="vf=${v};render()">${t}</div>`).join('')
     : tab==='todos'
-    ? `<div class="fb ${dirF==='todos'?'on':''}" onclick="dirF='todos';verLim=60;render()">Todos</div><div class="fb ${dirF==='revisar'?'on':''}" onclick="dirF='revisar';verLim=60;render()">⚠️ Revisar (${BI.revisar})</div><select class="fb" onchange="dirTipo=this.value;verLim=60;render()">${['','VIP','Exclusivo','Gold','Regular','Sin dato'].map(t=>`<option value="${t}" ${dirTipo===t?'selected':''}>${t?('Tipo: '+t):'Tipo: todos'}</option>`).join('')}</select><select class="fb" onchange="dirCloser=this.value;verLim=60;render()"><option value="">Closer: todos</option>${(BI.closers||[]).map(c=>`<option value="${esc(c)}" ${dirCloser===c?'selected':''}>${esc(c)}</option>`).join('')}</select>${(dirTipo||dirCloser)?`<div class="fb" onclick="dirTipo='';dirCloser='';render()">✕ limpiar</div>`:''}`
+    ? `<div class="fb ${dirF==='todos'?'on':''}" onclick="dirF='todos';verLim=60;render()">Todos</div><div class="fb ${dirF==='revisar'?'on':''}" onclick="dirF='revisar';verLim=60;render()"><svg class="svic" aria-hidden="true"><use href="#ic-alert"/></svg> Revisar (${BI.revisar})</div><select class="fb" onchange="dirTipo=this.value;verLim=60;render()">${['','VIP','Exclusivo','Gold','Regular','Sin dato'].map(t=>`<option value="${t}" ${dirTipo===t?'selected':''}>${t?('Tipo: '+t):'Tipo: todos'}</option>`).join('')}</select><select class="fb" onchange="dirCloser=this.value;verLim=60;render()"><option value="">Closer: todos</option>${(BI.closers||[]).map(c=>`<option value="${esc(c)}" ${dirCloser===c?'selected':''}>${esc(c)}</option>`).join('')}</select>${(dirTipo||dirCloser)?`<div class="fb" onclick="dirTipo='';dirCloser='';render()"><svg class="svic" aria-hidden="true"><use href="#ic-x"/></svg> limpiar</div>`:''}`
     : '';
-  const caps={tablero:'📊 Datos REALES de tus '+BI.socios+' socios · calculado en vivo.',
+  const caps={tablero:'Datos REALES de tus '+BI.socios+' socios · calculado en vivo.',
     vencimientos:'Socios por urgencia. Renovación de un toque por WhatsApp.',
-    todos:'Directorio de los '+BI.socios+' socios. Buscá y editá.',
-    promos:'🎁 Promociones activas del Club.',
+    todos:'Directorio de los '+BI.socios+' socios. Buscá por nombre, No. de socio o DPI, y editá.',
+    promos:'Promociones activas del Club.',
     leads:'Interesados que dejan sus datos en la web · llamalos y dales seguimiento.',bot:'El asistente de WhatsApp de Kuxtal: estado, prospectos que captó y cómo conectarlo.',activacion:'Uso del Club por socio (por capturar).',
-    calidad:'🛡️ Datos que el sistema detectó por revisar. El equipo valida y limpia la base.',roles:'⚙️ Consola de administración: roles, permisos y organigrama del HUB.'};
+    calidad:'Datos que el sistema detectó por revisar. El equipo valida y limpia la base.',roles:'Consola de administración: roles, permisos y organigrama del HUB.'};
   $('cap').textContent=caps[tab]||'';
   if(tab==='tablero'){$('lista').innerHTML='';tablero();return;}
   $('tablero').innerHTML=''; Object.values(charts).forEach(c=>c&&c.destroy()); charts={};
-  if(tab==='promos'){const nueva=ROLE==='admin'?`<button class="masbtn" style="margin-bottom:10px" onclick="nuevaPromo()">＋ Nueva promoción</button>`:'';$('lista').innerHTML=nueva+(OFERTAS.length?OFERTAS.map(ofertaCard).join(''):`<div class="vacio"><span class="em">🎁</span><b>Sin promociones activas</b><p>${ROLE==='admin'?'Creá la primera con el botón de arriba.':'Pronto habrá novedades.'}</p></div>`);return;}
+  if(tab==='promos'){const nueva=ROLE==='admin'?`<button class="masbtn" style="margin-bottom:10px" onclick="nuevaPromo()">＋ Nueva promoción</button>`:'';$('lista').innerHTML=nueva+(OFERTAS.length?OFERTAS.map(ofertaCard).join(''):`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-gift"/></svg></span><b>Sin promociones activas</b><p>${ROLE==='admin'?'Creá la primera con el botón de arriba.':'Pronto habrá novedades.'}</p></div>`);return;}
   if(tab==='leads'){
     if(LEADS===null){
       $('lista').innerHTML='<div class="vacio"><span class="spin"></span> Cargando prospectos…</div>';
       if(!cargandoLeads){
         cargandoLeads=true;
         traerLeads().then(rows=>{LEADS=rows;cargandoLeads=false;if(tab==='leads'||tab==='bot')render();})
-          .catch(()=>{cargandoLeads=false;/* LEADS sigue null → reintenta al reentrar */ if(tab==='leads'||tab==='bot')$('lista').innerHTML=`<div class="vacio"><span class="em">😕</span><b>No pude cargar los prospectos</b><p>Puede ser la conexión. <b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;});
+          .catch(()=>{cargandoLeads=false;/* LEADS sigue null → reintenta al reentrar */ if(tab==='leads'||tab==='bot')$('lista').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar los prospectos</b><p>Puede ser la conexión. <b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;});
       }
       return;
     }
     const act=LEADS.filter(l=>l.estado!=='descartado');
-    if(!act.length){ $('lista').innerHTML=`<div class="vacio"><span class="em">🎯</span><b>Sin prospectos por ahora</b><p>Acá caen SOLOS los interesados que dejan sus datos en la web de Kuxtal. Cuando llegue uno, aparece listo para llamarlo por WhatsApp y darle seguimiento.</p></div>`; return; }
+    if(!act.length){ $('lista').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-target"/></svg></span><b>Sin prospectos por ahora</b><p>Acá caen SOLOS los interesados que dejan sus datos en la web de Kuxtal. Cuando llegue uno, aparece listo para llamarlo por WhatsApp y darle seguimiento.</p></div>`; return; }
     $('lista').innerHTML=act.map(leadCard).join('');
     return;
   }
   if(tab==='bot'){
     if(LEADS===null){
       $('lista').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
-      if(!cargandoLeads){ cargandoLeads=true; traerLeads().then(rows=>{LEADS=rows;cargandoLeads=false;if(tab==='leads'||tab==='bot')render();}).catch(()=>{cargandoLeads=false;if(tab==='leads'||tab==='bot')$('lista').innerHTML=`<div class="vacio"><span class="em">😕</span><b>No pude cargar</b><p><b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;}); }
+      if(!cargandoLeads){ cargandoLeads=true; traerLeads().then(rows=>{LEADS=rows;cargandoLeads=false;if(tab==='leads'||tab==='bot')render();}).catch(()=>{cargandoLeads=false;if(tab==='leads'||tab==='bot')$('lista').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar</b><p><b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;}); }
       return;
     }
     const botLeads=LEADS.filter(l=>l.origen==='bot'&&l.estado!=='descartado');
     $('lista').innerHTML=botPanel(botLeads);
     return;
   }
-  if(tab==='activacion'){$('lista').innerHTML=`<div class="vacio"><span class="em">🧳</span><b>Falta capturar el "uso del Club"</b><p>Saber qué socios ya viajaron/usaron beneficios revela quiénes están en riesgo de NO renovar — el dato que más mueve los +US$600K de 2028-2031. Cuando lo captures, esta pestaña se enciende sola.</p></div>`;return;}
+  if(tab==='activacion'){$('lista').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-luggage"/></svg></span><b>Falta capturar el "uso del Club"</b><p>Saber qué socios ya viajaron/usaron beneficios revela quiénes están en riesgo de NO renovar — el dato que más mueve los +US$600K de 2028-2031. Cuando lo captures, esta pestaña se enciende sola.</p></div>`;return;}
   if(tab==='calidad'){
     if(!esAdmin()){ $('lista').innerHTML=noAdminHTML(); return; }
     if(ALERTAS===null){ if(!cargandoCal) cargarAlertas(); return; }
@@ -1096,8 +1151,8 @@ function render(){
     $('lista').innerHTML=rolesPanel(); return;
   }
   let items=filtrar();
-  if(tab==='vencimientos'&&!items.length){$('lista').innerHTML=`<div class="vacio"><span class="em">✅</span><b>Nada por vencer en este rango</b><p>Probá ampliar el filtro de arriba.</p></div>`;return;}
-  if(!items.length){$('lista').innerHTML=`<div class="vacio"><span class="em">🔎</span><b>Sin resultados</b><p>No hay socios que coincidan con tu búsqueda.</p></div>`;return;}
+  if(tab==='vencimientos'&&!items.length){$('lista').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg></span><b>Nada por vencer en este rango</b><p>Probá ampliar el filtro de arriba.</p></div>`;return;}
+  if(!items.length){$('lista').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-search"/></svg></span><b>Sin resultados</b><p>No hay socios que coincidan con tu búsqueda.</p></div>`;return;}
   const total=items.length; if(tab==='todos') items=items.slice(0,verLim);
   $('lista').innerHTML=items.map((x,i)=>tarjeta(x,i)).join('');
   if(tab==='todos'&&total>verLim) $('lista').innerHTML+=`<button class="masbtn" onclick="verLim+=60;render()">Ver más (${total-verLim} restantes)</button>`;
@@ -1129,8 +1184,8 @@ function abrirFicha(id){
     : `<span class="warn">sin teléfono válido</span>`;
   $('fichaBody').innerHTML=`
     <div class="fn">${esc(x.n)}</div>
-    <div style="margin:5px 0 12px"><span class="chip ${chipTipo(x.tipo)}">${esc(x.tipo)}</span> <span class="der ${s.c}" style="font-size:12px">${s.t}</span>${necesitaRevision(x)?' <span class="warn">⚠️ revisar</span>':''} <span class="tt" style="color:var(--gris);font-size:11px">· Socio #${esc(x.no||'—')}</span></div>
-    <div class="acciones">${cont}<button class="btn-c" style="background:var(--amar)" onclick="cerrarFicha();abrirTarjeta(${x.id})">🎫 Beneficio</button>${puedeEditar()?`<button class="btn-c edit" onclick="cerrarFicha();abrirEdit(${x.id})">✎ Editar</button>`:''}</div>
+    <div style="margin:5px 0 12px"><span class="chip ${chipTipo(x.tipo)}">${esc(x.tipo)}</span> <span class="der ${s.c}" style="font-size:12px">${s.t}</span>${necesitaRevision(x)?' <span class="warn"><svg class="svic" aria-hidden="true"><use href="#ic-alert"/></svg> revisar</span>':''} <span class="tt" style="color:var(--gris);font-size:11px">· Socio #${esc(x.no||'—')}</span></div>
+    <div class="acciones">${cont}<button class="btn-c" style="background:var(--amar)" onclick="cerrarFicha();abrirTarjeta(${x.id})"><svg class="svic" aria-hidden="true"><use href="#ic-ticket"/></svg> Beneficio</button>${puedeEditar()?`<button class="btn-c edit" onclick="cerrarFicha();abrirEdit(${x.id})"><svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Editar</button>`:''}</div>
     <div class="fsec"><h4>Membresía</h4>
       <div class="frow"><span>Tipo</span><b>${esc(x.tipo)}</b></div>
       <div class="frow"><span>Ingreso</span><b>${x.ingreso?fechaTxt(x.ingreso):'—'}</b></div>
@@ -1139,15 +1194,15 @@ function abrirFicha(id){
       <div class="frow"><span>Total</span><b>${x.total?money(x.total):'—'}</b></div>
     </div>
     <div class="fsec"><h4>Contacto</h4>
-      <div class="frow"><span>Teléfono</span><b>${ok?fmtTel(x.tel):(x.tel?esc(x.tel)+' ⚠️':'—')}</b></div>
+      <div class="frow"><span>Teléfono</span><b>${ok?fmtTel(x.tel):(x.tel?esc(x.tel)+' <svg class="svic" aria-hidden="true"><use href="#ic-alert"/></svg>':'—')}</b></div>
       <div class="frow"><span>DPI</span><b>${x.dpi?esc(x.dpi):'—'}</b></div>
       <div class="frow"><span>Copropietario</span><b>${x.copro?esc(x.copro):'—'}</b></div>
-      <div class="frow"><span>Tel. copropietario</span><b>${okc?fmtTel(x.cel_copro):(x.cel_copro?esc(x.cel_copro)+' ⚠️':'—')}</b></div>
+      <div class="frow"><span>Tel. copropietario</span><b>${okc?fmtTel(x.cel_copro):(x.cel_copro?esc(x.cel_copro)+' <svg class="svic" aria-hidden="true"><use href="#ic-alert"/></svg>':'—')}</b></div>
       <div class="frow"><span>Closer / Liner</span><b>${esc(x.closer||'—')} / ${esc(x.liner||'—')}</b></div>
     </div>
     <div class="fsec"><h4>Histórico</h4>
       <div class="fadd"><textarea id="fnota" placeholder="Escribí una nota del cliente…"></textarea></div>
-      <div class="fadd"><button class="btn-c tel" onclick="regInter(${x.id},'nota')">+ Nota</button><button class="btn-c edit" onclick="regInter(${x.id},'llamada')">☎ Registrar llamada</button><button class="btn-c edit" onclick="regInter(${x.id},'whatsapp')">💬 WhatsApp</button></div>
+      <div class="fadd"><button class="btn-c tel" onclick="regInter(${x.id},'nota')">+ Nota</button><button class="btn-c edit" onclick="regInter(${x.id},'llamada')"><svg class="svic" aria-hidden="true"><use href="#ic-phone"/></svg> Registrar llamada</button><button class="btn-c edit" onclick="regInter(${x.id},'whatsapp')"><svg class="svic" aria-hidden="true"><use href="#ic-chat"/></svg> WhatsApp</button></div>
       <ul class="tl" id="ftl"><li class="tt">Cargando…</li></ul>
     </div>`;
   $('ficha').style.display='flex'; cargarHist(id);
@@ -1157,15 +1212,15 @@ async function cargarHist(id){
   const data=await traerInter(id), ul=$('ftl'); if(!ul)return;
   if(data===null){ ul.innerHTML='<li class="tt">El histórico se activa en breve (conectando la base).</li>'; return; }
   if(!data.length){ ul.innerHTML='<li class="tt">Sin interacciones aún. Registrá la primera arriba.</li>'; return; }
-  const ico={nota:'📝',llamada:'☎',whatsapp:'💬',estado:'🔖',edicion:'✏️',reserva:'🧳'};
+  const ico={nota:'<svg class="svic" aria-hidden="true"><use href="#ic-note"/></svg>',llamada:'<svg class="svic" aria-hidden="true"><use href="#ic-phone"/></svg>',whatsapp:'<svg class="svic" aria-hidden="true"><use href="#ic-chat"/></svg>',estado:'<svg class="svic" aria-hidden="true"><use href="#ic-bookmark"/></svg>',edicion:'<svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg>',reserva:'<svg class="svic" aria-hidden="true"><use href="#ic-luggage"/></svg>'};
   ul.innerHTML=data.map(i=>`<li class="tli"><div class="tt">${ico[i.tipo]||'•'} ${new Date(i.creado_en).toLocaleString('es-GT',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})} · ${esc(i.usuario||'')}</div><div class="tc">${esc(i.nota||i.tipo)}</div></li>`).join('');
 }
 async function regInter(id,tipo){
   const ta=$('fnota'), nota=ta?ta.value.trim():'';
   if(tipo==='nota' && !nota){ toast('Escribí la nota primero'); return; }
   const texto=nota || {llamada:'Llamada registrada',whatsapp:'Contacto por WhatsApp'}[tipo] || tipo;
-  if(await addInter(id,tipo,texto)){ if(ta)ta.value=''; toast('✅ Registrado'); cargarHist(id); }
-  else toast('⚠️ Histórico aún no disponible');
+  if(await addInter(id,tipo,texto)){ if(ta)ta.value=''; toast('Registrado'); cargarHist(id); }
+  else toast('Histórico aún no disponible');
 }
 // ── Kuxtal Club: tarjeta digital + beneficio + validación ──
 let pendingValidar=null;
@@ -1176,19 +1231,19 @@ function cardHTML(x,usados){
   const misOf=vencido?[]:OFERTAS.filter(o=>o.tipo_objetivo==='todos'||o.tipo_objetivo===x.tipo);
   const top=`
     <div class="tcard${x.tipo==='VIP'?' vip':''}">
-      <div class="tcard-top"><span class="tt">KUXTAL TRAVELS</span><span class="tplane">✈</span></div>
+      <div class="tcard-top"><span class="tt">KUXTAL TRAVELS</span><span class="tplane"><svg class="svic" aria-hidden="true"><use href="#ic-plane"/></svg></span></div>
       <div class="tn">${esc(x.n)}</div>
       <div class="trow"><span class="tv">${esc(x.tipo)}</span><span class="tsince">MIEMBRO${anio?' DESDE '+anio:''}</span></div>
       <div class="tno">N° ${esc(x.no||'—')}</div>
     </div>`;
   let benef;
-  if(vencido) benef=`<div class="ocard" style="border-color:#f3b0ab;background:#fdecea"><div class="oemoji">⏳</div><div class="obody"><div class="otit" style="color:#b3261e">Membresía vencida</div><div class="odescr">Venció el ${fechaTxt(x.venc)}. Renovala para volver a disfrutar tus beneficios.</div></div></div>`;
+  if(vencido) benef=`<div class="ocard" style="border-color:#f3b0ab;background:#fdecea"><div class="oemoji"><svg class="svic" aria-hidden="true"><use href="#ic-clock"/></svg></div><div class="obody"><div class="otit" style="color:#b3261e">Membresía vencida</div><div class="odescr">Venció el ${fechaTxt(x.venc)}. Renovala para volver a disfrutar tus beneficios.</div></div></div>`;
   else if(misOf.length) benef=`<h4 class="bh">Tus beneficios</h4>`+misOf.map(o=>ofertaBenef(o,usados.includes(o.id),x.id)).join('');
   else benef=`<p style="color:var(--gris);font-size:12.5px;text-align:center;margin:14px 2px">No hay promos para tu membresía ahora mismo.</p>`;
   return top+benef;
 }
 function ofertaBenef(o,usado,sid){
-  const right = usado ? `<span class="obadge used">✅ Usado</span>` : `<span class="obadge use">Usar →</span>`;
+  const right = usado ? `<span class="obadge used"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> Usado</span>` : `<span class="obadge use">Usar →</span>`;
   const attrs = usado ? '' : `onclick="usarPromo(${sid},${o.id})" style="cursor:pointer"`;
   return `<div class="ocard${usado?' isused':''}" ${attrs}><div class="oemoji">${esc(o.emoji||'✈️')}</div><div class="obody"><div class="otit">${esc(o.titulo)} ${o.descuento?`<span class="odesc">${esc(o.descuento)}</span>`:''}</div><div class="odescr">${esc(o.descripcion||'')}</div><div class="ometa">${o.vigencia_hasta?'Vigente hasta '+fechaTxt(o.vigencia_hasta):''}</div></div>${right}</div>`;
 }
@@ -1212,7 +1267,7 @@ async function usarPromo(sid,ofId){
     if(!r.ok) throw 0;
     addInter(sid,'beneficio','Generó código para '+o.titulo+' ('+codigo+')');
     mostrarQR(o,codigo);
-  }catch(e){ toast('⚠️ No se pudo generar'); }
+  }catch(e){ toast('No se pudo generar'); }
 }
 function mostrarQR(o,codigo){
   const url="https://jorgerramirezh-rocky.github.io/kuxtal-crm/validar.html?c="+codigo;
@@ -1241,25 +1296,26 @@ async function generarCodigo(id){
     $('codeArea').innerHTML=`<div class="qrbox"><div id="qrc"></div></div><div class="codebig">${codigo}</div><div style="color:var(--gris);font-size:12px;margin-top:4px">Vence en 15 min · un solo uso · el local lo escanea</div>`;
     if(window.QRCode) new QRCode(document.getElementById('qrc'),{text:url,width:190,height:190,correctLevel:QRCode.CorrectLevel.M});
     addInter(id,'beneficio','Generó código de descuento '+codigo);
-  }catch(e){ toast('⚠️ No se pudo generar'); }
+  }catch(e){ toast('No se pudo generar'); }
 }
-function showValida(cls,ico,t,s){ const v=$('valida'); v.className=cls; $('vico').textContent=ico; $('vt').textContent=t; $('vs').textContent=s||''; v.style.display='flex'; }
+function showValida(cls,ico,t,s){ const v=$('valida'); v.className=cls; $('vico').innerHTML=ico; $('vt').textContent=t; $('vs').textContent=s||''; v.style.display='flex'; }
+const vicon=id=>`<svg class="svic" aria-hidden="true"><use href="#ic-${id}"/></svg>`;
 function cerrarValida(){ $('valida').style.display='none'; history.replaceState(null,'',location.pathname); if($('app').style.display!=='block') location.reload(); }
 async function validarCodigo(codigo){
-  showValida('','⏳','Validando…','');
+  showValida('',vicon('clock'),'Validando…','');
   try{
     const r=await fetch(SB_URL+"/rest/v1/codigos?codigo=eq."+encodeURIComponent(codigo)+"&select=*,socios(nombre,tipo_norm,vencimiento)",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
     const d=await r.json(), c=d&&d[0];
-    if(!c) return showValida('bad','❌','Código inválido','');
-    if(c.usado) return showValida('bad','⛔','Código ya usado',new Date(c.usado_en).toLocaleString('es-GT'));
-    if(new Date(c.expira_en)<new Date()) return showValida('bad','⌛','Código vencido','Pedile al socio uno nuevo');
-    if(c.socios&&c.socios.vencimiento&&new Date(c.socios.vencimiento)<new Date()) return showValida('bad','⏳','Membresía vencida','Renová para usar beneficios');
+    if(!c) return showValida('bad',vicon('x'),'Código inválido','');
+    if(c.usado) return showValida('bad',vicon('ban'),'Código ya usado',new Date(c.usado_en).toLocaleString('es-GT'));
+    if(new Date(c.expira_en)<new Date()) return showValida('bad',vicon('clock'),'Código vencido','Pedile al socio uno nuevo');
+    if(c.socios&&c.socios.vencimiento&&new Date(c.socios.vencimiento)<new Date()) return showValida('bad',vicon('clock'),'Membresía vencida','Renová para usar beneficios');
     await fetch(SB_URL+"/rest/v1/codigos?id=eq."+c.id,{method:"PATCH",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({usado:true,usado_en:new Date().toISOString(),usado_por:USER})});
     await fetch(SB_URL+"/rest/v1/usos",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_id:c.socio_id,tipo:'descuento',codigo:codigo,usuario:USER})});
     addInter(c.socio_id,'uso','Usó beneficio (descuento) '+codigo);
     const so=c.socios||{};
-    showValida('ok','✅',(so.tipo_norm||'Socio')+' · '+(so.nombre||''),'Disfrutá tu beneficio 🎉');
-  }catch(e){ showValida('bad','⚠️','No se pudo validar','Reintentá'); }
+    showValida('ok',vicon('check'),(so.tipo_norm||'Socio')+' · '+(so.nombre||''),'Disfrutá tu beneficio');
+  }catch(e){ showValida('bad',vicon('alert'),'No se pudo validar','Reintentá'); }
 }
 async function arrancar(){
   $('gate').style.display='none'; $('app').style.display='none'; $('load').style.display='flex';
@@ -1287,23 +1343,23 @@ async function arrancar(){
 // ── Tour guiado: primer ingreso por rol (repetible con "¿Cómo funciona?") ──
 const TOURS={
   staff:[
-    {sel:null,t:'Bienvenido a tu CRM ✈️',d:'En 20 segundos te muestro cómo sacarle jugo. Podés saltarlo cuando quieras.'},
+    {sel:null,t:'Bienvenido a tu CRM',d:'En 20 segundos te muestro cómo sacarle jugo. Podés saltarlo cuando quieras.'},
     {sel:'.stats',t:'Tus números en vivo',d:'Ventas, ticket promedio, socios y los que están por vencer. Tocá cualquiera y te lleva al detalle.'},
     {sel:'.tab[data-t="tablero"]',t:'Tablero BI',d:'Las gráficas de tu cartera: la ola de renovaciones, ingresos por mes, por closer y por tipo de socio.'},
     {sel:'.tab[data-t="vencimientos"]',t:'Renovaciones',d:'Los socios ordenados por urgencia. Los renovás de un toque por WhatsApp o llamada.'},
     {sel:'.tab[data-t="todos"]',t:'Directorio',d:'Buscá cualquier socio, editá sus datos y abrí su ficha 360 con todo el histórico.'},
     {sel:'.tab[data-t="bot"]',t:'Bot & WhatsApp',d:'El asistente de Kuxtal y los prospectos que capta solo. Acá ves cómo conectarlo.'},
-    {sel:null,t:'¡Listo! 🎉',d:'Tu sesión queda guardada — no te vuelve a pedir clave. ¿Necesitás repasar? Tocá "¿Cómo funciona?" arriba.'}
+    {sel:null,t:'¡Listo!',d:'Tu sesión queda guardada — no te vuelve a pedir clave. ¿Necesitás repasar? Tocá "¿Cómo funciona?" arriba.'}
   ],
   adminExtra:[
-    {sel:'.tab[data-t="calidad"]',t:'🛡️ Calidad de datos',d:'El sistema detecta solo los datos por revisar (DPI, teléfono, vencimientos, duplicados) y los agrupa por prioridad. El equipo valida y limpia la base.'},
-    {sel:'.tab[data-t="roles"]',t:'⚙️ Roles y organigrama',d:'Tu consola de administración del HUB: roles y su jerarquía, la matriz de permisos y —abajo— el <b>organigrama visual</b>: un árbol de quién le reporta a quién. Cambiá "Reporta a" en cualquier tarjeta y el equipo se reacomoda solo. Solo vos (admin) lo ves.'}
+    {sel:'.tab[data-t="calidad"]',t:'Calidad de datos',d:'El sistema detecta solo los datos por revisar (DPI, teléfono, vencimientos, duplicados) y los agrupa por prioridad. El equipo valida y limpia la base.'},
+    {sel:'.tab[data-t="roles"]',t:'Roles y organigrama',d:'Tu consola de administración del HUB: roles y su jerarquía, la matriz de permisos y —abajo— el <b>organigrama visual</b>: un árbol de quién le reporta a quién. Cambiá "Reporta a" en cualquier tarjeta y el equipo se reacomoda solo. Solo vos (admin) lo ves.'}
   ],
   cliente:[
     {sel:null,t:'¡Hola! Bienvenido al Club',d:'Esta es tu tarjeta digital de Kuxtal Club. Te muestro cómo usarla.'},
     {sel:'.tcard',t:'Tu carné de socio',d:'Tu membresía siempre a mano. Mostrala cuando viajás con nosotros.'},
     {sel:'#miembroCard',t:'Tus beneficios',d:'Acá aparecen tus promos. Tocá "Usar" y te damos un código para mostrar en el local (vence en 15 min).'},
-    {sel:null,t:'¡Buen viaje! ✈️',d:'Eso es todo. Disfrutá tus beneficios. ¿Querés repasar? Tocá "¿Cómo funciona?" arriba.'}
+    {sel:null,t:'¡Buen viaje!',d:'Eso es todo. Disfrutá tus beneficios. ¿Querés repasar? Tocá "¿Cómo funciona?" arriba.'}
   ]
 };
 let tourList=[], tourI=0, tourKey='';
@@ -1312,7 +1368,7 @@ function maybeTour(kind){ try{ if(localStorage.getItem('kux_tour_'+ROLE)) return
 function verTour(){ iniciarTour(ROLE==='cliente'?'cliente':'staff'); }
 function iniciarTour(kind){
   tourList=(TOURS[kind==='cliente'?'cliente':'staff']||[]).slice();
-  if(kind!=='cliente'&&puedeEmbudo()&&tourList.length){ tourList.splice(tourList.length-1,0,{sel:'.tab[data-t="embudo"]',t:'🎯 Embudo de ventas',d:'Todo el proceso de venta —prospectos, recepción, cierre de contratos, reservas y analítica— ahora vive acá adentro, según tu rol. Si tenés gente a cargo, la pestaña <b>Mi equipo</b> te muestra el avance de quienes te reportan (según el organigrama).'}); }
+  if(kind!=='cliente'&&puedeEmbudo()&&tourList.length){ tourList.splice(tourList.length-1,0,{sel:'.tab[data-t="embudo"]',t:'Embudo de ventas',d:'Todo el proceso de venta —prospectos, recepción, cierre de contratos, reservas y analítica— ahora vive acá adentro, según tu rol. Si tenés gente a cargo, la pestaña <b>Mi equipo</b> te muestra el avance de quienes te reportan (según el organigrama).'}); }
   if(kind!=='cliente'&&esAdmin()&&tourList.length){ tourList.splice(tourList.length-1,0,...TOURS.adminExtra); }
   if(!tourList.length) return;
   tourKey='kux_tour_'+ROLE; tourI=0; $('tourOv').style.display='block'; pasoTour();
@@ -1437,7 +1493,7 @@ async function funArrancar(){
     funTab = esGerente ? 'cargar' : (verTodo ? 'recepcion' : 'midia');
     funCargado=true;
     funPintarTabs(); await funIrTab(funTab);
-  }catch(e){ $('funCont').innerHTML='<div class="vacio"><span class="em">😕</span><b>No pude cargar el embudo</b><p>Puede ser la conexión. <b onclick="funArrancar()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>'; }
+  }catch(e){ $('funCont').innerHTML='<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar el embudo</b><p>Puede ser la conexión. <b onclick="funArrancar()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>'; }
 }
 
 function funPintarTabs(){
@@ -1498,8 +1554,8 @@ async function recepcionar(id,ok,btn){
   const body={edad:g('edad')?Number(g('edad')):null, estado_civil:g('ec')||null, tarjetas_credito:g('ntc')?Number(g('ntc')):null, tipo_tarjetas:g('ttc')||null,
     califica:ok, motivo_no:ok?null:(g('mot')||null), vendedor_id:g('vend')?Number(g('vend')):null, cerrador_id:g('cerr')?Number(g('cerr')):null,
     recepcion_en:new Date().toISOString(), recepcionado_por:USER, etapa:ok?'sala':'baja'};
-  if(await funPatchLead(id,body)){ ev(id,'sala',ok?'Calificó → sala':'No califica'); toast(ok?'✅ Pasa a sala':'Marcado: no califica'); const c=$('rec'+id); if(c)c.remove(); }
-  else{ btn.disabled=false; toast('⚠️ No se pudo'); }
+  if(await funPatchLead(id,body)){ ev(id,'sala',ok?'Calificó → sala':'No califica'); toast(ok?'Pasa a sala':'Marcado: no califica'); const c=$('rec'+id); if(c)c.remove(); }
+  else{ btn.disabled=false; toast('No se pudo'); }
 }
 
 // ── CIERRE (contrato + comisiones) ──
@@ -1526,7 +1582,7 @@ function cierreCard(l){
       <div class="fld"><label>Digitador</label><select id="dig${l.id}"><option value="">—</option>${opAgentes('digitador')}</select></div>
       <div class="fld"><label>Verificador</label><select id="ver${l.id}"><option value="">—</option>${opAgentes('verificador')}</select></div>
     </div>
-    <button class="btn" onclick="cerrarContrato(${l.id},this)">Cerrar contrato ✍️</button>
+    <button class="btn" onclick="cerrarContrato(${l.id},this)"><svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Cerrar contrato</button>
   </div>`;
 }
 // ── CONTRATO IMPRIMIBLE (marca Kuxtal) ──
@@ -1549,7 +1605,7 @@ table{width:100%;border-collapse:collapse}td{padding:7px 6px;border-bottom:1px s
 .monto{background:var(--kux);color:#fff;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;margin-top:6px}.monto .n{font-family:'League Gothic',sans-serif;font-size:30px;color:var(--lima)}
 .firmas{display:flex;gap:40px;margin-top:52px}.firmas div{flex:1;text-align:center;border-top:1.5px solid #0f2438;padding-top:7px;font-size:12px;color:var(--gris)}
 .legal{margin-top:30px;font-size:10.5px;color:var(--gris);line-height:1.5;border-top:1px solid var(--linea);padding-top:12px}@media print{body{padding:0}@page{margin:16mm}}</style></head><body>
-<div class="hdr"><div><div class="lg">KUXTAL <span class="pl">✈</span></div><div class="tag">CADA DESTINO, UNA HISTORIA</div></div>
+<div class="hdr"><div><div class="lg">KUXTAL <span class="pl"><svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.06em"><path d="M17.8 19.2 16 11l3.5-3.5a2.12 2.12 0 0 0-3-3L13 8 4.8 6.2a1 1 0 0 0-.9.3l-.9.9a1 1 0 0 0 .3 1.6L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 2.5 5.6a1 1 0 0 0 1.6.3l.9-.9a1 1 0 0 0 .3-.9z"/></svg></span></div><div class="tag">CADA DESTINO, UNA HISTORIA</div></div>
 <div class="doc"><div class="t">CONTRATO DE MEMBRESÍA</div><div class="m">No. de socio: <b>${esc(d.no_socio||'—')}</b></div><div class="m">Fecha: ${fmt(hoy)}</div></div></div>
 <h2>Datos del socio</h2><table>${fila('Nombre',d.nombre)}${fila('Teléfono',d.telefono)}</table>
 <h2>Membresía</h2><table>${fila('Tipo de membresía',d.membresia)}${fila('Vigencia',(Number(d.anios)||4)+' años')}${fila('Ingreso',fmt(hoy))}${fila('Vence',fmt(vencIso))}</table>
@@ -1571,12 +1627,12 @@ async function cerrarContrato(id,btn){
     const body={p_prospecto:id, p_membresia:g('mem'), p_plan:g('pln'), p_monto:Number(g('mon'))||0,
       p_vendedor:l.vendedor_id||null, p_cerrador:l.cerrador_id||null, p_digitador:g('dig')?Number(g('dig')):null, p_verificador:g('ver')?Number(g('ver')):null, p_anios:anios};
     const r=await api("rpc/funnel_cerrar_contrato",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-    if(!r.ok){ toast('⚠️ No se pudo cerrar el contrato'); btn.disabled=false; btn.textContent='Cerrar contrato ✍️'; return; }
+    if(!r.ok){ toast('No se pudo cerrar el contrato'); btn.disabled=false; btn.innerHTML='<svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Cerrar contrato'; return; }
     let res={}; try{ res=await r.json(); }catch(e){}
     imprimirContrato({ no_socio:res.no_socio, nombre:l.nombre, telefono:l.telefono, membresia:g('mem'), plan:g('pln'), monto:Number(g('mon'))||0, anios:anios,
       vendedor:agN(l.vendedor_id), cerrador:agN(l.cerrador_id), digitador:agN(g('dig')), verificador:agN(g('ver')) });
-    toast('✅ Contrato cerrado · socio creado · comisiones generadas'); const c=$('cie'+id); if(c)c.remove();
-  }catch(e){ toast('⚠️ Error al cerrar'); btn.disabled=false; btn.textContent='Cerrar contrato ✍️'; }
+    toast('Contrato cerrado · socio creado · comisiones generadas'); const c=$('cie'+id); if(c)c.remove();
+  }catch(e){ toast('Error al cerrar'); btn.disabled=false; btn.innerHTML='<svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Cerrar contrato'; }
 }
 
 // ── COMISIONES (gerencia) ──
@@ -1655,17 +1711,17 @@ function pvCard(l){
   const rec=['bien','alegre','molesto','con dudas'], done=l.postventa_contactado;
   const call=telDig(l.telefono).length>=8?`<div class="lcall"><a class="ic wa" href="${waHref(l.telefono)}" target="_blank" rel="noopener">${WA}</a><a class="ic tel" href="${telHref(l.telefono)}">${TEL}</a></div>`:'';
   return `<div class="lead" id="pv${l.id}" style="border-left-color:${done?'var(--verde)':'var(--kux)'}">
-    <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">${esc(l.telefono||'')}${done?(' · ✓ contactado'+(l.postventa_recepcion?(' ('+esc(l.postventa_recepcion)+')'):'')):''}</div></div>${call}</div>
+    <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">${esc(l.telefono||'')}${done?(' · <svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> contactado'+(l.postventa_recepcion?(' ('+esc(l.postventa_recepcion)+')'):'')):''}</div></div>${call}</div>
     <div class="lbl">¿Cómo recibió la bienvenida?</div>
     <div class="estados">${rec.map(r=>`<button class="est ${l.postventa_recepcion===r?'on':''}" style="${l.postventa_recepcion===r?'background:var(--kux);color:#fff':''}" onclick="pvRecep(${l.id},'${r}')">${r}</button>`).join('')}</div>
     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
-      <button class="btn" style="margin:0;flex:1;background:var(--verde)" onclick="pvContacto(${l.id},this)">${done?'Contactado ✓':'Marcar contactado'}</button>
+      <button class="btn" style="margin:0;flex:1;background:var(--verde)" onclick="pvContacto(${l.id},this)">${done?'Contactado <svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg>':'Marcar contactado'}</button>
       <button class="btn" style="margin:0;flex:none;background:var(--rojo)" onclick="darBaja(${l.id},this)">Dar de baja</button>
     </div>
   </div>`;
 }
 async function pvRecep(id,r){ if(await funPatchLead(id,{postventa_recepcion:r})){ ev(id,'postventa','recepción: '+r); toast('Anotado: '+r); document.querySelectorAll('#pv'+id+' .est').forEach(x=>{const on=x.textContent===r;x.classList.toggle('on',on);x.style.background=on?'var(--kux)':'';x.style.color=on?'#fff':'';}); } }
-async function pvContacto(id,btn){ if(await funPatchLead(id,{postventa_contactado:true,postventa_en:new Date().toISOString()})){ ev(id,'postventa','contactado bienvenida'); toast('✅ Bienvenida registrada'); btn.textContent='Contactado ✓'; } }
+async function pvContacto(id,btn){ if(await funPatchLead(id,{postventa_contactado:true,postventa_en:new Date().toISOString()})){ ev(id,'postventa','contactado bienvenida'); toast('Bienvenida registrada'); btn.innerHTML='Contactado <svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg>'; } }
 async function darBaja(id,btn){ const m=prompt('Motivo de la baja:'); if(m===null)return; if(await funPatchLead(id,{etapa:'baja',motivo_baja:m||null,baja_en:new Date().toISOString()})){ ev(id,'baja',m||'baja'); toast('Socio dado de baja'); const c=$('pv'+id); if(c)c.remove(); } }
 
 // ── RESERVAS (expediente del viaje: "del post-it al fólder") ──
@@ -1689,7 +1745,7 @@ function pintarReservas(){
   const el=$('resList'); if(!el) return;
   el.innerHTML=res.length?res.map(r=>`<div class="basecard resrow" onclick="abrirExp(${r.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')abrirExp(${r.id})">
     <div><b>${esc(r.socio_nombre||'—')}</b> → ${esc(r.destino||'')}
-      <div class="m">${r.fecha_viaje||'sin fecha'}${r.fecha_regreso?(' → '+r.fecha_regreso):''} · ${r.personas||1} pers.${r.hotel?(' · 🏨 '+esc(r.hotel)):''}</div></div>
+      <div class="m">${r.fecha_viaje||'sin fecha'}${r.fecha_regreso?(' → '+r.fecha_regreso):''} · ${r.personas||1} pers.${r.hotel?(' · <svg class="svic" aria-hidden="true"><use href="#ic-hotel"/></svg> '+esc(r.hotel)):''}</div></div>
     ${badgeRes(r.estado)}</div>`).join('')
     :`<div class="m" style="color:var(--gris);font-size:13px">Sin reservas todavía.</div>`;
 }
@@ -1698,8 +1754,8 @@ async function addReserva(){
   if(!soc||!dest){ toast('Poné socio y destino'); return; }
   const b=$('raddb'); b.disabled=true; b.textContent='Creando…';
   try{ const r=await api("funnel_reservas",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_nombre:soc,destino:dest,fecha_viaje:$('rfec').value||null,personas:Number($('rper').value)||1,gestionado_por:USER})});
-    if(!r.ok)throw 0; toast('✅ Reserva creada'); await vistaReservas();
-  }catch(e){ toast('⚠️ No se pudo'); } finally{ b.disabled=false; b.textContent='Crear reserva'; }
+    if(!r.ok)throw 0; toast('Reserva creada'); await vistaReservas();
+  }catch(e){ toast('No se pudo'); } finally{ b.disabled=false; b.textContent='Crear reserva'; }
 }
 
 // ── EXPEDIENTE (modal fólder) ──
@@ -1711,7 +1767,7 @@ function abrirExp(id){
   const cuando=r.actualizado_en?new Date(r.actualizado_en).toLocaleString('es-GT',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
   const ult=(r.actualizado_por||r.actualizado_en)?('Última edición: '+esc(r.actualizado_por||'—')+(cuando?(' · '+cuando):'')):'Sin ediciones registradas todavía.';
   $('expCard').innerHTML=`
-    <div class="exphd"><div><h3>📁 ${esc(r.socio_nombre||'Reserva')}</h3><div style="margin-top:6px">${badgeRes(r.estado)}</div></div><button class="expx" onclick="cerrarExp()" aria-label="Cerrar">✕</button></div>
+    <div class="exphd"><div><h3><svg class="svic" aria-hidden="true"><use href="#ic-folder"/></svg> ${esc(r.socio_nombre||'Reserva')}</h3><div style="margin-top:6px">${badgeRes(r.estado)}</div></div><button class="expx" onclick="cerrarExp()" aria-label="Cerrar"><svg class="svic" aria-hidden="true"><use href="#ic-x"/></svg></button></div>
     <div class="expsec"><div class="t">Estado</div><div class="fld"><select id="xest">${opt}</select></div></div>
     <div class="expsec"><div class="t">Viaje</div>
       <div class="row"><div class="fld"><label>Destino</label><input id="xdest" value="${esc(r.destino||'')}"></div><div class="fld"><label>Personas</label><input id="xper" type="number" min="1" inputmode="numeric" value="${r.personas||1}"></div></div>
@@ -1732,7 +1788,7 @@ function pintarTramos(){
   $('xit').innerHTML=EXP_IT.length?EXP_IT.map((t,i)=>`<div class="itrow">
     <input class="d" placeholder="Día" value="${esc(t.dia)}" oninput="EXP_IT[${i}].dia=this.value" aria-label="Día del tramo">
     <input class="det" placeholder="Detalle (vuelo, traslado, tour…)" value="${esc(t.detalle)}" oninput="EXP_IT[${i}].detalle=this.value" aria-label="Detalle del tramo">
-    <button class="x" onclick="delTramo(${i})" aria-label="Quitar tramo">✕</button></div>`).join('')
+    <button class="x" onclick="delTramo(${i})" aria-label="Quitar tramo"><svg class="svic" aria-hidden="true"><use href="#ic-x"/></svg></button></div>`).join('')
     :'<div style="color:var(--gris);font-size:12.5px;margin-bottom:8px">Sin tramos todavía — agregá el primero.</div>';
 }
 function addTramo(){ EXP_IT.push({dia:'',detalle:''}); pintarTramos(); const ins=document.querySelectorAll('#xit .d'); if(ins.length) ins[ins.length-1].focus(); }
@@ -1755,8 +1811,8 @@ async function guardarExp(){
     let fila=null; try{ fila=(await r.json())[0]; }catch(e){}
     const i=(window.__RES||[]).findIndex(x=>x.id===EXP.id);
     if(i>=0) window.__RES[i]=fila||Object.assign({},window.__RES[i],body);
-    pintarReservas(); cerrarExp(); toast('✅ Fólder guardado');
-  }catch(e){ toast('⚠️ No se pudo guardar'); }
+    pintarReservas(); cerrarExp(); toast('Fólder guardado');
+  }catch(e){ toast('No se pudo guardar'); }
   finally{ b.disabled=false; b.textContent='Guardar fólder'; }
 }
 
@@ -1770,7 +1826,18 @@ async function cargarMiDia(){
       : `<div class="vacio"><b>Todavía no estás en el equipo de TMK</b><p>Pedile a gerencia que te agregue en la pestaña Equipo con este correo: <b>${esc(USER)}</b>.</p></div>`;
     return;
   }
-  leads=await getJSON("funnel_prospectos?select=*&tmk_id=eq."+miAgente.id+"&order=recontacto_en.asc.nullslast,id.asc");
+  // Distinguí ERROR real (HTTP/permiso) de vacío legítimo: getJSON se traga los errores
+  // y devuelve [] → "no tenés nada" MENTIROSO. Acá miramos r.ok de verdad.
+  let rows;
+  try{
+    const r=await api("funnel_prospectos?select=*&tmk_id=eq."+miAgente.id+"&order=recontacto_en.asc.nullslast,id.asc");
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    rows=await r.json();
+  }catch(e){
+    $('funCont').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar tu día</b><p>Puede ser la conexión. <b onclick="funIrTab('midia')" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;
+    return;
+  }
+  leads=rows||[];
   renderWork();
 }
 function pasa(l){ const e=estDe(l.estado);
@@ -1823,20 +1890,33 @@ function funCardHTML(l){
       <div class="fld"><label>Hora</label><input type="time" value="${presH}" onchange="setAsi(${l.id},'presH',this.value)"></div>
     </div>
     <div class="note"><textarea placeholder="Comentario del contacto…" onchange="setCom(${l.id},this.value)">${esc(l.comentario||'')}</textarea></div>
-    <div class="pin ${(showAsi&&l.restaurante_id)?'show':''}">✓ Presentación asignada</div>
+    <div class="pin ${(showAsi&&l.restaurante_id)?'show':''}"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> Presentación asignada</div>
   </div>`;
 }
 function localL(id){ return leads.find(x=>x.id===id)||todos.find(x=>x.id===id); }
-async function funPatchLead(id,body){
-  try{ const r=await api("funnel_prospectos?id=eq."+id,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(Object.assign({actualizado_en:new Date().toISOString()},body))});
-    return r.ok; }catch(e){ toast('⚠️ Se cortó la conexión, probá de nuevo'); return false; }
+// Optimista en el llamador (pinta ya); acá reintenta ante 5xx/corte de red y devuelve
+// un booleano HONESTO: false = de verdad no se guardó → el llamador revierte (no miente).
+async function funPatchLead(id,body,intento){
+  intento=intento||0;
+  const payload=JSON.stringify(Object.assign({actualizado_en:new Date().toISOString()},body));
+  try{
+    const r=await api("funnel_prospectos?id=eq."+id,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:payload});
+    if(r.ok) return true;
+    // 5xx = problema temporal del servidor → reintentá; 4xx = fallo duro (permiso/validación) → no insistas.
+    if(r.status>=500 && intento<2){ await new Promise(res=>setTimeout(res,400*(intento+1))); return funPatchLead(id,body,intento+1); }
+    return false;
+  }catch(e){
+    // Corte de red → reintentá un par de veces antes de rendirte.
+    if(intento<2){ await new Promise(res=>setTimeout(res,400*(intento+1))); return funPatchLead(id,body,intento+1); }
+    toast('Se cortó la conexión, probá de nuevo'); return false;
+  }
 }
 async function ev(id,tipo,nota){ try{ await api("funnel_eventos",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({prospecto_id:id,tipo,actor:USER,payload:{nota}})}); }catch(e){} }
 async function setEstado(id,clave){ const l=localL(id); if(!l)return; const prev=l.estado; l.estado=clave;
   const e=estDe(clave); if(e.dispara_recontacto&&!l.recontacto_en){ l.recontacto_en=hoyStr()+'T09:00:00'; }
   renderWork();
   if(await funPatchLead(id,{estado:clave,recontacto_en:l.recontacto_en})){ ev(id,'estado',estDe(clave).etiqueta); toast('Estado: '+estDe(clave).etiqueta); }
-  else{ l.estado=prev; renderWork(); toast('⚠️ No se pudo guardar'); }
+  else{ l.estado=prev; renderWork(); toast('No se pudo guardar'); }
 }
 async function setRec(id,d,h){ const l=localL(id); if(!l)return; const cur=(l.recontacto_en||(hoyStr()+'T09:00:00')); const D=d||cur.slice(0,10), H=h||cur.slice(11,16)||'09:00'; l.recontacto_en=D+'T'+H+':00';
   if(await funPatchLead(id,{recontacto_en:l.recontacto_en})){ ev(id,'recontacto',l.recontacto_en); toast('Recontacto agendado'); } }
@@ -1850,12 +1930,26 @@ let comT; function setCom(id,v){ const l=localL(id); if(l)l.comentario=v; clearT
 async function cargarTodos(){
   $('funCap').textContent='Todos los prospectos · avance por TMK.';
   $('funCont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
-  todos=await getJSON("funnel_prospectos?select=*,funnel_agentes!funnel_prospectos_tmk_id_fkey(nombre)&order=id.desc&limit=500");
+  // NO usamos el embed de FK (funnel_prospectos_tmk_id_fkey): si el nombre del constraint
+  // difiere, PostgREST responde 400 y getJSON lo convierte en [] → "no hay prospectos"
+  // MENTIROSO. Leemos plano y resolvemos el TMK contra AGENTES (ya cargado en el arranque).
+  let rows;
+  try{
+    const r=await api("funnel_prospectos?select=*&order=id.desc&limit=500");
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    rows=await r.json();
+  }catch(e){
+    $('funCont').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar los prospectos</b><p>Puede ser la conexión o un permiso. <b onclick="funIrTab('todos')" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;
+    return;
+  }
+  todos=rows||[];
+  if(!AGENTES.length){ try{ AGENTES=(await getJSON("funnel_agentes?select=*"))||[]; }catch(_e){} }
+  const agN=id=>{const a=AGENTES.find(x=>x.id==id);return a?a.nombre:'sin asignar';};
   if(!todos.length){ $('funCont').innerHTML=`<div class="vacio"><b>Sin prospectos todavía</b><p>Subí una base en <b>Cargar base</b> y repartila.</p></div>`; return; }
   const porEstado={}; todos.forEach(l=>{const e=estDe(l.estado).etiqueta; porEstado[e]=(porEstado[e]||0)+1;});
   const resumen=Object.entries(porEstado).map(([k,v])=>`<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(k)}: ${v}</span>`).join('');
   $('funCont').innerHTML=`<div class="panel"><h3>${todos.length} prospectos</h3><div style="margin-top:8px">${resumen}</div></div>`+
-    todos.slice(0,200).map(l=>{const e=estDe(l.estado);const ag=l.funnel_agentes?l.funnel_agentes.nombre:'sin asignar';
+    todos.slice(0,200).map(l=>{const e=estDe(l.estado);const ag=agN(l.tmk_id);
       return `<div class="basecard"><div><b>${esc(l.nombre)}</b><div class="m">${esc(l.telefono||'—')} · TMK: ${esc(ag)}</div></div><span class="tag" style="background:${e.color}22;color:${e.color}">${esc(e.etiqueta)}</span></div>`;}).join('');
 }
 
@@ -1876,7 +1970,7 @@ async function vistaCargar(){
     </div>
     <div class="panel">
       <h3>Bases cargadas</h3>
-      <div class="h">Repartí los prospectos SIN asignar entre los ${activos} TMK activos (equitativo). ${activos?'':'⚠️ No hay TMK activos — agregá en Equipo.'}</div>
+      <div class="h">Repartí los prospectos SIN asignar entre los ${activos} TMK activos (equitativo). ${activos?'':'<svg class="svic" aria-hidden="true"><use href="#ic-alert"/></svg> No hay TMK activos — agregá en Equipo.'}</div>
       <div id="baseList"></div>
     </div>`;
   pintarBases();
@@ -1897,17 +1991,17 @@ async function crearBase(){
     const base=(await rb.json())[0];
     const payload=parsed.map(p=>({base_id:base.id,nombre:p.nombre,telefono:p.telefono,estado:'nuevo'}));
     for(let i=0;i<payload.length;i+=200){ const chunk=payload.slice(i,i+200); const rp=await api("funnel_prospectos",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(chunk)}); if(!rp.ok) throw new Error('prospectos '+rp.status); }
-    toast('✅ Base creada ('+parsed.length+')'); $('bnom').value='';$('brows').value='';
+    toast('Base creada ('+parsed.length+')'); $('bnom').value='';$('brows').value='';
     await vistaCargar();
-  }catch(e){ toast('⚠️ No se pudo ('+e.message+')'); }
+  }catch(e){ toast('No se pudo ('+e.message+')'); }
   finally{ b.disabled=false; b.textContent='Crear base'; }
 }
 async function repartir(baseId,btn){
   if(btn){ btn.disabled=true; btn.textContent='Repartiendo…'; }
   try{ const r=await api("rpc/funnel_repartir",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({p_base:baseId})});
-    if(!r.ok){ const t=await r.text(); toast('⚠️ '+(t.includes('TMK')?'No hay TMK activos — agregá en Equipo':'No se pudo repartir')); return; }
-    const n=await r.json(); toast(n>0?('✅ Repartidos '+n+' entre los TMK'):'Nada por repartir (ya estaban asignados)');
-  }catch(e){ toast('⚠️ No se pudo repartir'); }
+    if(!r.ok){ const t=await r.text(); toast(''+(t.includes('TMK')?'No hay TMK activos — agregá en Equipo':'No se pudo repartir')); return; }
+    const n=await r.json(); toast(n>0?('Repartidos '+n+' entre los TMK'):'Nada por repartir (ya estaban asignados)');
+  }catch(e){ toast('No se pudo repartir'); }
   finally{ if(btn){ btn.disabled=false; btn.textContent='Repartir'; } }
 }
 
@@ -1923,8 +2017,8 @@ async function vistaMiEquipo(){
   $('funCap').textContent='Mi equipo: el avance de las personas que me reportan (según el organigrama). El árbol manda.';
   $('funCont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando tu equipo…</div>';
   const ids=await rpcVeEquipo();
-  if(ids===null){ $('funCont').innerHTML=`<div class="vacio"><span class="em">😕</span><b>No pude leer tu equipo</b><p>Puede ser la conexión. <b onclick="funIrTab('miequipo')" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`; return; }
-  if(!ids.length){ $('funCont').innerHTML=`<div class="vacio"><span class="em">🌱</span><b>Todavía no tenés equipo</b><p>Pedí que te registren en el equipo con tu correo (<b>${esc(USER)}</b>) y que en <b>⚙️ Roles ▸ Organigrama</b> asignen quién te reporta.</p></div>`; return; }
+  if(ids===null){ $('funCont').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude leer tu equipo</b><p>Puede ser la conexión. <b onclick="funIrTab('miequipo')" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`; return; }
+  if(!ids.length){ $('funCont').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-sprout"/></svg></span><b>Todavía no tenés equipo</b><p>Pedí que te registren en el equipo con tu correo (<b>${esc(USER)}</b>) y que en <b>Roles ▸ Organigrama</b> asignen quién te reporta.</p></div>`; return; }
   if(!AGENTES.length) AGENTES=(await getJSON("funnel_agentes?select=*"))||[];
   const P=await getJSON("funnel_prospectos?select=id,nombre,telefono,estado,etapa,tmk_id&tmk_id=in.("+ids.join(',')+")&order=id.desc&limit=2000");
   const porAg={}; P.forEach(l=>{ (porAg[l.tmk_id]=porAg[l.tmk_id]||[]).push(l); });
@@ -1937,7 +2031,7 @@ async function vistaMiEquipo(){
       <div class="m">${arr.length} prospectos · ${cont} contactados · ${asis} en presentación/sala</div></div><span class="tag">${arr.length}</span></div>`;
   }).join('');
   $('funCont').innerHTML=`<div class="panel"><h3>Mi equipo (${equipoAgs.length})</h3>
-    <div class="sub">${P.length} prospectos en total bajo tu línea. Reorganizá quién te reporta en <b>⚙️ Roles ▸ Organigrama</b>.</div></div>`+
+    <div class="sub">${P.length} prospectos en total bajo tu línea. Reorganizá quién te reporta en <b>Roles ▸ Organigrama</b>.</div></div>`+
     (filas||`<div class="vacio"><b>Tu equipo aún no tiene prospectos</b><p>Cuando repartás base a tus TMK (Cargar base ▸ Repartir), su avance aparece acá.</p></div>`);
 }
 async function vistaEquipo(){
@@ -1949,7 +2043,7 @@ async function vistaEquipo(){
       <label>Correo de login (con el que entra al sistema)</label><input id="aemail" type="email" placeholder="mery@kuxtal.app">
       <div class="row">
         <div><label>Rol</label><select id="arol"><option value="tmk">TMK (telemarketing)</option><option value="supervisor_tmk">Supervisor TMK</option><option value="gerente_tmk">Gerente TMK</option><option value="vendedor">Vendedor</option><option value="cerrador">Cerrador</option></select></div>
-        <div><label>Peso (reparto)</label><input id="apeso" type="number" value="1" min="1" inputmode="numeric"></div>
+        <div><label>¿Cuántos leads recibe? (proporción)</label><input id="apeso" type="number" value="1" min="1" inputmode="numeric"></div>
       </div>
       <button class="btn" id="aadd" onclick="addAgente()">Agregar</button>
     </div>
@@ -1957,7 +2051,7 @@ async function vistaEquipo(){
   pintarAgentes();
 }
 function pintarAgentes(){
-  $('agList').innerHTML = AGENTES.length? AGENTES.map(a=>`<div class="agrow"><div><span class="an">${esc(a.nombre)}</span> <span class="tag">${esc(a.rol)}</span><div class="ae">${esc(a.email||'sin correo')} · peso ${a.peso}${a.activo?'':' · inactivo'}</div></div><button class="est" onclick="toggleAgente(${a.id},${a.activo})">${a.activo?'Desactivar':'Activar'}</button></div>`).join('')
+  $('agList').innerHTML = AGENTES.length? AGENTES.map(a=>`<div class="agrow"><div><span class="an">${esc(a.nombre)}</span> <span class="tag">${esc(a.rol)}</span><div class="ae">${esc(a.email||'sin correo')} · recibe ${a.peso}${a.activo?'':' · inactivo'}</div></div><button class="est" onclick="toggleAgente(${a.id},${a.activo})">${a.activo?'Desactivar':'Activar'}</button></div>`).join('')
     : `<div class="m" style="color:var(--gris);font-size:13px">Sin agentes aún.</div>`;
 }
 async function addAgente(){
@@ -1965,13 +2059,13 @@ async function addAgente(){
   if(!nom||!email){ toast('Nombre y correo son obligatorios'); return; }
   const b=$('aadd'); b.disabled=true; b.textContent='Agregando…';
   try{ const r=await api("funnel_agentes",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({nombre:nom,email,rol:$('arol').value,peso:Number($('apeso').value)||1})});
-    if(!r.ok) throw new Error(r.status); toast('✅ Agregado'); await vistaEquipo();
-  }catch(e){ toast('⚠️ No se pudo (¿sos gerencia?)'); }
+    if(!r.ok) throw new Error(r.status); toast('Agregado'); await vistaEquipo();
+  }catch(e){ toast('No se pudo (¿sos gerencia?)'); }
   finally{ b.disabled=false; b.textContent='Agregar'; }
 }
 async function toggleAgente(id,activo){
   try{ const r=await api("funnel_agentes?id=eq."+id,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({activo:!activo})});
-    if(r.ok){ const a=AGENTES.find(x=>x.id===id); if(a)a.activo=!activo; pintarAgentes(); } }catch(e){ toast('⚠️ No se pudo'); }
+    if(r.ok){ const a=AGENTES.find(x=>x.id===id); if(a)a.activo=!activo; pintarAgentes(); } }catch(e){ toast('No se pudo'); }
 }
 // Cierre del expediente por clic fuera / Escape (elementos del F4)
 if($('expOv')){
