@@ -2,63 +2,363 @@
 <html lang="es"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Kuxtal Club</title>
+<title>Kuxtal Club · Validar beneficio</title>
 <style>
-  *{margin:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
-  body{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:26px;color:#fff;overflow:hidden;position:relative;background:linear-gradient(135deg,#0f2438,#1b365d);transition:background .4s}
-  body.ok{background:radial-gradient(circle at 50% -10%,#2bbf74,#0f7a47 75%)}
-  body.bad{background:radial-gradient(circle at 50% -10%,#e5484d,#9d1b1f 75%)}
-  .logo{position:fixed;top:26px;left:0;right:0;font-family:'Arial Black',Arial,sans-serif;font-weight:900;letter-spacing:3px;font-size:15px;opacity:.92;z-index:2}
-  .ico{font-size:84px;line-height:1;animation:pop .55s cubic-bezier(.2,1.35,.4,1);z-index:2}
-  @keyframes pop{0%{transform:scale(.3);opacity:0}100%{transform:scale(1);opacity:1}}
-  .card{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:22px;padding:22px 20px;margin-top:16px;max-width:360px;width:100%;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);animation:rise .5s .1s both;z-index:2}
-  @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
-  .nom{font-size:26px;font-weight:800;margin:2px 0 10px;line-height:1.15}
-  .tipo{display:inline-block;background:linear-gradient(135deg,#f2c94c,#e0a422);color:#3a2a00;font-weight:800;border-radius:20px;padding:5px 16px;font-size:14px}
-  .promo{margin-top:16px;font-size:15px;font-weight:700}
-  .promo .d{background:rgba(255,255,255,.28);border-radius:8px;padding:2px 8px;font-size:13px;margin-left:4px}
-  .tag{margin-top:18px;font-size:17px;font-weight:800;z-index:2}
-  .sub{font-size:14px;opacity:.92;margin-top:8px}
-  .cf{position:fixed;top:-24px;font-size:22px;animation:fall linear infinite;z-index:0}
-  @keyframes fall{to{transform:translateY(112vh) rotate(420deg)}}
+/* ============================================================
+   KUXTAL — Validación de beneficio (pantalla de resultado)
+   Navy #1b365d + Lima #8dc63f + Dorado (acento premium escaso)
+   Mobile-first 360–390 · tema claro y oscuro · anti-IA-slop
+   Solo PRESENTACIÓN — la lógica (lee ?c=, fetch a la edge
+   function 'validar', estados ok/reasons) queda intacta.
+   ============================================================ */
+:root{
+  --navy:#1b365d; --navy-900:#0f2438; --navy-700:#274a76;
+  --lima:#8dc63f; --lima-700:#4f7a1e;
+  --gold:#e0b13f; --gold-700:#7e5c06;
+  --coral:#e0607a; --coral-700:#a8324f;
+  --cream:#f6f2e8;
+
+  /* superficies / tinta — tema CLARO por defecto */
+  --bg-1:#f4f1ea; --bg-2:#e9e4d7; --panel:#ffffff;
+  --panel-line:rgba(27,54,93,.12);
+  --ink:#16273f; --ink-soft:#5a6b82;
+  --seal-face:var(--navy); --seal-ink:var(--cream);
+  --shadow:0 18px 44px -18px rgba(15,36,56,.42), 0 4px 14px -8px rgba(15,36,56,.28);
+  --ticket-notch:var(--bg-1);
+  --accent:var(--ink-soft); /* neutro al cargar */
+
+  --serif:"Hoefler Text","Cochin","Playfair Display",Georgia,"Times New Roman",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:"SF Mono",ui-monospace,"Roboto Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg-1:#0e2136; --bg-2:#0a1728; --panel:#16304f;
+    --panel-line:rgba(255,255,255,.10);
+    --ink:#f3efe3; --ink-soft:#a9b8cc;
+    --seal-face:var(--cream); --seal-ink:var(--navy);
+    --shadow:0 22px 52px -20px rgba(0,0,0,.6), 0 4px 16px -8px rgba(0,0,0,.5);
+    --ticket-notch:var(--bg-1);
+    --lima-700:#a9df5e; --gold-700:#f0cd7c; --coral-700:#f19bb0;
+  }
+}
+:root[data-theme="dark"]{
+  --bg-1:#0e2136; --bg-2:#0a1728; --panel:#16304f;
+  --panel-line:rgba(255,255,255,.10);
+  --ink:#f3efe3; --ink-soft:#a9b8cc;
+  --seal-face:var(--cream); --seal-ink:var(--navy);
+  --shadow:0 22px 52px -20px rgba(0,0,0,.6), 0 4px 16px -8px rgba(0,0,0,.5);
+  --ticket-notch:var(--bg-1);
+  --lima-700:#a9df5e; --gold-700:#f0cd7c; --coral-700:#f19bb0;
+}
+:root[data-theme="light"]{
+  --bg-1:#f4f1ea; --bg-2:#e9e4d7; --panel:#ffffff;
+  --panel-line:rgba(27,54,93,.12);
+  --ink:#16273f; --ink-soft:#5a6b82;
+  --seal-face:var(--navy); --seal-ink:var(--cream);
+  --ticket-notch:var(--bg-1);
+  --lima-700:#4f7a1e; --gold-700:#7e5c06; --coral-700:#a8324f;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  min-height:100dvh; font-family:var(--sans); color:var(--ink);
+  background:
+    radial-gradient(120% 80% at 50% -18%, color-mix(in srgb,var(--accent) 12%, transparent) 0%, transparent 46%),
+    linear-gradient(168deg, var(--bg-1) 0%, var(--bg-2) 100%);
+  background-attachment:fixed;
+  display:flex; flex-direction:column; align-items:center;
+  padding:clamp(20px,7vw,40px) 20px calc(24px + env(safe-area-inset-bottom));
+  overflow-x:hidden; position:relative;
+  transition:background .5s ease;
+}
+
+/* ---- marca ---- */
+.brand{
+  display:flex; align-items:center; gap:9px; margin-top:4px;
+  font-weight:800; letter-spacing:.22em; font-size:11.5px; text-transform:uppercase;
+  color:var(--ink-soft);
+}
+.brand .plane{width:15px;height:15px;color:var(--lima-700)}
+
+/* ---- sello / medalla ---- */
+.seal{
+  margin:clamp(22px,7vw,34px) auto clamp(6px,3vw,10px);
+  width:104px;height:104px;position:relative;
+  animation:seal-in .7s cubic-bezier(.18,1.12,.32,1) both;
+}
+.seal svg{width:100%;height:100%;display:block;
+  filter:drop-shadow(0 10px 22px rgba(15,36,56,.28))}
+.seal .ring{fill:none;stroke:var(--accent);stroke-width:2;opacity:.9}
+.seal .disc{fill:var(--seal-face)}
+.seal .glyph{fill:none;stroke:var(--accent);stroke-width:7;stroke-linecap:round;stroke-linejoin:round}
+.seal .glyph.draw{stroke-dasharray:120;stroke-dashoffset:120;animation:draw .55s .4s cubic-bezier(.65,0,.35,1) forwards}
+@keyframes seal-in{0%{transform:scale(.72) translateY(6px);opacity:0}100%{transform:scale(1) translateY(0);opacity:1}}
+@keyframes draw{to{stroke-dashoffset:0}}
+
+/* disco apagado en estados no-frescos (usado/vencido/error) */
+body.is-muted .seal .disc{fill:color-mix(in srgb,var(--ink-soft) 30%, var(--panel))}
+body.is-muted .seal .ring{opacity:.6}
+
+/* ---- titulares ---- */
+.eyebrow{
+  text-align:center; text-transform:uppercase; letter-spacing:.2em;
+  font-size:11.5px; font-weight:700; color:var(--accent-ink,var(--ink-soft));
+  animation:rise .55s .12s both; min-height:14px;
+}
+h1{
+  font-family:var(--serif); font-weight:600; text-align:center;
+  font-size:clamp(1.7rem,7.6vw,2.4rem); line-height:1.08;
+  letter-spacing:-.012em; text-wrap:balance; color:var(--ink);
+  margin:8px 0 0; animation:rise .6s .18s both;
+}
+h1 .nom{color:var(--gold-700)}
+.lede{
+  text-align:center; color:var(--ink-soft); font-size:15px; line-height:1.5;
+  max-width:34ch; margin:10px auto 0; text-wrap:balance;
+  animation:rise .6s .24s both;
+}
+
+/* ---- ticket (solo en éxito) ---- */
+.ticket{
+  position:relative; width:100%; max-width:390px; margin:clamp(20px,6vw,28px) auto 0;
+  background:var(--panel); border:1px solid var(--panel-line); border-radius:20px;
+  box-shadow:var(--shadow); overflow:hidden;
+  animation:rise .6s .3s both;
+}
+.ticket::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,var(--lima),var(--gold) 55%,var(--lima))}
+.t-head{padding:20px 20px 16px; display:flex; align-items:flex-start; gap:14px}
+.t-emoji{
+  flex:0 0 auto;width:46px;height:46px;border-radius:13px;
+  background:color-mix(in srgb,var(--lima) 18%, var(--panel));
+  border:1px solid color-mix(in srgb,var(--lima) 40%, transparent);
+  display:grid;place-items:center;font-size:24px;line-height:1}
+.t-meta{min-width:0;flex:1}
+.t-kicker{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft)}
+.t-title{font-family:var(--serif);font-weight:600;font-size:20px;line-height:1.18;color:var(--ink);margin-top:3px;word-break:break-word}
+.tipo{
+  display:inline-flex;align-items:center;margin-top:10px;
+  background:color-mix(in srgb,var(--gold) 20%, var(--panel));
+  border:1px solid color-mix(in srgb,var(--gold) 45%, transparent);
+  color:var(--gold-700);font-weight:800;font-size:12px;letter-spacing:.02em;
+  text-transform:uppercase;padding:4px 11px;border-radius:999px;
+}
+.t-desc{
+  display:inline-flex;align-items:center;gap:6px;margin-top:10px;margin-left:8px;
+  background:var(--navy);color:var(--cream);
+  font-weight:800;font-size:13px;letter-spacing:.01em;
+  padding:4px 11px;border-radius:999px;
+}
+:root[data-theme="dark"] .t-desc{background:var(--lima);color:var(--navy)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .t-desc{background:var(--lima);color:var(--navy)}}
+
+.perf{position:relative;height:24px;border-top:1px dashed var(--panel-line);margin:2px 16px 0}
+.perf::before,.perf::after{content:"";position:absolute;top:-12px;width:22px;height:22px;border-radius:50%;
+  background:var(--ticket-notch);border:1px solid var(--panel-line)}
+.perf::before{left:-27px}.perf::after{right:-27px}
+
+.t-code{padding:4px 20px 20px}
+.code-lbl{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft)}
+.code-val{
+  font-family:var(--mono);font-weight:600;font-size:23px;letter-spacing:.14em;
+  color:var(--ink);margin-top:4px;font-variant-numeric:tabular-nums;word-break:break-all;
+}
+
+/* badge de estado */
+.status{
+  display:inline-flex;align-items:center;gap:7px;margin:18px auto 0;
+  padding:7px 15px;border-radius:999px;font-weight:800;font-size:12.5px;
+  letter-spacing:.04em;animation:rise .6s .36s both;flex-wrap:wrap;justify-content:center;
+  border:1px solid color-mix(in srgb,var(--accent) 45%, transparent);
+  background:color-mix(in srgb,var(--accent) 18%, var(--panel));
+  color:var(--accent-ink,var(--accent));
+}
+.status .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);
+  box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 26%, transparent)}
+.status .when{font-weight:600;opacity:.85}
+
+.foot{margin:22px auto 6px;text-align:center;font-size:12px;color:var(--ink-soft);
+  display:flex;align-items:center;gap:8px;animation:rise .6s .48s both}
+.foot .bar{width:16px;height:1px;background:var(--panel-line)}
+
+@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+/* confeti geométrico (sobrio) — solo en éxito */
+.confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0}
+.confetti i{position:absolute;top:-14px;width:8px;height:8px;opacity:.9;animation:fall linear forwards}
+@keyframes fall{to{transform:translateY(112dvh) rotate(300deg);opacity:0}}
+
+[hidden]{display:none!important}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.001ms!important;animation-iteration-count:1!important}
+  .confetti{display:none}
+}
+main{width:100%;display:flex;flex-direction:column;align-items:center;flex:1;max-width:430px;position:relative;z-index:1}
 </style></head>
 <body>
-<div class="logo">KUXTAL TRAVELS ✈</div>
-<div class="ico" id="ico">⏳</div>
-<div class="card" id="card"><div class="nom" id="nom">Validando…</div></div>
-<div class="tag" id="tag"></div>
+
+<div class="confetti" id="confetti" aria-hidden="true"></div>
+
+<main>
+  <div class="brand">
+    <svg class="plane" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.5 12 3 4.5l2.2 6.2L14 12l-8.8 1.3L3 19.5 21.5 12Z"/></svg>
+    KUXTAL TRAVELS
+  </div>
+
+  <div class="seal" id="seal" role="img" aria-label="Estado del beneficio">
+    <svg viewBox="0 0 120 120" aria-hidden="true">
+      <circle class="ring" cx="60" cy="60" r="55"/>
+      <circle class="disc" cx="60" cy="60" r="47"/>
+      <g class="glyph" id="sealGlyph"></g>
+    </svg>
+  </div>
+
+  <p class="eyebrow" id="eyebrow" aria-live="polite">Validando</p>
+  <h1 id="titulo">Un momento…</h1>
+  <p class="lede" id="lede">Estamos confirmando tu beneficio del Club.</p>
+
+  <section class="ticket" id="ticket" hidden aria-label="Detalle del beneficio">
+    <div class="t-head">
+      <div class="t-emoji" id="tEmoji" aria-hidden="true">🎁</div>
+      <div class="t-meta">
+        <div class="t-kicker">Beneficio del Club</div>
+        <div class="t-title" id="tTitle"></div>
+        <span class="tipo" id="tTipo" hidden></span>
+        <span class="t-desc" id="tDesc" hidden>
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M12 2 15 9l7 .5-5.3 4.6L18.4 21 12 17l-6.4 4 1.7-6.9L2 9.5 9 9z"/></svg>
+          <span id="tDescTxt"></span>
+        </span>
+      </div>
+    </div>
+    <div class="perf" aria-hidden="true"></div>
+    <div class="t-code">
+      <div class="code-lbl">Código</div>
+      <div class="code-val" id="codigo"></div>
+    </div>
+  </section>
+
+  <div class="status" id="status" hidden>
+    <span class="dot" aria-hidden="true"></span>
+    <span id="statusTxt"></span>
+    <span class="when" id="statusWhen"></span>
+  </div>
+
+  <div class="foot">
+    <span class="bar"></span>
+    <span id="footTxt">Un beneficio de tu membresía Kuxtal</span>
+    <span class="bar"></span>
+  </div>
+</main>
+
 <script>
+"use strict";
+/* ---- LÓGICA (intacta): edge function + escape ---- */
 const FN="https://tevzfdiumfekvapamovw.supabase.co/functions/v1/validar";
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const $=id=>document.getElementById(id);
+
+/* ---- PRESENTACIÓN ---- */
+const GLYPHS={
+  check:'<path class="glyph draw" d="M40 62 L54 76 L82 46"/>',
+  x:'<path d="M44 44 L76 76"/><path d="M76 44 L44 76"/>',
+  clock:'<circle cx="60" cy="62" r="21" fill="none" stroke="var(--accent)" stroke-width="6"/><path d="M60 49 V62 L71 68"/>'
+};
+function setSeal(glyph){ $('sealGlyph').innerHTML = GLYPHS[glyph] || GLYPHS.x; }
+function accent(name){
+  // name: 'lima' | 'gold' | 'coral'  ->  fija --accent y su tinta legible
+  const map={lima:['var(--lima)','var(--lima-700)'],gold:['var(--gold)','var(--gold-700)'],coral:['var(--coral)','var(--coral-700)']};
+  const [a,ink]=map[name]||map.coral;
+  document.documentElement.style.setProperty('--accent',a);
+  document.documentElement.style.setProperty('--accent-ink',ink);
+}
+
 function confetti(){
-  const em=["🎉","✨","🎊","🌴","🎉","✈️","✨","🎊","🌟","🎉"];
-  em.forEach((e,i)=>{const s=document.createElement('span');s.className='cf';s.textContent=e;
-    s.style.left=(5+i*9.5)+'%';s.style.animationDuration=(2.8+(i%3)*0.7)+'s';s.style.animationDelay=(i*0.28)+'s';document.body.appendChild(s);});
+  const host=$('confetti'); host.innerHTML='';
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const cols=['#8dc63f','#e0b13f','#5b8fd6','#8dc63f','#e0b13f'];
+  for(let k=0;k<26;k++){
+    const i=document.createElement('i');
+    i.style.left=(Math.random()*100)+'%';
+    i.style.background=cols[k%cols.length];
+    i.style.width=i.style.height=(5+Math.random()*5)+'px';
+    if(Math.random()>.5) i.style.borderRadius='50%';
+    i.style.animationDuration=(2.6+Math.random()*2)+'s';
+    i.style.animationDelay=(Math.random()*.9)+'s';
+    i.style.opacity=(.55+Math.random()*.4).toFixed(2);
+    host.appendChild(i);
+  }
 }
-function ok(d){
-  document.body.className='ok'; confetti();
-  $('ico').textContent='✅';
-  const promo=d.promo?`<div class="promo">${esc(d.promo.emoji||'🎁')} ${esc(d.promo.titulo)}${d.promo.descuento?`<span class="d">${esc(d.promo.descuento)}</span>`:''}</div>`:'';
-  $('card').innerHTML=`<div class="nom">${esc(d.nombre)}</div><span class="tipo">${esc(d.tipo)}</span>${promo}`;
-  $('tag').textContent='Disfrutá de tu beneficio con Kuxtal ✈️';
+
+/* Éxito: d.ok con d.nombre, d.tipo, d.promo{emoji,titulo,descuento} */
+function ok(d, codigo){
+  document.body.classList.remove('is-muted');
+  accent('lima'); setSeal('check');
+  $('eyebrow').textContent='Beneficio confirmado';
+  $('titulo').innerHTML='¡Felicidades,<br><span class="nom">'+esc(d.nombre)+'</span>!';
+  $('lede').textContent='Tu beneficio del Club quedó validado. ¡Que lo disfrutés!';
+
+  // ticket con datos REALES
+  if(d.promo){
+    $('tEmoji').textContent = d.promo.emoji || '🎁';
+    $('tTitle').textContent = d.promo.titulo || '';
+    if(d.promo.descuento){ $('tDescTxt').textContent=d.promo.descuento; $('tDesc').hidden=false; }
+  }else{
+    $('tEmoji').textContent='🎫';
+    $('tTitle').textContent='Beneficio de tu membresía';
+  }
+  if(d.tipo){ $('tTipo').textContent=d.tipo; $('tTipo').hidden=false; }
+  $('codigo').textContent = codigo;
+  $('ticket').hidden=false;
+
+  $('status').className='status';
+  $('statusTxt').textContent='Válido — recién canjeado';
+  $('status').hidden=false;
+  $('footTxt').textContent='Disfrutá de tu beneficio con Kuxtal ✈️';
+  confetti();
 }
-function bad(ico,t,sub){
-  document.body.className='bad'; $('ico').textContent=ico;
-  $('card').innerHTML=`<div class="nom" style="font-size:22px">${esc(t)}</div>${sub?`<div class="sub">${esc(sub)}</div>`:''}`;
-  $('tag').textContent='';
+
+/* Fallas: mismo mapa de reasons que antes (falta/invalido/usado/vencido/membresia_vencida/error) */
+const REASONS={
+  falta:   {tone:'coral',glyph:'x',    eyebrow:'Falta el código', titulo:'No hay código para validar', lede:'Escaneá el QR de tu tarjeta Kuxtal para validar tu beneficio.', status:'Sin código'},
+  invalido:{tone:'coral',glyph:'x',    eyebrow:'Código inválido', titulo:'No reconocemos este código', lede:'Revisá el enlace o pedí uno nuevo desde tu tarjeta.', status:'Inválido'},
+  usado:   {tone:'gold', glyph:'check',eyebrow:'Beneficio ya usado', titulo:'Este código ya se canjeó', lede:'Este beneficio ya lo disfrutaste. Buscá el próximo en tu tarjeta del Club.', status:'Usado'},
+  vencido: {tone:'gold', glyph:'clock',eyebrow:'Código vencido', titulo:'Este código ya venció', lede:'Pedí uno nuevo desde tu tarjeta del Club.', status:'Vencido'},
+  membresia_vencida:{tone:'gold',glyph:'clock',eyebrow:'Membresía vencida', titulo:'Tu membresía venció', lede:'Renová para seguir disfrutando tus beneficios.', status:'Membresía vencida'},
+  error:   {tone:'coral',glyph:'x',    eyebrow:'No se pudo validar', titulo:'Algo salió mal', lede:'Reintentá en un momento.', status:'Error'}
+};
+function bad(reason, detalle){
+  const r=REASONS[reason]||REASONS.error;
+  document.body.classList.add('is-muted');
+  $('confetti').innerHTML='';
+  accent(r.tone); setSeal(r.glyph);
+  $('eyebrow').textContent=r.eyebrow;
+  $('titulo').textContent=r.titulo;
+  $('lede').textContent=r.lede;
+  $('ticket').hidden=true;
+  $('status').className='status';
+  $('statusTxt').textContent=r.status;
+  // detalle real: fecha de uso (mismo formato es-GT que antes)
+  if(reason==='usado' && detalle){
+    $('statusWhen').textContent='· el '+new Date(detalle).toLocaleString('es-GT');
+  }else{
+    $('statusWhen').textContent='';
+  }
+  $('status').hidden=false;
+  $('footTxt').textContent='Kuxtal Club · beneficios de tu membresía';
 }
-const MSG={falta:['❌','Falta el código',''],invalido:['❌','Código inválido',''],
-  usado:['⛔','Código ya usado',''],vencido:['⌛','Código vencido','Pedí uno nuevo'],
-  membresia_vencida:['⏳','Membresía vencida','Renová para usar tus beneficios'],error:['⚠️','No se pudo validar','Reintentá']};
+
+/* ---- FLUJO (intacto): lee ?c=, llama a la edge function ---- */
 (async function(){
   const c=new URLSearchParams(location.search).get('c')||'';
-  if(!c){ bad(...MSG.falta); return; }
+  if(!c){ bad('falta'); return; }
   try{
     const d=await (await fetch(FN+"?c="+encodeURIComponent(c))).json();
-    if(d.ok) ok(d);
-    else { const m=MSG[d.reason]||MSG.error; bad(m[0],m[1], d.reason==='usado'&&d.detalle?('el '+new Date(d.detalle).toLocaleString('es-GT')):m[2]); }
-  }catch(e){ bad(...MSG.error); }
+    if(d.ok) ok(d, c);
+    else bad(d.reason, d.detalle);
+  }catch(e){ bad('error'); }
 })();
 </script>
 </body></html>
