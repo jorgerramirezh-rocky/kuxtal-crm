@@ -102,6 +102,96 @@ const NO_RE = /^(no|nop|nel|cancel[aá]r?|cancelalo|mejor no|❌)$/i;
 function norm(t: string) {
   return (t || "").toLowerCase().replace(/[áàäâ]/g, "a").replace(/[éèëê]/g, "e").replace(/[íìïî]/g, "i").replace(/[óòöô]/g, "o").replace(/[úùüû]/g, "u").replace(/ñ/g, "n").replace(/ç/g, "c").trim();
 }
+// ── Búsqueda de socio (tabla real `socios` del CRM) ──────────────────────────
+// El bot corre con SERVICE_ROLE (acceso total, sin bloqueo de grant): puede leer
+// `socios` directo. Columnas reales confirmadas contra la base viva
+// (tevzfdiumfekvapamovw): no_socio, nombre, dpi (13 díg. texto), tipo/tipo_norm,
+// vencimiento (date), estado, copropietario.
+const COLS_SOCIO = "no_socio, nombre, dpi, tipo, tipo_norm, vencimiento, estado, copropietario";
+// Extrae un DPI (13 dígitos consecutivos) de un texto libre, si lo hay.
+function extraerDPI(texto: string): string | null {
+  const m = (texto || "").match(/(?<!\d)(\d{13})(?!\d)/);
+  return m ? m[1] : null;
+}
+// Traduce la fecha de vencimiento a un estado humano (vigente / por vencer / vencida).
+function estadoMembresia(venc: string | null) {
+  if (!venc) return { emoji: "⚠️", txt: "sin fecha de vencimiento registrada" };
+  const d = new Date(String(venc) + "T00:00:00Z");
+  if (isNaN(d.getTime())) return { emoji: "⚠️", txt: `vencimiento no reconocido (${venc})` };
+  const hoy = new Date();
+  const hoyUTC = Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate());
+  const dias = Math.round((d.getTime() - hoyUTC) / 86400000);
+  if (dias < 0) return { emoji: "🔴", txt: `VENCIDA hace ${-dias} día(s) — venció el ${venc}` };
+  if (dias <= 30) return { emoji: "🟡", txt: `vigente pero vence pronto: en ${dias} día(s) (el ${venc})` };
+  return { emoji: "🟢", txt: `vigente hasta el ${venc}` };
+}
+// Arma la ficha humana de un socio: estado / vencimiento / tipo, claro y cálido.
+function fichaSocio(s: Record<string, unknown>): string {
+  const nombre = String(s.nombre || "(sin nombre)");
+  const no = s.no_socio ? `No. de socio: ${s.no_socio}` : "No. de socio: (sin dato)";
+  const tipo = String((s.tipo_norm || s.tipo || "Sin dato"));
+  const em = estadoMembresia((s.vencimiento as string) ?? null);
+  // `estado` es un campo manual del CRM (a veces vacío): solo lo mostramos si trae algo.
+  const estadoCRM = s.estado ? `\n• Estado en el CRM: ${s.estado}` : "";
+  const copro = s.copropietario ? `\n• Copropietario: ${s.copropietario}` : "";
+  return `${em.emoji} ${nombre}\n• ${no}\n• Tipo de membresía: ${tipo}\n• Membresía: ${em.txt}${estadoCRM}${copro}`;
+}
+// Busca socios por DPI (13 díg.), número de socio (puro número) o nombre
+// (normalizado, sin acentos/mayúsculas, coincidencia parcial). Devuelve un mensaje
+// humano listo para enviar. Fail-safe: nunca lanza; ante error de DB responde neutro.
+async function buscarSocio(termino: string): Promise<string> {
+  const raw = (termino || "").trim();
+  const clean = raw.replace(/[\s.\-]/g, "");
+  const esNum = /^\d+$/.test(clean);
+  try {
+    let filas: Record<string, unknown>[] = [];
+    let comoNombre = false;
+    if (esNum && clean.length === 13) {
+      // DPI exacto.
+      const { data, error } = await db.from("socios").select(COLS_SOCIO).eq("dpi", clean).limit(6);
+      if (error) throw error;
+      filas = data || [];
+    } else if (esNum) {
+      // Número de socio exacto (no_socio se guarda como texto: "3172").
+      const { data, error } = await db.from("socios").select(COLS_SOCIO).eq("no_socio", clean).limit(6);
+      if (error) throw error;
+      filas = data || [];
+    } else {
+      // Nombre: traemos y filtramos por norm() para ser tolerantes a acentos/mayúsculas.
+      comoNombre = true;
+      const nq = norm(raw);
+      if (nq.length < 2) {
+        return "Necesito un poco más para buscarte ✈. Pasame tu número de socio, tu DPI (13 dígitos) o tu nombre completo.";
+      }
+      const { data, error } = await db.from("socios").select(COLS_SOCIO).limit(3000);
+      if (error) throw error;
+      filas = (data || []).filter((s)=>{
+        const n = norm(String(s.nombre || ""));
+        const c = norm(String(s.copropietario || ""));
+        return n.includes(nq) || c.includes(nq);
+      });
+    }
+    if (!filas.length) {
+      return `No encontré a nadie con «${raw}» 🤔.\nRevisá el dato y probá con tu número de socio, tu DPI (13 dígitos) o tu nombre completo. Si sigue sin salir, escribime «hablar con una persona» y te paso con el equipo. ✈`;
+    }
+    if (filas.length === 1) {
+      return `Esto es lo que tengo de tu membresía ✈\n\n${fichaSocio(filas[0])}\n\nEsto es la info que la comunidad Kuxtal tiene registrada, no un documento oficial. Si algo no cuadra, avisale al equipo. 🙏`;
+    }
+    // Varias coincidencias (típico al buscar por nombre): mostramos hasta 6.
+    const cuantas = filas.length;
+    const muestra = filas.slice(0, 6).map((s)=>fichaSocio(s)).join("\n\n");
+    const extra = comoNombre
+      ? "\n\nEncontré varias personas con ese nombre. Si ninguna es la tuya, mandame tu número de socio o tu DPI (13 dígitos) para afinar. ✈"
+      : "";
+    const encabezado = cuantas > 6
+      ? `Encontré ${cuantas} coincidencias — te muestro las primeras 6:`
+      : `Encontré ${cuantas} coincidencias:`;
+    return `${encabezado}\n\n${muestra}${extra}`;
+  } catch (e) {
+    console.error("buscarSocio:", scrub(e));
+    return "Uf, no pude revisar el registro de socios ahora mismo ✈. Reintentá en un momento, o escribime «hablar con una persona» y te paso con el equipo. 🙏";
+  }
+}
 // Busca la PRIMERA regla activa (orden por prioridad) cuyo disparador esté
 // contenido en el texto normalizado. Si ninguna matchea, devuelve la regla
 // tipo='fallback'. Lanza si la lectura de la DB falla (lo maneja el llamador).
@@ -193,6 +283,14 @@ async function escalarHumano(chatId: string, contacto: string, texto: string, co
 }
 // Responder por reglas: núcleo del motor. Fail-safe con mensaje neutro.
 async function responderPorReglas(chatId: string, chatIdNum: number, texto: string, contacto: string, convId: number | null) {
+  // Atajo de alta señal: si el mensaje trae un DPI (13 dígitos), es inequívoco
+  // que quiere consultar su membresía → lo resolvemos directo, sin pedir rol a
+  // ninguna regla. Funciona aunque todavía no exista la fila de regla en la DB.
+  const dpi = extraerDPI(texto);
+  if (dpi) {
+    await reply(chatIdNum, await buscarSocio(dpi));
+    return;
+  }
   let regla = null;
   try {
     regla = await buscarRegla(texto);
@@ -212,6 +310,15 @@ async function responderPorReglas(chatId: string, chatIdNum: number, texto: stri
         // Arranca el wizard de reservas que YA existe (intacto).
         await guardarSesion(chatId, "nombre", {});
         await reply(chatIdNum, "Para empezar, ¿a nombre de quién va la reserva? (nombre del socio) ✈");
+        break;
+      }
+    case "buscar_socio":
+      {
+        // Mini-wizard de 1 paso: pedimos el identificador y lo resolvemos al
+        // siguiente turno (consistente con "un paso por turno"). El estado
+        // "buscar_socio" está en PASOS_WIZARD, así lo agarra la máquina de estados.
+        await guardarSesion(chatId, "buscar_socio", {});
+        await reply(chatIdNum, "Con gusto reviso tu membresía ✈. Pasame tu número de socio, tu DPI (13 dígitos) o tu nombre completo.");
         break;
       }
     case "escalar_humano":
@@ -246,7 +353,8 @@ async function manejar(chatId: string, chatIdNum: number, texto: string, contact
     "destino",
     "fecha",
     "personas",
-    "confirmar"
+    "confirmar",
+    "buscar_socio"
   ];
   const wizardActivo = PASOS_WIZARD.includes(s.paso);
   // /start reinicia limpio y saluda por reglas (ya NO fuerza el wizard).
@@ -262,6 +370,18 @@ async function manejar(chatId: string, chatIdNum: number, texto: string, contact
   }
   // Reserva en curso → seguí el wizard existente, sin interrumpir con reglas.
   switch(s.paso){
+    case "buscar_socio":
+      {
+        // El usuario respondió con su identificador → buscamos y cerramos.
+        if (t.length < 2) {
+          await reply(chatIdNum, "Pasame tu número de socio, tu DPI (13 dígitos) o tu nombre completo, porfa. 🙏");
+          return;
+        }
+        const msg = await buscarSocio(t);
+        await borrarSesion(chatId);
+        await reply(chatIdNum, msg);
+        return;
+      }
     case "nombre":
       {
         if (t.length < 2 || t.length > 80) {
