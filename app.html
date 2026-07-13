@@ -1059,7 +1059,7 @@ async function cargarFunnelBI(){
   if(cargandoFunnel) return; cargandoFunnel=true;
   try{
     const P=await getJSON("funnel_prospectos?select=estado,etapa,califica,recepcion_en&limit=8000");
-    const COM=await getJSON("funnel_comisiones?select=monto&limit=5000");
+    const COM=esGerente?await getJSON("funnel_comisiones?select=monto&limit=5000"):[]; // #13-fix: el total de comisiones solo lo ve gerencia
     const total=P.length;
     const contact=P.filter(p=>p.estado!=='nuevo').length;   // dejó de ser 'nuevo'
     const asis=P.filter(p=>p.recepcion_en).length;           // asistió a la presentación
@@ -1163,7 +1163,7 @@ function tablero(){
   const fStages=[['Nuevo',fn.total],['Contactado',fn.contact],['Asistió',fn.asis],['Calificó',fn.cal],['Cerró',fn.cerr]];
   const fPipe=fn.total?fStages.map(([n,v])=>barRow(n,v||0,fn.total,'var(--kux)')).join(''):'<div class="sub">Sin prospectos en el embudo todavía.</div>';
   const embudoPanel=puedeEmbudo()?`<div class="panel full"><h3><svg class="svic" aria-hidden="true"><use href="#ic-target"/></svg> El embudo de ventas</h3><div class="sub">De prospecto a familia socia · pipeline, conversión y comisiones · <b onclick="ir('embudo')" style="cursor:pointer;text-decoration:underline">abrir el embudo</b></div>
-    ${fn.cargado?`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${leadN(fn.cerr,'var(--lima-d)','Familias cerradas')}${leadN(fn.conv+'%','var(--kux)','Conversión total')}${leadN('$'+Math.round(fn.comisiones).toLocaleString('es-GT'),'#6f9e12','Comisiones')}${leadN(fn.bajas,'var(--rojo)','Bajas')}</div>${fPipe}`:`<div class="sub">Cargando embudo…</div>`}</div>`:'';
+    ${fn.cargado?`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${leadN(fn.cerr,'var(--lima-d)','Familias cerradas')}${leadN(fn.conv+'%','var(--kux)','Conversión total')}${esGerente?leadN('$'+Math.round(fn.comisiones).toLocaleString('es-GT'),'#6f9e12','Comisiones'):''}${leadN(fn.bajas,'var(--rojo)','Bajas')}</div>${fPipe}`:`<div class="sub">Cargando embudo…</div>`}</div>`:'';
   $('tablero').innerHTML=`<div class="grid">
     <div class="insight full"><svg class="svic" aria-hidden="true"><use href="#ic-bell"/></svg> <b>Lo urgente:</b> ${proxMes} socio(s) vencen en los próximos 30 días · <b>${money(BI.enRiesgo)}</b> en juego a 12 meses. Andá a <b onclick="ir('vencimientos')" style="cursor:pointer;text-decoration:underline">Renovaciones</b>.</div>
     ${alerta}
