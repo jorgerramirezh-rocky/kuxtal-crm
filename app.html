@@ -667,45 +667,146 @@ function botPanel(botLeads){
   </div></div>
   <div class="insight full" style="margin-top:14px"><svg class="svic" aria-hidden="true"><use href="#ic-lock"/></svg> El cerebro del bot está <b>aislado y protegido</b>: vive en la base de Kuxtal, no comparte datos con nadie. Cuando se ceda, se protege con llave — no se regala.</div>`;
 }
-function ofertaCard(o){
-  const del = ROLE==='admin' ? `<button class="eb" style="flex:none;align-self:flex-start" aria-label="Quitar promoción" onclick="borrarPromo(${o.id})"><svg class="svic" aria-hidden="true"><use href="#ic-x"/></svg></button>` : '';
-  return `<div class="ocard"><div class="oemoji">${esc(o.emoji||'✈️')}</div><div class="obody"><div class="otit">${esc(o.titulo)} ${o.descuento?`<span class="odesc">${esc(o.descuento)}</span>`:''}</div><div class="odescr">${esc(o.descripcion||'')}</div><div class="ometa">${o.tipo_objetivo==='todos'?'Para todos los socios':'Exclusivo '+esc(o.tipo_objetivo)}${o.vigencia_hasta?' · hasta '+fechaTxt(o.vigencia_hasta):''}</div></div>${del}</div>`;
+// ── Promociones v2 (editar · audiencia · cupón · canceladas) ──
+// Columnas "extendidas" que solo persisten si se aplicó la migración additiva
+// (link/ubicacion/foto/cupon_multi). El resto usa columnas que YA existen.
+const EXT_COLS=['link','ubicacion','foto','cupon_multi'];
+let OF_EXT=null, CANCELADAS=null, cargandoCancel=false, verCancel=false, promoEdit=null;
+// ¿La base ya tiene las columnas extendidas? Se prueba una vez al arrancar.
+async function probeOfertasExt(){
+  try{ const r=await fetch(SB_URL+"/rest/v1/ofertas?select="+EXT_COLS.join(',')+"&limit=1",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}}); OF_EXT=!!r.ok; }
+  catch(e){ OF_EXT=false; }
 }
-function nuevaPromo(){
-  if(ROLE!=='admin') return;
-  $('promoBody').innerHTML=`<h3>Nueva promoción</h3>
-    <label>Emoji</label><input id="p_emoji" value="✈️" maxlength="4">
-    <label>Título</label><input id="p_tit" placeholder="Ej. Cancún 2x1">
-    <label>Descripción</label><input id="p_desc" placeholder="Detalle del beneficio">
-    <label>Descuento (texto)</label><input id="p_dto" placeholder="Ej. 30%, 2x1, Regalo">
-    <label>Para</label><select id="p_tipo"><option value="todos">Todos los socios</option><option>VIP</option><option>Exclusivo</option><option>Gold</option><option>Regular</option></select>
-    <label>Vigente hasta</label><input id="p_venc" type="date">
+function audLabel(o){ const t=o.tipo_objetivo; if(t==='todos') return 'Para todos los socios'; if(t==='publico') return 'Todo público · publicable en la web'; return 'Exclusivo '+esc(t||'—'); }
+function cuponLabel(o){ return o.cupon_multi?'Cupón multi-uso':'Cupón 1 uso por socio'; }
+function ofertaCard(o){
+  const acc = ROLE==='admin' ? `<div style="display:flex;flex-direction:column;gap:6px;flex:none;align-self:flex-start">
+      <button class="eb" aria-label="Editar promoción" onclick="editarPromo(${o.id})"><svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg></button>
+      <button class="eb" aria-label="Cancelar promoción" onclick="cancelarPromo(${o.id})"><svg class="svic" aria-hidden="true"><use href="#ic-x"/></svg></button>
+    </div>` : '';
+  const foto = o.foto ? `<div style="margin-top:8px"><img src="${esc(o.foto)}" alt="" loading="lazy" style="max-width:100%;max-height:160px;border-radius:10px;object-fit:cover"></div>` : '';
+  const linkOk=o.link&&/^https?:\/\//i.test(o.link);
+  const linea2=[]; if(o.ubicacion) linea2.push(esc(o.ubicacion)); if(linkOk) linea2.push(`<a href="${esc(o.link)}" target="_blank" rel="noopener" style="color:var(--kux);font-weight:700">Ver más →</a>`);
+  return `<div class="ocard" style="align-items:flex-start"><div class="oemoji">${esc(o.emoji||'✈️')}</div><div class="obody">
+    <div class="otit">${esc(o.titulo)} ${o.descuento?`<span class="odesc">${esc(o.descuento)}</span>`:''}</div>
+    <div class="odescr">${esc(o.descripcion||'')}</div>${foto}
+    <div class="ometa">${audLabel(o)}${o.vigencia_hasta?' · hasta '+fechaTxt(o.vigencia_hasta):''} · ${cuponLabel(o)}</div>
+    ${linea2.length?`<div class="ometa" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:3px">${linea2.join(' · ')}</div>`:''}
+  </div>${acc}</div>`;
+}
+function nuevaPromo(){ if(ROLE!=='admin') return; promoEdit=null; abrirPromoForm(null); }
+function editarPromo(id){ if(ROLE!=='admin') return; const o=OFERTAS.find(x=>x.id===id)||(CANCELADAS||[]).find(x=>x.id===id); if(!o) return; promoEdit=o; abrirPromoForm(o); }
+function abrirPromoForm(o){
+  o=o||{};
+  const t=o.tipo_objetivo||'todos';
+  const aud = t==='todos'?'todos':(t==='publico'?'publico':'grupo');
+  const grupoVal = aud==='grupo'?t:'VIP';
+  const extNote = OF_EXT===false ? `<div class="ferr" style="color:var(--gold-t)">La foto, el link y la ubicación se guardan cuando se aplique la actualización de base pendiente.</div>` : '';
+  $('promoBody').innerHTML=`<h3>${o.id?'Editar promoción':'Nueva promoción'}</h3>
+    <label>Emoji</label><input id="p_emoji" value="${esc(o.emoji||'✈️')}" maxlength="4">
+    <label>Título</label><input id="p_tit" placeholder="Ej. Cancún 2x1" value="${esc(o.titulo||'')}">
+    <label>Descripción</label><input id="p_desc" placeholder="Detalle del beneficio" value="${esc(o.descripcion||'')}">
+    <label>Descuento / etiqueta</label><input id="p_dto" placeholder="Ej. 30%, 2x1, Regalo" value="${esc(o.descuento||'')}">
+    <label>Audiencia</label><select id="p_aud" onchange="audToggle()">
+      <option value="todos"${aud==='todos'?' selected':''}>Todos los socios</option>
+      <option value="grupo"${aud==='grupo'?' selected':''}>Un grupo / membresía</option>
+      <option value="publico"${aud==='publico'?' selected':''}>Todo público (publicable en la web)</option>
+    </select>
+    <div id="p_grupoWrap" style="display:${aud==='grupo'?'block':'none'}">
+      <label>¿Cuál grupo?</label><select id="p_grupo">${['VIP','Gold','Exclusivo','Regular'].map(g=>`<option${grupoVal===g?' selected':''}>${g}</option>`).join('')}</select>
+    </div>
+    <label>Vigente hasta</label><input id="p_venc" type="date" value="${esc(o.vigencia_hasta||'')}">
+    <label>Cupón</label><select id="p_multi">
+      <option value=""${!o.cupon_multi?' selected':''}>1 uso por socio</option>
+      <option value="1"${o.cupon_multi?' selected':''}>Multi-uso (varias veces)</option>
+    </select>
+    <label>Link (opcional)</label><input id="p_link" placeholder="https://…" value="${esc(o.link||'')}">
+    <label>Ubicación (opcional)</label><input id="p_ubic" placeholder="Ej. Zona 10, Guatemala" value="${esc(o.ubicacion||'')}">
+    <label>Foto — URL (opcional)</label><input id="p_foto" placeholder="https://…/foto.jpg" value="${esc(o.foto||'')}">
+    ${extNote}
     <div class="ferr" id="p_err"></div>
-    <div class="macc"><button class="mcancel" onclick="cerrarPromo()">Cancelar</button><button class="msave" id="p_save" onclick="guardarPromo()">Crear</button></div>`;
+    <div class="macc"><button class="mcancel" onclick="cerrarPromo()">Cancelar</button><button class="msave" id="p_save" onclick="guardarPromo()">${o.id?'Guardar':'Crear'}</button></div>`;
   $('promoModal').style.display='flex';
 }
+function audToggle(){ const a=$('p_aud').value; $('p_grupoWrap').style.display=a==='grupo'?'block':'none'; }
 function cerrarPromo(){ $('promoModal').style.display='none'; }
 async function guardarPromo(){
   const tit=$('p_tit').value.trim(); if(!tit){ $('p_err').textContent='Poné un título.'; return; }
-  const body={emoji:$('p_emoji').value.trim()||'✈️',titulo:tit,descripcion:$('p_desc').value.trim()||null,descuento:$('p_dto').value.trim()||null,tipo_objetivo:$('p_tipo').value,vigencia_hasta:$('p_venc').value||null,activa:true};
-  const btn=$('p_save'); btn.disabled=true; btn.textContent='Creando…';
-  try{
-    const r=await fetch(SB_URL+"/rest/v1/ofertas",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify(body)});
-    if(!r.ok) throw 0;
-    // Aparece YA (admin y cliente filtran OFERTAS por tipo_objetivo): insertá lo que devolvió el POST.
-    let nueva=null; try{ const arr=await r.json(); nueva=Array.isArray(arr)?arr[0]:arr; }catch(_e){}
-    if(!nueva) nueva=Object.assign({id:'tmp'+Date.now(),creado_en:new Date().toISOString()},body);
-    OFERTAS.unshift(nueva); cerrarPromo(); render(); toast('Promo creada');
-    // Reconciliá con el servidor, pero NUNCA borres la lista si la relectura falla o viene vacía.
-    try{ const fresca=await traerOfertas(); if(Array.isArray(fresca)&&fresca.length){ OFERTAS=fresca; render(); } }catch(_e){}
+  const aud=$('p_aud').value;
+  const tipo = aud==='grupo' ? $('p_grupo').value : aud; // 'todos' | 'publico' | (grupo p.ej. 'VIP')
+  const body={emoji:$('p_emoji').value.trim()||'✈️',titulo:tit,descripcion:$('p_desc').value.trim()||null,descuento:$('p_dto').value.trim()||null,tipo_objetivo:tipo,vigencia_hasta:$('p_venc').value||null};
+  if(OF_EXT===true){ // solo mando columnas extendidas si la base las tiene (evita 400)
+    body.link=$('p_link').value.trim()||null;
+    body.ubicacion=$('p_ubic').value.trim()||null;
+    body.foto=$('p_foto').value.trim()||null;
+    body.cupon_multi=$('p_multi').value==='1';
   }
-  catch(e){ $('p_err').textContent='No se pudo crear (¿sos admin?).'; }
-  finally{ btn.disabled=false; btn.textContent='Crear'; }
+  const editing = promoEdit && promoEdit.id && String(promoEdit.id).slice(0,3)!=='tmp';
+  const btn=$('p_save'); btn.disabled=true; btn.textContent=editing?'Guardando…':'Creando…';
+  try{
+    if(editing){
+      const r=await fetch(SB_URL+"/rest/v1/ofertas?id=eq."+promoEdit.id,{method:"PATCH",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify(body)});
+      if(!r.ok) throw 0;
+      let upd=null; try{ const arr=await r.json(); upd=Array.isArray(arr)?arr[0]:arr; }catch(_e){}
+      if(!upd) upd=Object.assign({},promoEdit,body);
+      // Actualizá en su lugar; NUNCA borres la lista.
+      OFERTAS=OFERTAS.map(x=>x.id===promoEdit.id?upd:x); cerrarPromo(); render(); toast('Promo actualizada');
+    } else {
+      body.activa=true;
+      const r=await fetch(SB_URL+"/rest/v1/ofertas",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify(body)});
+      if(!r.ok) throw 0;
+      // Aparece YA: insertá lo que devolvió el POST (bug "no aparece al crear" cerrado con unshift).
+      let nueva=null; try{ const arr=await r.json(); nueva=Array.isArray(arr)?arr[0]:arr; }catch(_e){}
+      if(!nueva) nueva=Object.assign({id:'tmp'+Date.now(),creado_en:new Date().toISOString()},body);
+      OFERTAS.unshift(nueva); cerrarPromo(); render(); toast('Promo creada');
+      // Reconciliá con el servidor, pero NUNCA borres la lista si la relectura falla o viene vacía.
+      try{ const fresca=await traerOfertas(); if(Array.isArray(fresca)&&fresca.length){ OFERTAS=fresca; render(); } }catch(_e){}
+    }
+  }
+  catch(e){ $('p_err').textContent=(editing?'No se pudo guardar':'No se pudo crear')+' (¿sos admin?).'; }
+  finally{ btn.disabled=false; btn.textContent=editing?'Guardar':'Crear'; }
 }
-async function borrarPromo(id){
-  if(ROLE!=='admin' || !confirm('¿Quitar esta promoción?')) return;
-  try{ const r=await fetch(SB_URL+"/rest/v1/ofertas?id=eq."+id,{method:"DELETE",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,Prefer:"return=minimal"}}); if(!r.ok) throw 0;
-    OFERTAS=OFERTAS.filter(o=>o.id!==id); render(); toast('Promo quitada'); }catch(e){ toast('No se pudo'); }
+// ── Base de canceladas: cancelar NO borra (activa=false) + historial + reactivar ──
+async function cancelarPromo(id){
+  if(ROLE!=='admin' || !confirm('¿Cancelar esta promoción? Se guarda en el historial, no se borra.')) return;
+  try{
+    const r=await fetch(SB_URL+"/rest/v1/ofertas?id=eq."+id,{method:"PATCH",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({activa:false})});
+    if(!r.ok) throw 0;
+    const o=OFERTAS.find(x=>x.id===id); OFERTAS=OFERTAS.filter(x=>x.id!==id);
+    if(o){ o.activa=false; if(CANCELADAS!==null) CANCELADAS.unshift(o); }
+    render(); toast('Promo cancelada (queda en el historial)');
+  }catch(e){ toast('No se pudo'); }
+}
+async function reactivarPromo(id){
+  if(ROLE!=='admin') return;
+  try{
+    const r=await fetch(SB_URL+"/rest/v1/ofertas?id=eq."+id,{method:"PATCH",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({activa:true})});
+    if(!r.ok) throw 0;
+    const o=(CANCELADAS||[]).find(x=>x.id===id); if(CANCELADAS) CANCELADAS=CANCELADAS.filter(x=>x.id!==id);
+    if(o){ o.activa=true; OFERTAS.unshift(o); }
+    render(); toast('Promo reactivada');
+  }catch(e){ toast('No se pudo'); }
+}
+async function traerCanceladas(){
+  try{ const r=await fetch(SB_URL+"/rest/v1/ofertas?select=*&activa=eq.false&order=creado_en.desc",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}}); if(!r.ok) return []; return await r.json(); }
+  catch(e){ return []; }
+}
+async function toggleCanceladas(){
+  verCancel=!verCancel;
+  if(verCancel && CANCELADAS===null && !cargandoCancel){ cargandoCancel=true; render(); CANCELADAS=await traerCanceladas(); cargandoCancel=false; }
+  render();
+}
+function cancelCard(o){
+  return `<div class="ocard isused" style="align-items:flex-start"><div class="oemoji">${esc(o.emoji||'✈️')}</div><div class="obody">
+    <div class="otit">${esc(o.titulo)} ${o.descuento?`<span class="odesc">${esc(o.descuento)}</span>`:''}</div>
+    <div class="odescr">${esc(o.descripcion||'')}</div>
+    <div class="ometa">${audLabel(o)}${o.vigencia_hasta?' · vencía '+fechaTxt(o.vigencia_hasta):''} · Cancelada</div>
+  </div><button class="eb" style="flex:none;align-self:flex-start" onclick="reactivarPromo(${o.id})"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> Reactivar</button></div>`;
+}
+function canceladasHTML(){
+  if(cargandoCancel && CANCELADAS===null) return `<div class="vacio"><span class="spin"></span> Cargando…</div>`;
+  if(!CANCELADAS || !CANCELADAS.length) return `<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-folder"/></svg></span><b>Sin promociones canceladas</b><p>Las que canceles quedan acá para consultarlas o reactivarlas.</p></div>`;
+  return CANCELADAS.map(cancelCard).join('');
 }
 // ── Admin: Calidad de datos + Roles/Organigrama (gateado a admin) ──
 let ALERTAS=null, cargandoCal=false, caF='';
@@ -1113,7 +1214,16 @@ function render(){
   $('cap').textContent=caps[tab]||'';
   if(tab==='tablero'){$('lista').innerHTML='';tablero();return;}
   $('tablero').innerHTML=''; Object.values(charts).forEach(c=>c&&c.destroy()); charts={};
-  if(tab==='promos'){const nueva=ROLE==='admin'?`<button class="masbtn" style="margin-bottom:10px" onclick="nuevaPromo()">＋ Nueva promoción</button>`:'';$('lista').innerHTML=nueva+(OFERTAS.length?OFERTAS.map(ofertaCard).join(''):`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-gift"/></svg></span><b>Sin promociones activas</b><p>${ROLE==='admin'?'Creá la primera con el botón de arriba.':'Pronto habrá novedades.'}</p></div>`);return;}
+  if(tab==='promos'){
+    let head='';
+    if(ROLE==='admin'){ head=`<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <button class="masbtn" style="flex:1;margin:0" onclick="nuevaPromo()">＋ Nueva promoción</button>
+        <button class="fb${verCancel?' on':''}" onclick="toggleCanceladas()"><svg class="svic" aria-hidden="true"><use href="#ic-folder"/></svg> Canceladas</button>
+      </div>`; }
+    const activas = OFERTAS.length?OFERTAS.map(ofertaCard).join(''):`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-gift"/></svg></span><b>Sin promociones activas</b><p>${ROLE==='admin'?'Creá la primera con el botón de arriba.':'Pronto habrá novedades.'}</p></div>`;
+    const cancel = (ROLE==='admin'&&verCancel)?`<h3 style="margin:18px 0 10px;color:var(--gris)"><svg class="svic" aria-hidden="true"><use href="#ic-folder"/></svg> Historial de canceladas</h3>`+canceladasHTML():'';
+    $('lista').innerHTML=head+activas+cancel; return;
+  }
   if(tab==='leads'){
     if(LEADS===null){
       $('lista').innerHTML='<div class="vacio"><span class="spin"></span> Cargando prospectos…</div>';
@@ -1225,10 +1335,10 @@ async function regInter(id,tipo){
 // ── Kuxtal Club: tarjeta digital + beneficio + validación ──
 let pendingValidar=null;
 function cardHTML(x,usados){
-  usados=usados||[];
+  usados=usados||{};
   const anio=x.ingreso?x.ingreso.slice(0,4):'';
   const vencido=x.dv!=null&&x.dv<0;
-  const misOf=vencido?[]:OFERTAS.filter(o=>o.tipo_objetivo==='todos'||o.tipo_objetivo===x.tipo);
+  const misOf=vencido?[]:OFERTAS.filter(o=>o.tipo_objetivo==='todos'||o.tipo_objetivo==='publico'||o.tipo_objetivo===x.tipo);
   const top=`
     <div class="tcard${x.tipo==='VIP'?' vip':''}">
       <div class="tcard-top"><span class="tt">KUXTAL TRAVELS</span><span class="tplane"><svg class="svic" aria-hidden="true"><use href="#ic-plane"/></svg></span></div>
@@ -1238,16 +1348,21 @@ function cardHTML(x,usados){
     </div>`;
   let benef;
   if(vencido) benef=`<div class="ocard" style="border-color:#f3b0ab;background:#fdecea"><div class="oemoji"><svg class="svic" aria-hidden="true"><use href="#ic-clock"/></svg></div><div class="obody"><div class="otit" style="color:#b3261e">Membresía vencida</div><div class="odescr">Venció el ${fechaTxt(x.venc)}. Renovala para volver a disfrutar tus beneficios.</div></div></div>`;
-  else if(misOf.length) benef=`<h4 class="bh">Tus beneficios</h4>`+misOf.map(o=>ofertaBenef(o,usados.includes(o.id),x.id)).join('');
+  else if(misOf.length) benef=`<h4 class="bh">Tus beneficios</h4>`+misOf.map(o=>ofertaBenef(o,(usados&&usados[o.id])||0,x.id)).join('');
   else benef=`<p style="color:var(--gris);font-size:12.5px;text-align:center;margin:14px 2px">No hay promos para tu membresía ahora mismo.</p>`;
   return top+benef;
 }
-function ofertaBenef(o,usado,sid){
-  const right = usado ? `<span class="obadge used"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> Usado</span>` : `<span class="obadge use">Usar →</span>`;
-  const attrs = usado ? '' : `onclick="usarPromo(${sid},${o.id})" style="cursor:pointer"`;
-  return `<div class="ocard${usado?' isused':''}" ${attrs}><div class="oemoji">${esc(o.emoji||'✈️')}</div><div class="obody"><div class="otit">${esc(o.titulo)} ${o.descuento?`<span class="odesc">${esc(o.descuento)}</span>`:''}</div><div class="odescr">${esc(o.descripcion||'')}</div><div class="ometa">${o.vigencia_hasta?'Vigente hasta '+fechaTxt(o.vigencia_hasta):''}</div></div>${right}</div>`;
+// n = cuántas veces la usó este socio. 1-uso: si n>0 → USADO y no deja. Multi: muestra "usado N veces" y deja.
+function ofertaBenef(o,n,sid){
+  n=n||0; const multi=!!o.cupon_multi; const bloqueado = !multi && n>0;
+  const right = bloqueado
+    ? `<span class="obadge used"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> Usado</span>`
+    : `<span class="obadge use">${(multi&&n>0)?('Usado '+n+(n===1?' vez · ':' veces · ')):''}Usar →</span>`;
+  const attrs = bloqueado ? '' : `onclick="usarPromo(${sid},${o.id})" style="cursor:pointer"`;
+  return `<div class="ocard${bloqueado?' isused':''}" ${attrs}><div class="oemoji">${esc(o.emoji||'✈️')}</div><div class="obody"><div class="otit">${esc(o.titulo)} ${o.descuento?`<span class="odesc">${esc(o.descuento)}</span>`:''}</div><div class="odescr">${esc(o.descripcion||'')}</div><div class="ometa">${o.vigencia_hasta?'Vigente hasta '+fechaTxt(o.vigencia_hasta):''}${multi?' · multi-uso':''}</div></div>${right}</div>`;
 }
-async function usosDeSocio(sid){ try{ const r=await fetch(SB_URL+"/rest/v1/usos?socio_id=eq."+sid+"&select=oferta_id",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}}); if(!r.ok) return []; return (await r.json()).map(u=>u.oferta_id).filter(v=>v!=null); }catch(e){ return []; } }
+// Devuelve {oferta_id: veces_usada} para este socio.
+async function usosDeSocio(sid){ try{ const r=await fetch(SB_URL+"/rest/v1/usos?socio_id=eq."+sid+"&select=oferta_id",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}}); if(!r.ok) return {}; const m={}; (await r.json()).forEach(u=>{ if(u.oferta_id!=null) m[u.oferta_id]=(m[u.oferta_id]||0)+1; }); return m; }catch(e){ return {}; } }
 async function renderCard(){ const x=gente.find(g=>g.id===cardCtx.sid); if(!x||!$(cardCtx.target)) return; const usados=await usosDeSocio(x.id); $(cardCtx.target).innerHTML=cardHTML(x,usados); }
 async function abrirTarjeta(id){ cardCtx={sid:id,target:'tarjetaBody'}; $('tarjetaBody').innerHTML='<p style="text-align:center;color:var(--gris);padding:22px">Cargando…</p>'; $('tarjeta').style.display='flex'; await renderCard(); }
 async function mostrarMiembro(){
@@ -1277,7 +1392,7 @@ function mostrarQR(o,codigo){
     ${o.descuento?`<div class="odesc" style="display:inline-block;margin-bottom:10px">${esc(o.descuento)}</div>`:''}
     <div class="qrbox"><div id="qrc"></div></div>
     <div class="codebig">${codigo}</div>
-    <div style="color:var(--gris);font-size:12px;margin-top:4px">Mostralo en el local · vence en 15 min · un solo uso</div>
+    <div style="color:var(--gris);font-size:12px;margin-top:4px">Mostralo en el local · vence en 15 min · ${o.cupon_multi?'multi-uso':'un solo uso'}</div>
     <button class="btn-c edit" style="margin-top:14px" onclick="volverTarjeta()">← Volver a mi tarjeta</button>
   </div>`;
   if(window.QRCode) new QRCode(document.getElementById('qrc'),{text:url,width:210,height:210,correctLevel:QRCode.CorrectLevel.M});
@@ -1321,7 +1436,7 @@ async function arrancar(){
   $('gate').style.display='none'; $('app').style.display='none'; $('load').style.display='flex';
   try{
     decodeUser();
-    gente=await traerSocios(); OFERTAS=await traerOfertas(); calcularBI();
+    gente=await traerSocios(); OFERTAS=await traerOfertas(); await probeOfertasExt(); calcularBI();
     // F2 Kaizen: prospectos al tablero — cargan en paralelo, nunca frenan el arranque
     if(ROLE!=='cliente'&&LEADS===null&&!cargandoLeads){ cargandoLeads=true;
       traerLeads().then(rows=>{LEADS=rows;cargandoLeads=false;calcularBI();if(tab==='tablero'||tab==='leads'||tab==='bot')render();})
