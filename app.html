@@ -493,7 +493,7 @@
 const SB_URL="https://tevzfdiumfekvapamovw.supabase.co";
 const SB_PUB="sb_publishable_MMVJjzrA1rHdnMWxl0zeMA_DTDTTGTJ";
 const LS="kux_sesion";
-let SES=null, USER="equipo", ROLE="invitado", gente=[], OFERTAS=[], LEADS=null, cargandoLeads=false, BI={}, tab="tablero", vf=90, dirF="todos", dirTipo="", dirCloser="", verLim=60, editId=null, cardCtx={sid:null,target:'tarjetaBody'}, charts={};
+let SES=null, USER="equipo", ROLE="invitado", gente=[], OFERTAS=[], LEADS=null, cargandoLeads=false, FUNNEL=null, cargandoFunnel=false, BI={}, tab="tablero", vf=90, dirF="todos", dirTipo="", dirCloser="", verLim=60, editId=null, cardCtx={sid:null,target:'tarjetaBody'}, charts={};
 const EDITORES=['admin','gerente_general','gerente_ventas'];
 const puedeEditar=()=>EDITORES.includes(ROLE);
 const HOY=new Date(); HOY.setHours(0,0,0,0);
@@ -1051,6 +1051,28 @@ function calcularBI(){
     cartera:{'Vigentes':vig,'Vencidos':ven,'Sin fecha':sinf},ingMes,acum,leads:leadsBI};
 }
 
+// ── Pendiente #13: KPIs del EMBUDO en el tablero principal ──
+// Antes vivían aislados en Embudo▸Analítica (vistaAnalitica). Acá se cargan en paralelo
+// (mismos reads que la analítica del embudo: funnel_prospectos + funnel_comisiones) y se
+// pintan junto a los KPIs de socios. Solo para roles que ven el embudo (puedeEmbudo).
+async function cargarFunnelBI(){
+  if(cargandoFunnel) return; cargandoFunnel=true;
+  try{
+    const P=await getJSON("funnel_prospectos?select=estado,etapa,califica,recepcion_en&limit=8000");
+    const COM=await getJSON("funnel_comisiones?select=monto&limit=5000");
+    const total=P.length;
+    const contact=P.filter(p=>p.estado!=='nuevo').length;   // dejó de ser 'nuevo'
+    const asis=P.filter(p=>p.recepcion_en).length;           // asistió a la presentación
+    const cal=P.filter(p=>p.califica===true).length;         // calificó
+    const cerr=P.filter(p=>p.etapa==='socio').length;        // cerró (familia socia)
+    const bajas=P.filter(p=>p.etapa==='baja').length;
+    let comisiones=0; COM.forEach(c=>{comisiones+=Number(c.monto||0);});
+    FUNNEL={total,contact,asis,cal,cerr,bajas,comisiones,
+      conv:total>0?Math.round(cerr/total*100):0, cargado:true};
+  }catch(e){ FUNNEL={cargado:false}; }
+  finally{ cargandoFunnel=false; }
+}
+
 // ── Render ──
 const chipTipo=t=>({VIP:'vip',Exclusivo:'exc',Gold:'gold'}[t]||'reg');
 const fechaTxt=s=>s?new Date(s+"T00:00:00").toLocaleDateString('es-GT',{day:'numeric',month:'short',year:'numeric'}):'—';
@@ -1136,10 +1158,17 @@ function tablero(){
   const leadN=(v,c,t)=>`<div style="flex:1;min-width:90px;background:var(--kux-l);border-radius:12px;padding:12px 8px;text-align:center"><b style="display:block;font-size:22px;color:${c};font-variant-numeric:tabular-nums">${v}</b><span style="font-size:11px;color:var(--gris)">${t}</span></div>`;
   const prospectos=`<div class="panel full"><h3><svg class="svic" aria-hidden="true"><use href="#ic-target"/></svg> Prospectos (interesados)</h3><div class="sub">Los que dejan sus datos en la web o le escriben al bot · <b onclick="ir('leads')" style="cursor:pointer;text-decoration:underline">ver y dar seguimiento</b></div>
     ${lb.cargado?`<div style="display:flex;gap:10px;flex-wrap:wrap">${leadN(lb.nuevos,'#7e5c06','Nuevos')}${leadN(lb.contactados,'var(--kux)','Contactados')}${leadN(lb.convertidos,'var(--lima-d)','Ya son socios')}</div>`:`<div class="sub">Cargando prospectos…</div>`}</div>`;
+  // Pendiente #13: EL EMBUDO en el tablero (pipeline + conversión + cierres + comisiones + bajas)
+  const fn=FUNNEL||{cargado:false};
+  const fStages=[['Nuevo',fn.total],['Contactado',fn.contact],['Asistió',fn.asis],['Calificó',fn.cal],['Cerró',fn.cerr]];
+  const fPipe=fn.total?fStages.map(([n,v])=>barRow(n,v||0,fn.total,'var(--kux)')).join(''):'<div class="sub">Sin prospectos en el embudo todavía.</div>';
+  const embudoPanel=puedeEmbudo()?`<div class="panel full"><h3><svg class="svic" aria-hidden="true"><use href="#ic-target"/></svg> El embudo de ventas</h3><div class="sub">De prospecto a familia socia · pipeline, conversión y comisiones · <b onclick="ir('embudo')" style="cursor:pointer;text-decoration:underline">abrir el embudo</b></div>
+    ${fn.cargado?`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${leadN(fn.cerr,'var(--lima-d)','Familias cerradas')}${leadN(fn.conv+'%','var(--kux)','Conversión total')}${leadN('$'+Math.round(fn.comisiones).toLocaleString('es-GT'),'#6f9e12','Comisiones')}${leadN(fn.bajas,'var(--rojo)','Bajas')}</div>${fPipe}`:`<div class="sub">Cargando embudo…</div>`}</div>`:'';
   $('tablero').innerHTML=`<div class="grid">
     <div class="insight full"><svg class="svic" aria-hidden="true"><use href="#ic-bell"/></svg> <b>Lo urgente:</b> ${proxMes} socio(s) vencen en los próximos 30 días · <b>${money(BI.enRiesgo)}</b> en juego a 12 meses. Andá a <b onclick="ir('vencimientos')" style="cursor:pointer;text-decoration:underline">Renovaciones</b>.</div>
     ${alerta}
     ${prospectos}
+    ${embudoPanel}
     <div class="panel full"><h3><svg class="svic" aria-hidden="true"><use href="#ic-wave"/></svg> La ola de renovaciones (socios por año)</h3><div class="sub">Cuántas membresías vencen cada año. Pico 2028-2031 (~${olaMax}/año). Rojo=vencido, amarillo=este año, azul=futuro.</div><div class="canvas-box"><canvas id="c6"></canvas></div></div>
     <div class="panel"><h3>Ingreso por mes (US$)</h3><div class="sub">Por mes de ingreso del socio (últimos 12)</div><div class="canvas-box"><canvas id="c1"></canvas></div></div>
     <div class="panel"><h3>Ingreso acumulado</h3><div class="sub">La curva de crecimiento</div><div class="canvas-box"><canvas id="c2"></canvas></div></div>
@@ -1441,6 +1470,10 @@ async function arrancar(){
     if(ROLE!=='cliente'&&LEADS===null&&!cargandoLeads){ cargandoLeads=true;
       traerLeads().then(rows=>{LEADS=rows;cargandoLeads=false;calcularBI();if(tab==='tablero'||tab==='leads'||tab==='bot')render();})
         .catch(()=>{cargandoLeads=false;/* la pestaña Prospectos reintenta sola al entrar */});
+    }
+    // Pendiente #13: KPIs del embudo al tablero — cargan en paralelo, nunca frenan el arranque
+    if(puedeEmbudo()&&FUNNEL===null&&!cargandoFunnel){
+      cargarFunnelBI().then(()=>{ if(tab==='tablero')render(); });
     }
     $('load').style.display='none'; $('app').style.display='block';
     document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>ir(t.dataset.t));
