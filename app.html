@@ -353,6 +353,18 @@
   .itadd{border:1px dashed var(--kux);background:var(--kux-l);color:var(--kux);border-radius:10px;padding:10px 14px;font-size:13px;font-weight:700;cursor:pointer;min-height:44px;width:100%}
   .expfoot{font-size:11.5px;color:var(--gris);margin-top:12px;text-align:center}
   @media (min-width:560px){ .fld{min-width:150px} }
+  /* EXPEDIENTE (hilo conductor) — línea de tiempo en la ficha admin */
+  .expediente{margin-top:16px;padding-top:14px;border-top:1px solid var(--linea)}
+  .expediente .bh{display:flex;align-items:center;gap:7px}
+  .exp-row{display:flex;gap:11px;align-items:flex-start;padding:9px 0}
+  .exp-row+.exp-row{border-top:1px dashed var(--linea)}
+  .exp-ic{flex:none;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:var(--kux-l);color:var(--kux)}
+  .exp-ic .svic{width:16px;height:16px}
+  .exp-b{min-width:0;flex:1}
+  .exp-f{font-size:11px;color:var(--gris);font-weight:600}
+  .exp-t{font-size:14px;font-weight:600;line-height:1.3}
+  .exp-s{font-size:12.5px;color:var(--gris)}
+  .exp-note{font-size:11.5px;color:var(--gris);margin-top:11px;font-style:italic}
 </style>
 </head>
 <body>
@@ -1392,7 +1404,23 @@ function ofertaBenef(o,n,sid){
 }
 // Devuelve {oferta_id: veces_usada} para este socio.
 async function usosDeSocio(sid){ try{ const r=await fetch(SB_URL+"/rest/v1/usos?socio_id=eq."+sid+"&select=oferta_id",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}}); if(!r.ok) return {}; const m={}; (await r.json()).forEach(u=>{ if(u.oferta_id!=null) m[u.oferta_id]=(m[u.oferta_id]||0)+1; }); return m; }catch(e){ return {}; } }
-async function renderCard(){ const x=gente.find(g=>g.id===cardCtx.sid); if(!x||!$(cardCtx.target)) return; const usados=await usosDeSocio(x.id); $(cardCtx.target).innerHTML=cardHTML(x,usados); }
+async function renderCard(){ const x=gente.find(g=>g.id===cardCtx.sid); if(!x||!$(cardCtx.target)) return; const usados=await usosDeSocio(x.id); let html=cardHTML(x,usados); if(cardCtx.target==='tarjetaBody'){ try{ html+=await expedienteHTML(x); }catch(e){} } $(cardCtx.target).innerHTML=html; }
+// EXPEDIENTE (hilo conductor) — SOLO vista admin (ficha 'tarjetaBody', abierta desde el Directorio).
+// La línea de tiempo de la familia (agrupada por N° de socio). Arranca en socio con la data que hay;
+// de aquí en adelante cada acción del CRM sumará su hito. El cliente (miembroCard) NO ve esto.
+async function expedienteHTML(x){
+  const ev=[];
+  if(x.ingreso) ev.push({f:x.ingreso, ic:'ic-user', t:'Se hizo socio N° '+(x.no||'—'), s:x.tipo?('Membresía '+x.tipo):''});
+  try{
+    const rs=await getJSON('funnel_reservas?select=destino,fecha_viaje,personas,estado,creado_en&socio_nombre=eq.'+encodeURIComponent(x.n||''));
+    rs.forEach(r=>ev.push({f:r.fecha_viaje||r.creado_en, ic:'ic-plane', t:'Reserva: '+(r.destino||'destino')+(r.personas?' · '+r.personas+' pers':''), s:r.estado||''}));
+  }catch(e){}
+  if(x.venc){ const vd=x.dv!=null&&x.dv<0; ev.push({f:x.venc, ic:'ic-clock', t:vd?'Membresía vencida':'Vigente hasta '+fechaTxt(x.venc), s:''}); }
+  if(!ev.length) return '';
+  ev.sort((a,b)=>String(a.f||'').localeCompare(String(b.f||'')));
+  const filas=ev.map(e=>`<div class="exp-row"><span class="exp-ic"><svg class="svic" aria-hidden="true"><use href="#${e.ic}"/></svg></span><div class="exp-b"><div class="exp-f">${esc(fechaTxt(e.f))}</div><div class="exp-t">${esc(e.t)}</div>${e.s?`<div class="exp-s">${esc(e.s)}</div>`:''}</div></div>`).join('');
+  return `<div class="expediente"><h4 class="bh"><svg class="svic" aria-hidden="true"><use href="#ic-target"/></svg> Expediente · línea de tiempo</h4>${filas}<div class="exp-note">De aquí en adelante, cada acción del CRM queda registrada en este hilo.</div></div>`;
+}
 async function abrirTarjeta(id){ cardCtx={sid:id,target:'tarjetaBody'}; $('tarjetaBody').innerHTML='<p style="text-align:center;color:var(--gris);padding:22px">Cargando…</p>'; $('tarjeta').style.display='flex'; await renderCard(); }
 async function mostrarMiembro(){
   ['.stats','.tabs'].forEach(s=>{const e=document.querySelector(s);if(e)e.style.display='none';});
