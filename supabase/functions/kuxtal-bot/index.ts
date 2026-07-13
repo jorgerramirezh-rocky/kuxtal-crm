@@ -102,12 +102,13 @@ const NO_RE = /^(no|nop|nel|cancel[aá]r?|cancelalo|mejor no|❌)$/i;
 function norm(t: string) {
   return (t || "").toLowerCase().replace(/[áàäâ]/g, "a").replace(/[éèëê]/g, "e").replace(/[íìïî]/g, "i").replace(/[óòöô]/g, "o").replace(/[úùüû]/g, "u").replace(/ñ/g, "n").replace(/ç/g, "c").trim();
 }
-// ── Búsqueda de socio (tabla real `socios` del CRM) ──────────────────────────
-// El bot corre con SERVICE_ROLE (acceso total, sin bloqueo de grant): puede leer
-// `socios` directo. Columnas reales confirmadas contra la base viva
-// (tevzfdiumfekvapamovw): no_socio, nombre, dpi (13 díg. texto), tipo/tipo_norm,
-// vencimiento (date), estado, copropietario.
-const COLS_SOCIO = "no_socio, nombre, dpi, tipo, tipo_norm, vencimiento, estado, copropietario";
+// ── Búsqueda de socio — CANDADO DE PRIVACIDAD (12-jul) ───────────────────────
+// Solo DPI EXACTO (13 díg.). El número de socio (secuencial 1..~3172) y el nombre
+// (apellidos comunes) son ENUMERABLES: permitían sacar el padrón entero → PROHIBIDO.
+// Divulgación mínima: solo traemos/mostramos estado de membresía + tipo; NUNCA
+// nombre, No. de socio, DPI, copropietario ni notas del CRM (serían datos de
+// terceros ante un DPI ajeno). El bot corre con SERVICE_ROLE; el candado es la lógica.
+const COLS_SOCIO = "tipo, tipo_norm, vencimiento";
 // Extrae un DPI (13 dígitos consecutivos) de un texto libre, si lo hay.
 function extraerDPI(texto: string): string | null {
   const m = (texto || "").match(/(?<!\d)(\d{13})(?!\d)/);
@@ -125,71 +126,32 @@ function estadoMembresia(venc: string | null) {
   if (dias <= 30) return { emoji: "🟡", txt: `vigente pero vence pronto: en ${dias} día(s) (el ${venc})` };
   return { emoji: "🟢", txt: `vigente hasta el ${venc}` };
 }
-// Arma la ficha humana de un socio: estado / vencimiento / tipo, claro y cálido.
-function fichaSocio(s: Record<string, unknown>): string {
-  const nombre = String(s.nombre || "(sin nombre)");
-  const no = s.no_socio ? `No. de socio: ${s.no_socio}` : "No. de socio: (sin dato)";
-  const tipo = String((s.tipo_norm || s.tipo || "Sin dato"));
+// Ficha MÍNIMA (candado): solo estado de membresía + tipo. Sin nombre, No. de
+// socio, DPI ni copropietario — nada que identifique a la persona o a terceros.
+function fichaSocioSegura(s: Record<string, unknown>): string {
+  const tipo = String((s.tipo_norm || s.tipo || "sin dato"));
   const em = estadoMembresia((s.vencimiento as string) ?? null);
-  // `estado` es un campo manual del CRM (a veces vacío): solo lo mostramos si trae algo.
-  const estadoCRM = s.estado ? `\n• Estado en el CRM: ${s.estado}` : "";
-  const copro = s.copropietario ? `\n• Copropietario: ${s.copropietario}` : "";
-  return `${em.emoji} ${nombre}\n• ${no}\n• Tipo de membresía: ${tipo}\n• Membresía: ${em.txt}${estadoCRM}${copro}`;
+  return `${em.emoji} Membresía ${em.txt}\n• Tipo: ${tipo}`;
 }
-// Busca socios por DPI (13 díg.), número de socio (puro número) o nombre
-// (normalizado, sin acentos/mayúsculas, coincidencia parcial). Devuelve un mensaje
-// humano listo para enviar. Fail-safe: nunca lanza; ante error de DB responde neutro.
+// CANDADO: reviso membresía SOLO con DPI exacto (13 díg.). No busca por número de
+// socio ni por nombre (ambos enumerables). Devuelve mensaje humano; fail-safe.
 async function buscarSocio(termino: string): Promise<string> {
-  const raw = (termino || "").trim();
-  const clean = raw.replace(/[\s.\-]/g, "");
-  const esNum = /^\d+$/.test(clean);
+  const clean = (termino || "").replace(/[\s.\-]/g, "");
+  if (!/^\d{13}$/.test(clean)) {
+    return "Para cuidar los datos de la comunidad, reviso la membresía solo con el DPI completo (13 dígitos) del titular ✈. Pasame el DPI, o escribime «hablar con una persona» y te paso con el equipo. 🙏";
+  }
   try {
-    let filas: Record<string, unknown>[] = [];
-    let comoNombre = false;
-    if (esNum && clean.length === 13) {
-      // DPI exacto.
-      const { data, error } = await db.from("socios").select(COLS_SOCIO).eq("dpi", clean).limit(6);
-      if (error) throw error;
-      filas = data || [];
-    } else if (esNum) {
-      // Número de socio exacto (no_socio se guarda como texto: "3172").
-      const { data, error } = await db.from("socios").select(COLS_SOCIO).eq("no_socio", clean).limit(6);
-      if (error) throw error;
-      filas = data || [];
-    } else {
-      // Nombre: traemos y filtramos por norm() para ser tolerantes a acentos/mayúsculas.
-      comoNombre = true;
-      const nq = norm(raw);
-      if (nq.length < 2) {
-        return "Necesito un poco más para buscarte ✈. Pasame tu número de socio, tu DPI (13 dígitos) o tu nombre completo.";
-      }
-      const { data, error } = await db.from("socios").select(COLS_SOCIO).limit(3000);
-      if (error) throw error;
-      filas = (data || []).filter((s)=>{
-        const n = norm(String(s.nombre || ""));
-        const c = norm(String(s.copropietario || ""));
-        return n.includes(nq) || c.includes(nq);
-      });
-    }
+    const { data, error } = await db.from("socios").select(COLS_SOCIO).eq("dpi", clean).limit(2);
+    if (error) throw error;
+    const filas = data || [];
     if (!filas.length) {
-      return `No encontré a nadie con «${raw}» 🤔.\nRevisá el dato y probá con tu número de socio, tu DPI (13 dígitos) o tu nombre completo. Si sigue sin salir, escribime «hablar con una persona» y te paso con el equipo. ✈`;
+      return "No encontré una membresía con ese DPI 🤔. Verificá que estén los 13 dígitos completos, o escribime «hablar con una persona» y te ayudo. ✈";
     }
-    if (filas.length === 1) {
-      return `Esto es lo que tengo de tu membresía ✈\n\n${fichaSocio(filas[0])}\n\nEsto es la info que la comunidad Kuxtal tiene registrada, no un documento oficial. Si algo no cuadra, avisale al equipo. 🙏`;
-    }
-    // Varias coincidencias (típico al buscar por nombre): mostramos hasta 6.
-    const cuantas = filas.length;
-    const muestra = filas.slice(0, 6).map((s)=>fichaSocio(s)).join("\n\n");
-    const extra = comoNombre
-      ? "\n\nEncontré varias personas con ese nombre. Si ninguna es la tuya, mandame tu número de socio o tu DPI (13 dígitos) para afinar. ✈"
-      : "";
-    const encabezado = cuantas > 6
-      ? `Encontré ${cuantas} coincidencias — te muestro las primeras 6:`
-      : `Encontré ${cuantas} coincidencias:`;
-    return `${encabezado}\n\n${muestra}${extra}`;
+    // Uno o varios (copropietarios comparten DPI): damos el estado, sin listar personas.
+    return `Esto es lo que tengo de esa membresía ✈\n\n${fichaSocioSegura(filas[0])}\n\nEs la info que la comunidad Kuxtal tiene registrada, no un documento oficial. Si algo no cuadra, avisale al equipo. 🙏`;
   } catch (e) {
     console.error("buscarSocio:", scrub(e));
-    return "Uf, no pude revisar el registro de socios ahora mismo ✈. Reintentá en un momento, o escribime «hablar con una persona» y te paso con el equipo. 🙏";
+    return "Uf, no pude revisar el registro ahora mismo ✈. Reintentá en un momento, o escribime «hablar con una persona» y te paso con el equipo. 🙏";
   }
 }
 // Busca la PRIMERA regla activa (orden por prioridad) cuyo disparador esté
@@ -318,7 +280,7 @@ async function responderPorReglas(chatId: string, chatIdNum: number, texto: stri
         // siguiente turno (consistente con "un paso por turno"). El estado
         // "buscar_socio" está en PASOS_WIZARD, así lo agarra la máquina de estados.
         await guardarSesion(chatId, "buscar_socio", {});
-        await reply(chatIdNum, "Con gusto reviso tu membresía ✈. Pasame tu número de socio, tu DPI (13 dígitos) o tu nombre completo.");
+        await reply(chatIdNum, "Con gusto reviso tu membresía ✈. Por privacidad, la reviso solo con el DPI completo (13 dígitos) del titular. Pasámelo, porfa. 🙏");
         break;
       }
     case "escalar_humano":
@@ -372,11 +334,7 @@ async function manejar(chatId: string, chatIdNum: number, texto: string, contact
   switch(s.paso){
     case "buscar_socio":
       {
-        // El usuario respondió con su identificador → buscamos y cerramos.
-        if (t.length < 2) {
-          await reply(chatIdNum, "Pasame tu número de socio, tu DPI (13 dígitos) o tu nombre completo, porfa. 🙏");
-          return;
-        }
+        // El usuario respondió → buscarSocio exige DPI exacto (candado de privacidad).
         const msg = await buscarSocio(t);
         await borrarSesion(chatId);
         await reply(chatIdNum, msg);
