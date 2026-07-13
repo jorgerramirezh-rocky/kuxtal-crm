@@ -702,7 +702,7 @@ function ofertaCard(o){
   return `<div class="ocard" style="align-items:flex-start"><div class="oemoji">${esc(o.emoji||'✈️')}</div><div class="obody">
     <div class="otit">${esc(o.titulo)} ${o.descuento?`<span class="odesc">${esc(o.descuento)}</span>`:''}</div>
     <div class="odescr">${esc(o.descripcion||'')}</div>${foto}
-    <div class="ometa">${audLabel(o)}${o.vigencia_hasta?' · hasta '+fechaTxt(o.vigencia_hasta):''} · ${cuponLabel(o)}</div>
+    <div class="ometa">${audLabel(o)}${o.vigencia_hasta?' · hasta '+fechaTxt(o.vigencia_hasta):''} · ${cuponLabel(o)}${o.cantidad!=null?' · Cupos: '+esc(String(o.cantidad)):''}</div>
     ${linea2.length?`<div class="ometa" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:3px">${linea2.join(' · ')}</div>`:''}
   </div>${acc}</div>`;
 }
@@ -728,6 +728,7 @@ function abrirPromoForm(o){
       <label>¿Cuál grupo?</label><select id="p_grupo">${['VIP','Gold','Exclusivo','Regular'].map(g=>`<option${grupoVal===g?' selected':''}>${g}</option>`).join('')}</select>
     </div>
     <label>Vigente hasta</label><input id="p_venc" type="date" value="${esc(o.vigencia_hasta||'')}">
+    <label>Cupos (cantidad) — opcional</label><input id="p_cupos" type="number" min="0" inputmode="numeric" placeholder="Ej. 50 (dejar vacío = sin límite)" value="${o.cantidad!=null?esc(String(o.cantidad)):''}">
     <label>Cupón</label><select id="p_multi">
       <option value=""${!o.cupon_multi?' selected':''}>1 uso por socio</option>
       <option value="1"${o.cupon_multi?' selected':''}>Multi-uso (varias veces)</option>
@@ -746,7 +747,9 @@ async function guardarPromo(){
   const tit=$('p_tit').value.trim(); if(!tit){ $('p_err').textContent='Poné un título.'; return; }
   const aud=$('p_aud').value;
   const tipo = aud==='grupo' ? $('p_grupo').value : aud; // 'todos' | 'publico' | (grupo p.ej. 'VIP')
-  const body={emoji:$('p_emoji').value.trim()||'✈️',titulo:tit,descripcion:$('p_desc').value.trim()||null,descuento:$('p_dto').value.trim()||null,tipo_objetivo:tipo,vigencia_hasta:$('p_venc').value||null};
+  const cuposRaw=$('p_cupos').value.trim();
+  const cupos = cuposRaw==='' ? null : (Number.isFinite(+cuposRaw)&&+cuposRaw>=0 ? Math.round(+cuposRaw) : null);
+  const body={emoji:$('p_emoji').value.trim()||'✈️',titulo:tit,descripcion:$('p_desc').value.trim()||null,descuento:$('p_dto').value.trim()||null,tipo_objetivo:tipo,vigencia_hasta:$('p_venc').value||null,cantidad:cupos};
   if(OF_EXT===true){ // solo mando columnas extendidas si la base las tiene (evita 400)
     body.link=$('p_link').value.trim()||null;
     body.ubicacion=$('p_ubic').value.trim()||null;
@@ -819,6 +822,30 @@ function canceladasHTML(){
   if(cargandoCancel && CANCELADAS===null) return `<div class="vacio"><span class="spin"></span> Cargando…</div>`;
   if(!CANCELADAS || !CANCELADAS.length) return `<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-folder"/></svg></span><b>Sin promociones canceladas</b><p>Las que canceles quedan acá para consultarlas o reactivarlas.</p></div>`;
   return CANCELADAS.map(cancelCard).join('');
+}
+// ── Admin: Analítica de uso de promos (tabla 'usos' + 'ofertas') ──
+let USOS=null, cargandoUsos=false, verUsos=false;
+async function traerUsos(){
+  try{ return await sbGet('usos','select=oferta_id,socio_id&limit=20000'); }
+  catch(e){ return []; }
+}
+async function toggleAnalitica(){
+  verUsos=!verUsos;
+  if(verUsos && USOS===null && !cargandoUsos){ cargandoUsos=true; render(); USOS=await traerUsos(); cargandoUsos=false; }
+  render();
+}
+function analiticaPromosHTML(){
+  if(cargandoUsos && USOS===null) return `<div class="vacio"><span class="spin"></span> Cargando canjes…</div>`;
+  if(!USOS || !USOS.length) return `<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-ticket"/></svg></span><b>Sin canjes registrados</b><p>Cuando los socios usen las promociones, acá vas a ver el ranking de las más canjeadas.</p></div>`;
+  // Título por id: uní activas + canceladas ya cargadas.
+  const idx={}; [].concat(OFERTAS||[],CANCELADAS||[]).forEach(o=>{ if(o&&o.id!=null) idx[String(o.id)]=o.titulo||('Promo #'+o.id); });
+  const conteo={}; USOS.forEach(u=>{ const k=String(u.oferta_id); if(u.oferta_id==null) return; conteo[k]=(conteo[k]||0)+1; });
+  const filas=Object.entries(conteo).map(([id,n])=>[idx[id]||('Promo #'+id),n]).sort((a,b)=>b[1]-a[1]);
+  const max=filas.length?filas[0][1]:0;
+  const total=USOS.length;
+  const resumen=`<div class="insight full" style="margin-bottom:12px"><svg class="svic" aria-hidden="true"><use href="#ic-ticket"/></svg> <b>${total.toLocaleString('es-GT')} canjes</b> en total · <b>${filas.length}</b> promo(s) con al menos un uso.</div>`;
+  const ranking=filas.slice(0,15).map(([t,n])=>barRow(t,n,max,'var(--kux)')).join('');
+  return resumen+ranking;
 }
 // ── Admin: Calidad de datos + Roles/Organigrama (gateado a admin) ──
 let ALERTAS=null, cargandoCal=false, caF='';
@@ -1260,10 +1287,12 @@ function render(){
     if(ROLE==='admin'){ head=`<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
         <button class="masbtn" style="flex:1;margin:0" onclick="nuevaPromo()">＋ Nueva promoción</button>
         <button class="fb${verCancel?' on':''}" onclick="toggleCanceladas()"><svg class="svic" aria-hidden="true"><use href="#ic-folder"/></svg> Canceladas</button>
+        <button class="fb${verUsos?' on':''}" onclick="toggleAnalitica()"><svg class="svic" aria-hidden="true"><use href="#ic-ticket"/></svg> Analítica de uso</button>
       </div>`; }
     const activas = OFERTAS.length?OFERTAS.map(ofertaCard).join(''):`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-gift"/></svg></span><b>Sin promociones activas</b><p>${ROLE==='admin'?'Creá la primera con el botón de arriba.':'Pronto habrá novedades.'}</p></div>`;
     const cancel = (ROLE==='admin'&&verCancel)?`<h3 style="margin:18px 0 10px;color:var(--gris)"><svg class="svic" aria-hidden="true"><use href="#ic-folder"/></svg> Historial de canceladas</h3>`+canceladasHTML():'';
-    $('lista').innerHTML=head+activas+cancel; return;
+    const analit = (ROLE==='admin'&&verUsos)?`<h3 style="margin:18px 0 10px;color:var(--gris)"><svg class="svic" aria-hidden="true"><use href="#ic-ticket"/></svg> Promos más usadas</h3>`+analiticaPromosHTML():'';
+    $('lista').innerHTML=head+activas+cancel+analit; return;
   }
   if(tab==='leads'){
     if(LEADS===null){
