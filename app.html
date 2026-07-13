@@ -1412,7 +1412,7 @@ async function expedienteHTML(x){
   const ev=[];
   if(x.ingreso) ev.push({f:x.ingreso, ic:'ic-user', t:'Se hizo socio N° '+(x.no||'—'), s:x.tipo?('Membresía '+x.tipo):''});
   try{
-    const rs=await getJSON('funnel_reservas?select=destino,fecha_viaje,personas,estado,creado_en&socio_nombre=eq.'+encodeURIComponent(x.n||''));
+    const rs=await getJSON('funnel_reservas?select=destino,fecha_viaje,personas,estado,creado_en&socio_id=eq.'+x.id);
     rs.forEach(r=>ev.push({f:(r.fecha_viaje||r.creado_en||'').slice(0,10), ic:'ic-plane', t:'Reserva: '+(r.destino||'destino')+(r.personas?' · '+r.personas+' pers':''), s:r.estado||''}));
   }catch(e){}
   if(x.venc){ const vd=x.dv!=null&&x.dv<0; ev.push({f:x.venc, ic:'ic-clock', t:vd?'Membresía vencida':'Vigente hasta '+fechaTxt(x.venc), s:''}); }
@@ -1929,7 +1929,10 @@ async function addReserva(){
   const soc=$('rsoc').value.trim(), dest=$('rdest').value.trim();
   if(!soc||!dest){ toast('Poné socio y destino'); return; }
   const b=$('raddb'); b.disabled=true; b.textContent='Creando…';
-  try{ const r=await api("funnel_reservas",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_nombre:soc,destino:dest,fecha_viaje:$('rfec').value||null,personas:Number($('rper').value)||1,gestionado_por:USER})});
+  // Registro (hilo conductor): ligamos la reserva al socio por id, no solo por nombre → aparece en su Expediente.
+  const _nrm=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
+  const _g=gente.find(s=>_nrm(s.n)===_nrm(soc)); const _sid=_g?_g.id:null;
+  try{ const r=await api("funnel_reservas",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_nombre:soc,socio_id:_sid,destino:dest,fecha_viaje:$('rfec').value||null,personas:Number($('rper').value)||1,gestionado_por:USER})});
     if(!r.ok)throw 0; toast('Reserva creada'); await vistaReservas();
   }catch(e){ toast('No se pudo'); } finally{ b.disabled=false; b.textContent='Crear reserva'; }
 }
