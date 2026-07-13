@@ -136,8 +136,19 @@
   @keyframes up{from{transform:translateY(30px);opacity:.6}to{transform:translateY(0);opacity:1}}
   .mcard h3{color:var(--kux);font-size:18px;margin-bottom:14px}
   .mcard label{display:block;font-size:12px;font-weight:700;color:var(--gris);margin:12px 0 5px}
-  .mcard input,.mcard select{width:100%;padding:12px 13px;border:1px solid var(--linea);border-radius:11px;font-size:16px;outline:none;background:#fff}
-  .mcard input:focus,.mcard select:focus{border-color:var(--kux);box-shadow:0 0 0 3px rgba(27,54,93,.1)}
+  .mcard input,.mcard select,.mcard textarea{width:100%;padding:12px 13px;border:1px solid var(--linea);border-radius:11px;font-size:16px;outline:none;background:#fff;font-family:inherit}
+  .mcard textarea{min-height:72px;resize:vertical}
+  .mcard input:focus,.mcard select:focus,.mcard textarea:focus{border-color:var(--kux);box-shadow:0 0 0 3px rgba(27,54,93,.1)}
+  .membcard{background:#fff;border:1px solid var(--linea);border-radius:14px;padding:13px 14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(15,36,56,.04)}
+  .membcard.off{opacity:.62;background:var(--papel)}
+  .membcard .mtop{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .membcard .mtit{font-size:15px;font-weight:800;color:var(--kux)}
+  .membcard .mprice{font-size:17px;font-weight:800;color:var(--lima-d);font-variant-numeric:tabular-nums}
+  .membcard .mmeta{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+  .membchip{background:var(--papel);border:1px solid var(--linea);border-radius:9px;padding:5px 9px;font-size:11.5px;color:var(--gris);font-weight:700}
+  .membchip b{color:var(--tinta);font-variant-numeric:tabular-nums}
+  .membcard .mben{margin-top:9px;font-size:12.5px;color:var(--gris);line-height:1.45;white-space:pre-wrap}
+  .membcard .macc2{display:flex;gap:8px;flex-wrap:wrap;margin-top:11px}
   .ferr{color:var(--rojo-t);font-size:12px;margin-top:5px;min-height:15px}
   .macc{display:flex;gap:10px;margin-top:20px}
   .macc button{flex:1;padding:14px;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;min-height:50px;border:none}
@@ -446,6 +457,7 @@
     <div class="tab" data-t="embudo" id="tabEmbudo" role="button" tabindex="0" style="display:none"><svg class="svic" aria-hidden="true"><use href="#ic-target"/></svg> Embudo</div>
     <div class="tab" data-t="calidad" id="tabCalidad" role="button" tabindex="0" style="display:none"><svg class="svic" aria-hidden="true"><use href="#ic-shield"/></svg> Calidad</div>
     <div class="tab" data-t="roles" id="tabRoles" role="button" tabindex="0" style="display:none"><svg class="svic" aria-hidden="true"><use href="#ic-settings"/></svg> Roles</div>
+    <div class="tab" data-t="membresias" id="tabMembresias" role="button" tabindex="0" style="display:none"><svg class="svic" aria-hidden="true"><use href="#ic-ticket"/></svg> Membresías</div>
   </div>
   <div class="search" id="search"><span class="ico"><svg class="svic" aria-hidden="true"><use href="#ic-search"/></svg></span><input id="buscar" placeholder="Buscar por nombre, No. de socio o DPI…"></div>
   <div class="cap" id="cap"></div>
@@ -468,6 +480,9 @@
 
 <!-- Nuevo rol (solo admin) -->
 <div id="rolModal" class="modal" style="display:none"><div class="mcard"><div id="rolBody"></div></div></div>
+
+<!-- Crear/editar tipo de membresía (gerencia/ventas) -->
+<div id="membModal" class="modal" style="display:none"><div class="mcard"><div id="membBody"></div></div></div>
 
 <!-- Pantalla de validación en el local -->
 <div id="valida"><div><div class="vbig" id="vico"></div><div class="vt" id="vt"></div><div class="vs" id="vs"></div><button onclick="cerrarValida()">Listo</button></div></div>
@@ -1058,6 +1073,95 @@ async function guardarRol(){
   btn.disabled=false; btn.textContent='Crear rol';
 }
 
+// ── SECCIÓN 3 · Tipos de membresía (gerencia / ventas) ──
+// Panel para gestionar los tipos de membresía del embudo (tabla funnel_membresias).
+// Se muestran TODOS (activos e inactivos) para poder reactivar; nunca se borra, se desactiva.
+let MEMBDATA=null, cargandoMembs=false, membEdit=null;
+const numFmt=n=>{const v=Number(n); return isNaN(v)?'—':v.toLocaleString('es-GT');};
+async function cargarMembs(){
+  cargandoMembs=true; $('lista').innerHTML='<div class="vacio"><span class="spin"></span> Cargando membresías…</div>';
+  try{
+    MEMBDATA=await sbGet('funnel_membresias','select=*&order=orden.asc');
+    cargandoMembs=false; if(tab==='membresias')render();
+  }catch(e){ cargandoMembs=false; if(tab==='membresias')$('lista').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar las membresías</b><p>Puede ser la conexión. <b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`; }
+}
+function membresiasPanel(){
+  const head=`<div class="adminhead"><h3><svg class="svic" aria-hidden="true"><use href="#ic-ticket"/></svg> Tipos de membresía (${MEMBDATA.length})</h3><button class="minibtn" onclick="nuevaMemb()">＋ Nueva membresía</button></div>`;
+  if(!MEMBDATA.length) return head+`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-ticket"/></svg></span><b>Aún no hay tipos de membresía</b><p>Creá el primero con el botón de arriba. Definís precio, costo, descuento, enganche y beneficios; el embudo los usa al cerrar contratos.</p></div>`;
+  const cards=MEMBDATA.map(m=>{
+    const mon=esc(m.moneda||'USD');
+    const chips=[
+      `<span class="membchip">Costo <b>${mon} ${numFmt(m.costo)}</b></span>`,
+      `<span class="membchip">Descuento <b>${m.descuento==null?'—':numFmt(m.descuento)+'%'}</b></span>`,
+      `<span class="membchip">Enganche <b>${m.enganche==null?'—':mon+' '+numFmt(m.enganche)}</b></span>`,
+      `<span class="membchip">Orden <b>${m.orden==null?'—':numFmt(m.orden)}</b></span>`
+    ].join('');
+    const ben=m.beneficios?`<div class="mben">${esc(m.beneficios)}</div>`:'';
+    const estadoTxt=m.activo?'Activo':'Inactivo';
+    return `<div class="membcard${m.activo?'':' off'}">
+      <div class="mtop"><div><div class="mtit">${esc(m.tipo||'(sin nombre)')}</div><span class="pill ${m.activo?'on':''}" style="margin-top:6px" onclick="toggleMembActivo(${m.id})">${estadoTxt}</span></div>
+      <div class="mprice">${mon} ${numFmt(m.precio)}</div></div>
+      <div class="mmeta">${chips}</div>
+      ${ben}
+      <div class="macc2"><button class="minibtn" onclick="editarMemb(${m.id})"><svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Editar</button>
+      <button class="pill" onclick="toggleMembActivo(${m.id})">${m.activo?'Desactivar':'Activar'}</button></div>
+    </div>`;
+  }).join('');
+  const cap=`<div class="cap" style="margin-top:8px">Los tipos <b>activos</b> son los que el embudo ofrece al cerrar contratos. Nada se borra: se <b>desactiva</b> y podés reactivarlo cuando quieras.</div>`;
+  return head+cards+cap;
+}
+function nuevaMemb(){ if(!puedeEditar())return; membEdit=null; abrirMembForm(null); }
+function editarMemb(id){ if(!puedeEditar())return; const m=(MEMBDATA||[]).find(x=>x.id===id); if(!m)return; membEdit=m; abrirMembForm(m); }
+function cerrarMemb(){ $('membModal').style.display='none'; }
+function abrirMembForm(m){
+  m=m||{};
+  const v=(x)=>x==null?'':x;
+  const monedas=['USD','GTQ'];
+  const monOpts=monedas.map(x=>`<option value="${x}" ${(m.moneda||'USD')===x?'selected':''}>${x}</option>`).join('');
+  $('membBody').innerHTML=`<h3>${m.id?'Editar membresía':'Nueva membresía'}</h3>
+    <label>Tipo / nombre</label><input id="m_tipo" placeholder="Ej. VIP" value="${esc(v(m.tipo))}">
+    <label>Precio</label><input id="m_precio" inputmode="decimal" placeholder="ej. 700" value="${esc(v(m.precio))}">
+    <label>Moneda</label><select id="m_moneda">${monOpts}</select>
+    <label>Costo</label><input id="m_costo" inputmode="decimal" placeholder="ej. 300" value="${esc(v(m.costo))}">
+    <label>Descuento (%)</label><input id="m_descuento" inputmode="decimal" placeholder="ej. 10" value="${esc(v(m.descuento))}">
+    <label>Enganche</label><input id="m_enganche" inputmode="decimal" placeholder="ej. 150" value="${esc(v(m.enganche))}">
+    <label>Orden (para ordenar la lista)</label><input id="m_orden" inputmode="numeric" placeholder="ej. 1" value="${esc(v(m.orden))}">
+    <label>Beneficios</label><textarea id="m_beneficios" placeholder="Qué incluye esta membresía…">${esc(v(m.beneficios))}</textarea>
+    <div class="ferr" id="m_err"></div>
+    <div class="macc"><button class="mcancel" onclick="cerrarMemb()">Cancelar</button><button class="msave" id="m_save" onclick="guardarMemb()">${m.id?'Guardar cambios':'Crear membresía'}</button></div>`;
+  $('membModal').style.display='flex';
+}
+// Valida un número opcional; devuelve {ok, val}. Vacío => null (permitido).
+function numOpt(id){ const s=($(id).value||'').trim(); if(s==='')return{ok:true,val:null}; const n=Number(s); if(isNaN(n))return{ok:false}; return{ok:true,val:n}; }
+async function guardarMemb(){
+  if(!puedeEditar())return;
+  const tipo=($('m_tipo').value||'').trim();
+  if(!tipo){ $('m_err').textContent='Poné un tipo/nombre.'; return; }
+  const campos={precio:'m_precio',costo:'m_costo',descuento:'m_descuento',enganche:'m_enganche',orden:'m_orden'};
+  const body={tipo:tipo,moneda:$('m_moneda').value||'USD',beneficios:($('m_beneficios').value||'').trim()||null};
+  for(const [k,id] of Object.entries(campos)){
+    const r=numOpt(id);
+    if(!r.ok){ $('m_err').textContent='Revisá "'+k+'": tiene que ser un número.'; return; }
+    if((k==='precio'||k==='costo'||k==='enganche')&&r.val!=null&&r.val<0){ $('m_err').textContent=k+': no puede ser negativo.'; return; }
+    if(k==='descuento'&&r.val!=null&&(r.val<0||r.val>100)){ $('m_err').textContent='Descuento: entre 0 y 100.'; return; }
+    body[k]=r.val;
+  }
+  const btn=$('m_save'); const txt=btn.textContent; btn.disabled=true; btn.textContent='Guardando…';
+  let ok;
+  if(membEdit&&membEdit.id){ ok=await sbWrite('PATCH','funnel_membresias','id=eq.'+membEdit.id,body); }
+  else{ body.activo=true; ok=await sbWrite('POST','funnel_membresias','',body); }
+  if(ok){ const editaba=membEdit&&membEdit.id; cerrarMemb(); MEMBDATA=null; if(tab==='membresias'&&!cargandoMembs) cargarMembs(); toast(editaba?'Membresía actualizada':'Membresía creada'); }
+  else{ $('m_err').textContent='No se pudo guardar (¿tenés permiso?).'; btn.disabled=false; btn.textContent=txt; }
+}
+async function toggleMembActivo(id){
+  if(!puedeEditar())return;
+  const m=(MEMBDATA||[]).find(x=>x.id===id); if(!m)return;
+  const nuevo=!m.activo; m.activo=nuevo; render();
+  const ok=await sbWrite('PATCH','funnel_membresias','id=eq.'+id,{activo:nuevo});
+  if(ok){ toast(nuevo?'Membresía activada':'Membresía desactivada'); }
+  else{ m.activo=!nuevo; render(); toast('No se pudo (¿tenés permiso?)'); }
+}
+
 // ── BI en vivo ──
 function calcularBI(){
   const socios=gente.length;
@@ -1278,7 +1382,8 @@ function render(){
     todos:'Directorio de los '+BI.socios+' socios. Buscá por nombre, No. de socio o DPI, y editá.',
     promos:'Promociones activas del Club.',
     leads:'Interesados que dejan sus datos en la web · llamalos y dales seguimiento.',bot:'El asistente de WhatsApp de Kuxtal: estado, prospectos que captó y cómo conectarlo.',activacion:'Uso del Club por socio (por capturar).',
-    calidad:'Datos que el sistema detectó por revisar. El equipo valida y limpia la base.',roles:'Consola de administración: roles, permisos y organigrama del HUB.'};
+    calidad:'Datos que el sistema detectó por revisar. El equipo valida y limpia la base.',roles:'Consola de administración: roles, permisos y organigrama del HUB.',
+    membresias:'Tipos de membresía del Club: precio, costo, descuento, enganche y beneficios. Los activos son los que ofrece el embudo.'};
   $('cap').textContent=caps[tab]||'';
   if(tab==='tablero'){$('lista').innerHTML='';tablero();return;}
   $('tablero').innerHTML=''; Object.values(charts).forEach(c=>c&&c.destroy()); charts={};
@@ -1329,6 +1434,11 @@ function render(){
     if(!esAdmin()){ $('lista').innerHTML=noAdminHTML(); return; }
     if(ROLDATA===null){ if(!cargandoRoles) cargarRoles(); return; }
     $('lista').innerHTML=rolesPanel(); return;
+  }
+  if(tab==='membresias'){
+    if(!puedeEditar()){ $('lista').innerHTML=noAdminHTML(); return; }
+    if(MEMBDATA===null){ if(!cargandoMembs) cargarMembs(); return; }
+    $('lista').innerHTML=membresiasPanel(); return;
   }
   let items=filtrar();
   if(tab==='vencimientos'&&!items.length){$('lista').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg></span><b>Nada por vencer en este rango</b><p>Probá ampliar el filtro de arriba.</p></div>`;return;}
@@ -1537,6 +1647,7 @@ async function arrancar(){
     $('buscar').oninput=()=>{verLim=60;render()};
     if(ROLE==='cliente'){ await mostrarMiembro(); $('rolLabel').textContent=USER; maybeTour('cliente'); return true; }
     if(esAdmin()){ ['tabCalidad','tabRoles'].forEach(id=>{const el=$(id);if(el)el.style.display='';}); }
+    if(puedeEditar()){ const el=$('tabMembresias'); if(el) el.style.display=''; }
     if(puedeEmbudo()){ const el=$('tabEmbudo'); if(el) el.style.display=''; }
     kpis(); render(); $('rolLabel').textContent=USER+' · '+rolBonito(ROLE);
     // F4: si vino desde embudo.html (redirección) o con #embudo, abrir la pestaña
@@ -1574,6 +1685,7 @@ function verTour(){ iniciarTour(ROLE==='cliente'?'cliente':'staff'); }
 function iniciarTour(kind){
   tourList=(TOURS[kind==='cliente'?'cliente':'staff']||[]).slice();
   if(kind!=='cliente'&&puedeEmbudo()&&tourList.length){ tourList.splice(tourList.length-1,0,{sel:'.tab[data-t="embudo"]',t:'Embudo de ventas',d:'Todo el proceso de venta —prospectos, recepción, cierre de contratos, reservas y analítica— ahora vive acá adentro, según tu rol. Si tenés gente a cargo, la pestaña <b>Mi equipo</b> te muestra el avance de quienes te reportan (según el organigrama).'}); }
+  if(kind!=='cliente'&&puedeEditar()&&tourList.length){ tourList.splice(tourList.length-1,0,{sel:'.tab[data-t="membresias"]',t:'Membresías',d:'Acá definís los <b>tipos de membresía</b> del Club —precio, costo, descuento, enganche y beneficios—. Los que dejás <b>activos</b> son los que el embudo ofrece al cerrar contratos. Nada se borra: se desactiva y se reactiva cuando querás.'}); }
   if(kind!=='cliente'&&esAdmin()&&tourList.length){ tourList.splice(tourList.length-1,0,...TOURS.adminExtra); }
   if(!tourList.length) return;
   tourKey='kux_tour_'+ROLE; tourI=0; $('tourOv').style.display='block'; pasoTour();
@@ -1646,6 +1758,7 @@ $('ficha').addEventListener('click',e=>{if(e.target.id==='ficha')cerrarFicha();}
 $('tarjeta').addEventListener('click',e=>{if(e.target.id==='tarjeta')cerrarTarjeta();});
 $('promoModal').addEventListener('click',e=>{if(e.target.id==='promoModal')cerrarPromo();});
 $('rolModal').addEventListener('click',e=>{if(e.target.id==='rolModal')cerrarRol();});
+$('membModal').addEventListener('click',e=>{if(e.target.id==='membModal')cerrarMemb();});
 $('modal').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();guardarEdit();}});
 
 // ═══════════════════════════════════════════════════════════════════════════
