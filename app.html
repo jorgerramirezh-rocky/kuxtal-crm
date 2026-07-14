@@ -915,7 +915,7 @@ function canceladasHTML(){
 // ── Admin: Analítica de uso de promos (tabla 'usos' + 'ofertas') ──
 let USOS=null, cargandoUsos=false, verUsos=false;
 async function traerUsos(){
-  try{ return await sbGet('usos','select=oferta_id,socio_id&limit=20000'); }
+  try{ return await getAllRows('usos?select=oferta_id,socio_id'); } // paginado: limit=20000 se cortaba en 1000
   catch(e){ return []; }
 }
 async function toggleAnalitica(){
@@ -1284,19 +1284,28 @@ function calcularBI(){
 async function cargarFunnelBI(){
   if(cargandoFunnel) return; cargandoFunnel=true;
   try{
-    const P=await getJSON("funnel_prospectos?select=estado,etapa,califica,recepcion_en&limit=8000");
-    const COM=esGerente?await getJSON("funnel_comisiones?select=monto&limit=5000"):[]; // #13-fix: el total de comisiones solo lo ve gerencia
-    const total=P.length;
-    const contact=P.filter(p=>p.estado!=='nuevo').length;   // dejó de ser 'nuevo'
-    const asis=P.filter(p=>p.recepcion_en).length;           // asistió a la presentación
-    const cal=P.filter(p=>p.califica===true).length;         // calificó
-    const cerr=P.filter(p=>p.etapa==='socio').length;        // cerró (familia socia)
-    const bajas=P.filter(p=>p.etapa==='baja').length;
-    let comisiones=0; COM.forEach(c=>{comisiones+=Number(c.monto||0);});
+    // Conteos con count=exact (HEAD): antes se pedía limit=8000 pero PostgREST corta en 1000
+    // y los KPIs mentían apenas la base pasara de mil prospectos.
+    const B='funnel_prospectos?select=id';
+    const [total,contact,asis,cal,cerr,bajas]=await Promise.all([
+      sbCountExact(B),
+      sbCountExact(B+'&or=(estado.neq.nuevo,estado.is.null)'), // dejó de ser 'nuevo'
+      sbCountExact(B+'&recepcion_en=not.is.null'),             // asistió a la presentación
+      sbCountExact(B+'&califica=is.true'),                     // calificó
+      sbCountExact(B+'&etapa=eq.socio'),                       // cerró (familia socia)
+      sbCountExact(B+'&etapa=eq.baja')
+    ]);
+    let comisiones=0;
+    if(esGerente){ (await getAllRows('funnel_comisiones?select=monto')).forEach(c=>{comisiones+=Number(c.monto||0);}); } // #13-fix: el total de comisiones solo lo ve gerencia
     FUNNEL={total,contact,asis,cal,cerr,bajas,comisiones,
       conv:total>0?Math.round(cerr/total*100):0, cargado:true};
   }catch(e){ FUNNEL={cargado:false}; }
   finally{ cargandoFunnel=false; }
+}
+// Reintento manual desde el tablero cuando el embudo no cargó (resetea y vuelve a pedir)
+function reintentarFunnelBI(){
+  FUNNEL=null; if(tab==='tablero') render();
+  cargarFunnelBI().then(()=>{ if(tab==='tablero') render(); });
 }
 
 // ── Render ──
@@ -1386,10 +1395,16 @@ function tablero(){
     ${lb.cargado?`<div style="display:flex;gap:10px;flex-wrap:wrap">${leadN(lb.nuevos,'#7e5c06','Nuevos')}${leadN(lb.contactados,'var(--kux)','Contactados')}${leadN(lb.convertidos,'var(--lima-d)','Ya son socios')}</div>`:`<div class="sub">Cargando prospectos…</div>`}</div>`;
   // Pendiente #13: EL EMBUDO en el tablero (pipeline + conversión + cierres + comisiones + bajas)
   const fn=FUNNEL||{cargado:false};
-  const fStages=[['Nuevo',fn.total],['Contactado',fn.contact],['Asistió',fn.asis],['Calificó',fn.cal],['Cerró',fn.cerr]];
+  const fStages=[['Prospectos (total)',fn.total],['Contactado',fn.contact],['Asistió',fn.asis],['Calificó',fn.cal],['Cerró',fn.cerr]];
   const fPipe=fn.total?fStages.map(([n,v])=>barRow(n,v||0,fn.total,'var(--kux)')).join(''):'<div class="sub">Sin prospectos en el embudo todavía.</div>';
+  // Estado del panel: cargado | error (FUNNEL existe pero cargado===false → reintentar) | cargando
+  const fnBody = fn.cargado
+    ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${leadN(fn.cerr,'var(--lima-d)','Familias cerradas')}${leadN(fn.conv+'%','var(--kux)','Conversión total')}${esGerente?leadN('$'+Math.round(fn.comisiones).toLocaleString('es-GT'),'#6f9e12','Comisiones'):''}${leadN(fn.bajas,'var(--rojo)','Bajas')}</div>${fPipe}`
+    : (FUNNEL&&FUNNEL.cargado===false
+      ? `<div class="sub" style="color:var(--rojo-t)">No se pudo cargar el embudo · <b onclick="reintentarFunnelBI()" style="cursor:pointer;text-decoration:underline">reintentar</b></div>`
+      : `<div class="sub">Cargando embudo…</div>`);
   const embudoPanel=puedeEmbudo()?`<div class="panel full"><h3><svg class="svic" aria-hidden="true"><use href="#ic-target"/></svg> El embudo de ventas</h3><div class="sub">De prospecto a familia socia · pipeline, conversión y comisiones · <b onclick="ir('embudo')" style="cursor:pointer;text-decoration:underline">abrir el embudo</b></div>
-    ${fn.cargado?`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${leadN(fn.cerr,'var(--lima-d)','Familias cerradas')}${leadN(fn.conv+'%','var(--kux)','Conversión total')}${esGerente?leadN('$'+Math.round(fn.comisiones).toLocaleString('es-GT'),'#6f9e12','Comisiones'):''}${leadN(fn.bajas,'var(--rojo)','Bajas')}</div>${fPipe}`:`<div class="sub">Cargando embudo…</div>`}</div>`:'';
+    ${fnBody}</div>`:'';
   $('tablero').innerHTML=`<div class="grid">
     <div class="insight full"><svg class="svic" aria-hidden="true"><use href="#ic-bell"/></svg> <b>Lo urgente:</b> ${proxMes} socio(s) vencen en los próximos 30 días · <b>${money(BI.enRiesgo)}</b> en juego a 12 meses. Andá a <b onclick="ir('vencimientos')" style="cursor:pointer;text-decoration:underline">Renovaciones</b>.</div>
     ${alerta}
@@ -1911,7 +1926,23 @@ async function api(path,opt,reint){
   if(r.status===401){ if(!reint && await refrescar()) return api(path,opt,true); throw new Error("sesión vencida"); }
   return r;
 }
-async function getJSON(path){ const r=await api(path); if(!r.ok) return []; return await r.json(); }
+// OJO: un HTTP error PROPAGA (throw) — antes devolvía [] y "error" se veía igual que "vacío".
+async function getJSON(path){ const r=await api(path); if(!r.ok) throw new Error('HTTP '+r.status); return await r.json(); }
+// Trae TODAS las filas paginando de a 1000 (PostgREST corta en max_rows=1000 aunque pidás limit=8000).
+async function getAllRows(path,paso=1000){
+  const sep=path.includes('?')?'&':'?';
+  let out=[], desde=0;
+  for(;;){
+    const r=await api(path+sep+'limit='+paso+'&offset='+desde,{headers:{Prefer:'count=exact'}});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const rows=await r.json(); out=out.concat(rows);
+    const t=(r.headers.get('content-range')||'').split('/')[1];
+    const total=(t&&t!=='*')?Number(t):null;
+    if(!rows.length || (total!=null && out.length>=total)) break;
+    desde+=paso;
+  }
+  return out;
+}
 
 // ── Arranque del embudo (dentro del contenedor #embudo) ──
 function mostrarEmbudo(){
@@ -1947,17 +1978,21 @@ function funPintarTabs(){
   $('funTabs').innerHTML=defs.map(([k,t])=>`<button class="tab ${funTab===k?'on':''}" onclick="funIrTab('${k}')">${t}</button>`).join('');
 }
 async function funIrTab(k){ funTab=k; funPintarTabs();
-  if(k==='midia'){ await cargarMiDia(); }
-  else if(k==='recepcion'){ await vistaRecepcion(); }
-  else if(k==='cierre'){ await vistaCierre(); }
-  else if(k==='postventa'){ await vistaPostventa(); }
-  else if(k==='reservas'){ await vistaReservas(); }
-  else if(k==='todos'){ await cargarTodos(); }
-  else if(k==='cargar'){ await vistaCargar(); }
-  else if(k==='miequipo'){ await vistaMiEquipo(); }
-  else if(k==='equipo'){ await vistaEquipo(); }
-  else if(k==='comis'){ await vistaComisiones(); }
-  else if(k==='analitica'){ await vistaAnalitica(); }
+  try{
+    if(k==='midia'){ await cargarMiDia(); }
+    else if(k==='recepcion'){ await vistaRecepcion(); }
+    else if(k==='cierre'){ await vistaCierre(); }
+    else if(k==='postventa'){ await vistaPostventa(); }
+    else if(k==='reservas'){ await vistaReservas(); }
+    else if(k==='todos'){ await cargarTodos(); }
+    else if(k==='cargar'){ await vistaCargar(); }
+    else if(k==='miequipo'){ await vistaMiEquipo(); }
+    else if(k==='equipo'){ await vistaEquipo(); }
+    else if(k==='comis'){ await vistaComisiones(); }
+    else if(k==='analitica'){ await vistaAnalitica(); }
+  }catch(e){ // ahora que getJSON propaga errores HTTP, ninguna pestaña se queda en "Cargando…"
+    const c=$('funCont'); if(c) c.innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No se pudo cargar</b><p>Puede ser la conexión. <b onclick="funIrTab('${k}')" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;
+  }
 }
 function opAgentes(rol,sel){ return AGENTES.filter(a=>a.activo&&a.rol===rol).map(a=>`<option value="${a.id}" ${sel==a.id?'selected':''}>${esc(a.nombre)}</option>`).join(''); }
 
@@ -2105,9 +2140,10 @@ async function vistaAnalitica(){
   if(!BASES.length) BASES=await getJSON("funnel_bases?select=id,nombre,tipo&limit=500");
   const baseTipo={}; BASES.forEach(b=>baseTipo[b.id]=b.tipo||'(sin tipo)');
   const nomAg=id=>{const a=AGENTES.find(x=>x.id===id);return a?a.nombre:'(sin asignar)';};
-  const P=await getJSON("funnel_prospectos?select=id,estado,etapa,califica,tmk_id,vendedor_id,cerrador_id,base_id,recepcion_en,actualizado_en,motivo_baja&limit=8000");
-  const COM=await getJSON("funnel_comisiones?select=rol,monto&limit=5000");
-  const LEXT=await getJSON("leads?select=estado&limit=5000"); // leads captados fuera del embudo (web/bot)
+  // Paginado (getAllRows): acá sí se necesitan las FILAS para agrupar, y limit>1000 no sirve (max_rows)
+  const P=await getAllRows("funnel_prospectos?select=id,estado,etapa,califica,tmk_id,vendedor_id,cerrador_id,base_id,recepcion_en,actualizado_en,motivo_baja");
+  const COM=await getAllRows("funnel_comisiones?select=rol,monto");
+  const LEXT=await getAllRows("leads?select=estado"); // leads captados fuera del embudo (web/bot)
   const total=P.length, contact=P.filter(p=>p.estado!=='nuevo').length, asis=P.filter(p=>p.recepcion_en).length, cal=P.filter(p=>p.califica===true).length;
   const socios=P.filter(p=>p.etapa==='socio'), cerr=socios.length;
   const pct=(a,b)=>b>0?Math.round(a/b*100)+'%':'—';
