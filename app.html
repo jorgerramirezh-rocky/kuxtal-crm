@@ -2533,9 +2533,10 @@ async function vistaCargar(){
       <textarea id="brows" placeholder="Familia López, 5541-2233&#10;Familia Girón, 4102-8890"></textarea>
       <button class="btn" id="bcrear" onclick="crearBase()">Crear base</button>
     </div>
+    <div id="repPrev"></div>
     <div class="panel">
       <h3>Bases cargadas</h3>
-      <div class="h">Repartí los prospectos SIN asignar entre los ${activos} TMK activos (equitativo). ${activos?'':'<svg class="svic" aria-hidden="true"><use href="#ic-alert"/></svg> No hay TMK activos — agregá en Equipo.'}</div>
+      <div class="h">Repartí los prospectos SIN asignar entre los ${activos} TMK activos (equitativo, round-robin). ${activos?'':'<svg class="svic" aria-hidden="true"><use href="#ic-alert"/></svg> No hay TMK activos — agregá en Equipo.'}</div>
       <div id="baseList"></div>
     </div>`;
   pintarBases();
@@ -2561,13 +2562,76 @@ async function crearBase(){
   }catch(e){ toast('No se pudo ('+e.message+')'); }
   finally{ b.disabled=false; b.textContent='Crear base'; }
 }
+// ── (M1a) REPARTO EQUITATIVO round-robin, con PREVIEW antes de escribir ──
+// Mismo criterio que el RPC funnel_repartir: los TMK activos se expanden por su PESO
+// (peso 2 = recibe doble turno) y los prospectos SIN tmk_id se reparten en ronda por id.
+// El offset rota quién arranca (botón "Re-repartir"). Función PURA → probada en qa/marco.mjs.
+function repartoRoundRobin(prospectos,agentes,offset){
+  const tmk=(agentes||[]).filter(a=>a.activo&&a.rol==='tmk').slice().sort((x,y)=>x.id-y.id);
+  const slots=[]; tmk.forEach(a=>{ const w=Math.max(1,Number(a.peso)||1); for(let i=0;i<w;i++) slots.push(a.id); });
+  const plan={}; tmk.forEach(a=>{plan[a.id]=[];});
+  const libres=(prospectos||[]).filter(p=>!p.tmk_id).slice().sort((x,y)=>x.id-y.id);
+  if(!slots.length) return {plan,sinAsignar:libres,total:libres.length};
+  libres.forEach((p,i)=>{ plan[slots[(i+(Number(offset)||0))%slots.length]].push(p); });
+  return {plan,sinAsignar:[],total:libres.length};
+}
+// Escribe el plan: un PATCH por agente (id=in.(...) y tmk_id=is.null como candado anti-doble
+// asignación) + los eventos 'asignado' en funnel_eventos. Recibe apiFn para poder stubearse en QA.
+async function aplicarReparto(plan,apiFn,actor){
+  let n=0; const evs=[];
+  for(const aid of Object.keys(plan)){
+    const arr=plan[aid]||[]; if(!arr.length) continue;
+    const ids=arr.map(p=>p.id).join(',');
+    const r=await apiFn("funnel_prospectos?id=in.("+ids+")&tmk_id=is.null",{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify({tmk_id:Number(aid),actualizado_en:new Date().toISOString()})});
+    if(!r.ok) throw new Error('reparto '+r.status);
+    let filas=[]; try{ filas=await r.json(); }catch(e){}
+    n+=filas.length;
+    filas.forEach(p=>evs.push({prospecto_id:p.id,tipo:'asignado',actor:actor||'crm',payload:{agente_id:Number(aid)}}));
+  }
+  if(evs.length){ try{ await apiFn("funnel_eventos",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(evs)}); }catch(e){/* el reparto ya quedó; el evento es bitácora */} }
+  return n;
+}
+let REP={base:null,nombre:'',offset:0,prosp:[],asignados:0};
 async function repartir(baseId,btn){
-  if(btn){ btn.disabled=true; btn.textContent='Repartiendo…'; }
-  try{ const r=await api("rpc/funnel_repartir",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({p_base:baseId})});
-    if(!r.ok){ const t=await r.text(); toast(''+(t.includes('TMK')?'No hay TMK activos — agregá en Equipo':'No se pudo repartir')); return; }
-    const n=await r.json(); toast(n>0?('Repartidos '+n+' entre los TMK'):'Nada por repartir (ya estaban asignados)');
-  }catch(e){ toast('No se pudo repartir'); }
+  if(btn){ btn.disabled=true; btn.textContent='Calculando…'; }
+  try{
+    if(!AGENTES.length) AGENTES=(await getJSON("funnel_agentes?select=*"))||[];
+    const rows=await getAllRows("funnel_prospectos?select=id,nombre,tmk_id&base_id=eq."+baseId+"&order=id.asc");
+    const b=BASES.find(x=>x.id===baseId)||{};
+    REP={base:baseId,nombre:b.nombre||('base '+baseId),offset:0,prosp:rows,asignados:rows.filter(p=>p.tmk_id).length};
+    pintarPreviewReparto();
+    const pv=$('repPrev'); if(pv) pv.scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(e){ toast('No pude leer la base'); }
   finally{ if(btn){ btn.disabled=false; btn.textContent='Repartir'; } }
+}
+function pintarPreviewReparto(){
+  const box=$('repPrev'); if(!box||REP.base==null) return;
+  const r=repartoRoundRobin(REP.prosp,AGENTES,REP.offset);
+  const agN=id=>{const a=AGENTES.find(x=>x.id==id);return a?a.nombre:('agente '+id);};
+  const filas=Object.entries(r.plan).map(([aid,arr])=>{
+    const nombres=arr.slice(0,3).map(p=>esc(p.nombre)).join(', ')+(arr.length>3?'…':'');
+    return `<div class="basecard"><div><b>${esc(agN(aid))}</b><div class="m">${nombres||'—'}</div></div><span class="tag">${arr.length}</span></div>`;
+  }).join('');
+  const sin=r.sinAsignar.length?`<div class="basecard" style="border-color:var(--rojo)"><div><b>Sin asignar (no hay TMK activos)</b><div class="m">${r.sinAsignar.slice(0,5).map(p=>esc(p.nombre)).join(', ')}${r.sinAsignar.length>5?'…':''}</div></div><span class="tag" style="background:#fdecea;color:#b3261e">${r.sinAsignar.length}</span></div>`:'';
+  box.innerHTML=`<div class="panel">
+    <h3>Preview del reparto · ${esc(REP.nombre)}</h3>
+    <div class="h">${r.total} sin asignar de ${REP.prosp.length} en la base${REP.asignados?(' ('+REP.asignados+' ya tenían TMK y no se tocan)'):''}. Nada se guarda hasta que confirmés.</div>
+    ${filas||'<div class="cap">No hay TMK activos — agregá en la pestaña Equipo.</div>'}${sin}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+      <button class="btn" style="margin:0;flex:1;background:var(--lima-d)" id="repOk" onclick="confirmarReparto(this)" ${r.total&&Object.keys(r.plan).length?'':'disabled'}>Confirmar reparto (${r.total})</button>
+      <button class="btn" style="margin:0;flex:none" onclick="REP.offset++;pintarPreviewReparto()">Re-repartir</button>
+      <button class="btn" style="margin:0;flex:none;background:var(--gris)" onclick="REP={base:null,nombre:'',offset:0,prosp:[],asignados:0};$('repPrev').innerHTML=''">Cancelar</button>
+    </div></div>`;
+}
+async function confirmarReparto(btn){
+  btn.disabled=true; btn.textContent='Repartiendo…';
+  try{
+    const r=repartoRoundRobin(REP.prosp,AGENTES,REP.offset);
+    const n=await aplicarReparto(r.plan,api,USER);
+    toast(n>0?('Repartidos '+n+' entre los TMK'):'Nada por repartir (ya estaban asignados)');
+    REP={base:null,nombre:'',offset:0,prosp:[],asignados:0};
+    await vistaCargar();
+  }catch(e){ toast('No se pudo repartir'); btn.disabled=false; btn.textContent='Confirmar reparto'; }
 }
 
 // ── EQUIPO (gerencia) ──
