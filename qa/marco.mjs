@@ -74,6 +74,27 @@ console.log('\n(a) aplicarReparto (api stub)');
   ok(JSON.parse(evs[0].opt.body)[0].actor==='qa@kuxtal', 'actor del evento = usuario');
 }
 
+// ── (a) aplicarReparto: falla a mitad → los ya asignados NO pierden bitácora (revisión adversaria) ──
+console.log('\n(a) aplicarReparto con falla a mitad de camino');
+{
+  const calls=[];
+  const apiStub=async(path,opt)=>{
+    calls.push({path,opt});
+    if(path.startsWith('funnel_prospectos')){
+      const ids=path.match(/id=in\.\(([^)]*)\)/)[1].split(',').map(Number);
+      if(ids.includes(5)) return {ok:false,status:500,json:async()=>[]}; // el 2do PATCH falla
+      return {ok:true,json:async()=>ids.map(id=>({id}))};
+    }
+    return {ok:true,json:async()=>[]};
+  };
+  const plan={7:[{id:1},{id:2}],8:[{id:5},{id:6}]};
+  let lanzo=false;
+  try{ await sandbox.aplicarReparto(plan,apiStub,'qa@kuxtal'); }catch(e){ lanzo=true; }
+  ok(lanzo, 'la falla del PATCH se propaga (el caller muestra el error)');
+  const evs=calls.filter(c=>c.path==='funnel_eventos');
+  ok(evs.length===1 && JSON.parse(evs[0].opt.body).length===2, 'los 2 ya asignados igual quedan en la bitácora (fue '+(evs.length?JSON.parse(evs[0].opt.body).length:0)+')');
+}
+
 // ── (b) Mi día ──
 console.log('\n(b) ordenarMiDia + cuerpoCita');
 {
