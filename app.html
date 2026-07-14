@@ -2142,16 +2142,25 @@ async function vistaCierre(){
   if(!cierreLeads.length){ $('funCont').innerHTML=`<div class="vacio"><b>Nadie en sala para cerrar</b><p>Acá caen los que calificaron en Recepción, listos para el contrato.</p></div>`; return; }
   $('funCont').innerHTML=cierreLeads.map(cierreCard).join('');
 }
+// (M1d) El contrato NACE de la tabla funnel_membresias (precio, descuento, enganche) —
+// nada de valores cableados en el HTML. montoMembresia() es pura → qa/marco.mjs.
+function montoMembresia(m){ return Math.max(0,(Number(m&&m.precio)||0)-(Number(m&&m.descuento)||0)); }
+function elegirMemb(id,tipo){
+  const m=MEMBS.find(x=>x.tipo===tipo); if(!m) return;
+  const mon=$('mon'+id); if(mon) mon.value=montoMembresia(m);
+  const eng=$('eng'+id); if(eng) eng.value=(m.enganche==null?'':m.enganche);
+}
 function cierreCard(l){
-  const memb=MEMBS.map((m,i)=>`<option value="${esc(m.tipo)}" data-p="${m.precio}">${esc(m.tipo)} · $${m.precio}</option>`).join('');
+  const memb=MEMBS.map(m=>`<option value="${esc(m.tipo)}">${esc(m.tipo)} · $${montoMembresia(m)}${Number(m.descuento)>0?(' (precio $'+m.precio+' − desc $'+m.descuento+')'):''}</option>`).join('');
   const plan=PLANES.map(p=>`<option>${esc(p.nombre)}</option>`).join('');
-  const p0=MEMBS[0]?MEMBS[0].precio:'';
+  const m0=MEMBS[0]||null;
   return `<div class="lead" id="cie${l.id}" style="border-left-color:var(--verde)">
     <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">Vendedor y cerrador asignados en recepción</div></div></div>
     <div class="sub show" style="margin-top:12px">
-      <div class="fld"><label>Membresía</label><select id="mem${l.id}" onchange="var o=this.options[this.selectedIndex];document.getElementById('mon${l.id}').value=o.getAttribute('data-p')||''">${memb}</select></div>
+      <div class="fld"><label>Membresía</label><select id="mem${l.id}" onchange="elegirMemb(${l.id},this.value)">${memb}</select></div>
       <div class="fld"><label>Plan de pago</label><select id="pln${l.id}">${plan}</select></div>
-      <div class="fld"><label>Monto (US$)</label><input type="number" id="mon${l.id}" inputmode="decimal" value="${p0}"></div>
+      <div class="fld"><label>Monto (US$) · precio − descuento</label><input type="number" id="mon${l.id}" inputmode="decimal" value="${m0?montoMembresia(m0):''}"></div>
+      <div class="fld"><label>Enganche / pago inicial (US$)</label><input type="number" id="eng${l.id}" inputmode="decimal" value="${m0&&m0.enganche!=null?m0.enganche:''}"></div>
       <div class="fld"><label>Vigencia (años)</label><select id="vig${l.id}"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select></div>
     </div>
     <div class="sub show">
@@ -2185,13 +2194,34 @@ table{width:100%;border-collapse:collapse}td{padding:7px 6px;border-bottom:1px s
 <div class="doc"><div class="t">CONTRATO DE MEMBRESÍA</div><div class="m">No. de socio: <b>${esc(d.no_socio||'—')}</b></div><div class="m">Fecha: ${fmt(hoy)}</div></div></div>
 <h2>Datos del socio</h2><table>${fila('Nombre',d.nombre)}${fila('Teléfono',d.telefono)}</table>
 <h2>Membresía</h2><table>${fila('Tipo de membresía',d.membresia)}${fila('Vigencia',(Number(d.anios)||4)+' años')}${fila('Ingreso',fmt(hoy))}${fila('Vence',fmt(vencIso))}</table>
-<h2>Inversión y plan de pago</h2><table>${fila('Plan de pago',d.plan)}</table>
+<h2>Inversión y plan de pago</h2><table>${fila('Plan de pago',d.plan)}${d.enganche>0?fila('Enganche (pago inicial)','US$ '+Number(d.enganche).toLocaleString('en-US',{minimumFractionDigits:2})):''}</table>
 <div class="monto"><span>Total de la membresía</span><span class="n">US$ ${Number(d.monto||0).toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>
 <h2>Equipo Kuxtal</h2><table>${fila('Vendedor (liner)',d.vendedor)}${fila('Cerrador (closer)',d.cerrador)}${fila('Digitador',d.digitador)}${fila('Verificador',d.verificador)}</table>
 <div class="firmas"><div>Firma del socio<br>${esc(d.nombre||'')}</div><div>Por Kuxtal Travels<br>${esc(d.cerrador||'')}</div></div>
 <div class="legal">Este contrato acredita la afiliación del socio al programa de membresías de Kuxtal Travels bajo el tipo y la vigencia arriba indicados. La membresía es válida desde la fecha de ingreso hasta su vencimiento y otorga acceso a los beneficios del club vigentes durante ese periodo. Documento generado electrónicamente por el sistema Kuxtal.</div></body></html>`;
   const w=window.open('','_blank'); if(!w){ toast('Permití las ventanas emergentes para imprimir'); return; }
   w.document.write(html); w.document.close(); w.focus(); setTimeout(()=>{ try{ w.print(); }catch(e){} }, 400);
+}
+// (M1d) ¿funnel_contratos ya tiene la columna 'enganche'? Se prueba UNA vez (mismo patrón
+// que probeOfertasExt): la migración 20260714_marco_funnel.sql la agrega; mientras no esté,
+// el enganche igual queda registrado en funnel_eventos (tipo 'enganche').
+let CONTR_ENG=null;
+async function probeContratosExt(){
+  if(CONTR_ENG!==null) return CONTR_ENG;
+  try{ const r=await api("funnel_contratos?select=enganche&limit=1"); CONTR_ENG=!!r.ok; }catch(e){ CONTR_ENG=false; }
+  return CONTR_ENG;
+}
+// Registra el enganche (pago inicial): PATCH al contrato si la columna existe + SIEMPRE
+// bitácora en funnel_eventos. Recibe apiFn para stubearse en QA. Tolerante: si el PATCH
+// falla (RLS/columna), el evento queda igual.
+async function registrarEnganche(cid,pid,enganche,planPago,apiFn,tieneCol,actor){
+  const out={patched:false,evento:false};
+  if(enganche==null||!(enganche>0)) return out;
+  if(tieneCol&&cid!=null){
+    try{ const r=await apiFn("funnel_contratos?id=eq."+cid,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({enganche})}); out.patched=!!r.ok; }catch(e){}
+  }
+  try{ const r2=await apiFn("funnel_eventos",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({prospecto_id:pid,tipo:'enganche',actor:actor||'crm',payload:{contrato_id:cid,enganche,plan_pago:planPago}})}); out.evento=!!r2.ok; }catch(e){}
+  return out;
 }
 async function cerrarContrato(id,btn){
   btn.disabled=true; btn.textContent='Cerrando…';
@@ -2205,7 +2235,10 @@ async function cerrarContrato(id,btn){
     const r=await api("rpc/funnel_cerrar_contrato",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     if(!r.ok){ toast('No se pudo cerrar el contrato'); btn.disabled=false; btn.innerHTML='<svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Cerrar contrato'; return; }
     let res={}; try{ res=await r.json(); }catch(e){}
-    imprimirContrato({ no_socio:res.no_socio, nombre:l.nombre, telefono:l.telefono, membresia:g('mem'), plan:g('pln'), monto:Number(g('mon'))||0, anios:anios,
+    // (M1d) enganche como pago inicial: a la fila del contrato (si hay columna) + bitácora
+    const eng=g('eng')?Number(g('eng')):null;
+    try{ await registrarEnganche(res.contrato_id,id,eng,g('pln'),api,await probeContratosExt(),USER); }catch(e){}
+    imprimirContrato({ no_socio:res.no_socio, nombre:l.nombre, telefono:l.telefono, membresia:g('mem'), plan:g('pln'), monto:Number(g('mon'))||0, enganche:eng, anios:anios,
       vendedor:agN(l.vendedor_id), cerrador:agN(l.cerrador_id), digitador:agN(g('dig')), verificador:agN(g('ver')) });
     toast('Contrato cerrado · socio creado · comisiones generadas'); const c=$('cie'+id); if(c)c.remove();
   }catch(e){ toast('Error al cerrar'); btn.disabled=false; btn.innerHTML='<svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Cerrar contrato'; }
