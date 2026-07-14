@@ -2679,17 +2679,20 @@ function repartoRoundRobin(prospectos,agentes,offset){
 // Escribe el plan: un PATCH por agente (id=in.(...) y tmk_id=is.null como candado anti-doble
 // asignación) + los eventos 'asignado' en funnel_eventos. Recibe apiFn para poder stubearse en QA.
 async function aplicarReparto(plan,apiFn,actor){
-  let n=0; const evs=[];
-  for(const aid of Object.keys(plan)){
-    const arr=plan[aid]||[]; if(!arr.length) continue;
-    const ids=arr.map(p=>p.id).join(',');
-    const r=await apiFn("funnel_prospectos?id=in.("+ids+")&tmk_id=is.null",{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify({tmk_id:Number(aid),actualizado_en:new Date().toISOString()})});
-    if(!r.ok) throw new Error('reparto '+r.status);
-    let filas=[]; try{ filas=await r.json(); }catch(e){}
-    n+=filas.length;
-    filas.forEach(p=>evs.push({prospecto_id:p.id,tipo:'asignado',actor:actor||'crm',payload:{agente_id:Number(aid)}}));
-  }
+  let n=0; const evs=[]; let err=null;
+  try{
+    for(const aid of Object.keys(plan)){
+      const arr=plan[aid]||[]; if(!arr.length) continue;
+      const ids=arr.map(p=>p.id).join(',');
+      const r=await apiFn("funnel_prospectos?id=in.("+ids+")&tmk_id=is.null",{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify({tmk_id:Number(aid),actualizado_en:new Date().toISOString()})});
+      if(!r.ok) throw new Error('reparto '+r.status);
+      let filas=[]; try{ filas=await r.json(); }catch(e){}
+      n+=filas.length;
+      filas.forEach(p=>evs.push({prospecto_id:p.id,tipo:'asignado',actor:actor||'crm',payload:{agente_id:Number(aid)}}));
+    }
+  }catch(e){ err=e; } // (revisión adversaria) si un PATCH intermedio falla, los ya asignados NO se quedan sin bitácora
   if(evs.length){ try{ await apiFn("funnel_eventos",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(evs)}); }catch(e){/* el reparto ya quedó; el evento es bitácora */} }
+  if(err) throw err;
   return n;
 }
 let REP={base:null,nombre:'',offset:0,prosp:[],asignados:0};
