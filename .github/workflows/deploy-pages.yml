@@ -1,0 +1,53 @@
+name: Publicar Pages tras QA
+# hz_fb626d12: la publicación de Pages debe BLOQUEARSE si el QA falla.
+# Este workflow publica vía Actions (build_type=workflow) SOLO si el job 'qa' pasa.
+# Los pasos del job 'qa' son los mismos que .github/workflows/qa.yml (required check 'qa').
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Instalar Playwright + Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm i -D playwright@1.48
+          npx playwright install --with-deps chromium
+      - name: Correr QA (responsive + errores + piezas)
+        run: node qa/check.mjs
+
+  deploy:
+    needs: qa
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configurar Pages
+        uses: actions/configure-pages@v5
+      - name: Empaquetar el sitio (raíz del repo)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - name: Publicar a GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
