@@ -944,7 +944,7 @@ function canceladasHTML(){
 // ── Admin: Analítica de uso de promos (tabla 'usos' + 'ofertas') ──
 let USOS=null, cargandoUsos=false, verUsos=false;
 async function traerUsos(){
-  try{ return await getAllRows('usos?select=oferta_id,socio_id'); } // paginado: limit=20000 se cortaba en 1000
+  try{ return await getAllRows('usos?select=oferta_id,socio_id&order=id.asc'); } // paginado: limit=20000 se cortaba en 1000
   catch(e){ return []; }
 }
 async function toggleAnalitica(){
@@ -1331,7 +1331,7 @@ async function cargarFunnelBI(){
       sbCountExact(B+'&etapa=eq.baja')
     ]);
     let comisiones=0;
-    if(esGerente){ (await getAllRows('funnel_comisiones?select=monto')).forEach(c=>{comisiones+=Number(c.monto||0);}); } // #13-fix: el total de comisiones solo lo ve gerencia
+    if(esGerente){ (await getAllRows('funnel_comisiones?select=monto&order=id.asc')).forEach(c=>{comisiones+=Number(c.monto||0);}); } // #13-fix: el total de comisiones solo lo ve gerencia
     FUNNEL={total,contact,asis,cal,cerr,bajas,comisiones,
       conv:total>0?Math.round(cerr/total*100):0, cargado:true};
   }catch(e){ FUNNEL={cargado:false}; }
@@ -1823,7 +1823,10 @@ async function validarCodigo(codigo){
         if(usados>=cant) return showValida('error','Cupos agotados','Esta promoción ya llegó a su límite de canjes.');
       }
     }
-    await fetch(SB_URL+"/rest/v1/codigos?id=eq."+c.id,{method:"PATCH",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({usado:true,usado_en:new Date().toISOString(),usado_por:USER})});
+    // El PATCH que consume el código TIENE que confirmarse antes de celebrar: si falla (RLS/red),
+    // el código sigue vigente y mostrar 'ok' regalaría el descuento y permitiría reutilizarlo.
+    const rp=await fetch(SB_URL+"/rest/v1/codigos?id=eq."+c.id,{method:"PATCH",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({usado:true,usado_en:new Date().toISOString(),usado_por:USER})});
+    if(!rp.ok) return showValida('error','No se pudo validar','El código NO se consumió. Revisá la conexión e intentá de nuevo.');
     // Registro del canje CON la oferta (antes iba sin oferta_id y la analítica/cupos no podían contarlo)
     await fetch(SB_URL+"/rest/v1/usos",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_id:c.socio_id,oferta_id:c.oferta_id??null,tipo:'descuento',codigo:codigo,usuario:USER})});
     addInter(c.socio_id,'uso','Usó beneficio (descuento) '+codigo);
@@ -2206,9 +2209,9 @@ async function vistaAnalitica(){
   const baseTipo={}; BASES.forEach(b=>baseTipo[b.id]=b.tipo||'(sin tipo)');
   const nomAg=id=>{const a=AGENTES.find(x=>x.id===id);return a?a.nombre:'(sin asignar)';};
   // Paginado (getAllRows): acá sí se necesitan las FILAS para agrupar, y limit>1000 no sirve (max_rows)
-  const P=await getAllRows("funnel_prospectos?select=id,estado,etapa,califica,tmk_id,vendedor_id,cerrador_id,base_id,recepcion_en,actualizado_en,motivo_baja");
-  const COM=await getAllRows("funnel_comisiones?select=rol,monto");
-  const LEXT=await getAllRows("leads?select=estado"); // leads captados fuera del embudo (web/bot)
+  const P=await getAllRows("funnel_prospectos?select=id,estado,etapa,califica,tmk_id,vendedor_id,cerrador_id,base_id,recepcion_en,actualizado_en,motivo_baja&order=id.asc");
+  const COM=await getAllRows("funnel_comisiones?select=rol,monto&order=id.asc");
+  const LEXT=await getAllRows("leads?select=estado&order=id.asc"); // leads captados fuera del embudo (web/bot)
   const total=P.length, contact=P.filter(p=>p.estado!=='nuevo').length, asis=P.filter(p=>p.recepcion_en).length, cal=P.filter(p=>p.califica===true).length;
   const socios=P.filter(p=>p.etapa==='socio'), cerr=socios.length;
   const pct=(a,b)=>b>0?Math.round(a/b*100)+'%':'—';
