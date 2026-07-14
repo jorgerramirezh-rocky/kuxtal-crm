@@ -2064,18 +2064,44 @@ async function funIrTab(k){ funTab=k; funPintarTabs();
 }
 function opAgentes(rol,sel){ return AGENTES.filter(a=>a.activo&&a.rol===rol).map(a=>`<option value="${a.id}" ${sel==a.id?'selected':''}>${esc(a.nombre)}</option>`).join(''); }
 
-// ── RECEPCIÓN (sala de ventas: validar + calificar al llegar) ──
+// ── RECEPCIÓN (sala de ventas: los citados de HOY llegan, se valida, califica y asigna) ──
+// (M1c) citadosDeHoy() es pura → qa/marco.mjs.
+function citadosDeHoy(list,hoy){ return (list||[]).filter(l=>l.presenta_en&&String(l.presenta_en).slice(0,10)===hoy); }
+let recepSub='hoy';
 async function vistaRecepcion(){
-  $('funCap').textContent='Recepción de sala: validá al que llega, calificá y asigná vendedor/cerrador.';
+  $('funCap').textContent='Recepción de sala: marcá la llegada del citado, calificá y asigná vendedor/cerrador.';
   $('funCont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
-  const list=await getJSON("funnel_prospectos?select=*&estado=eq.asistira&etapa=in.(telemarketing,presentacion)&order=presenta_en.asc.nullslast,id.asc");
-  if(!list.length){ $('funCont').innerHTML=`<div class="vacio"><b>Nadie en recepción</b><p>Acá aparecen los prospectos que un TMK marcó como <b>Asistirá</b>. Cuando lleguen, los validás y calificás.</p></div>`; return; }
-  $('funCont').innerHTML=list.map(recepCard).join('');
+  window.__REC=await getJSON("funnel_prospectos?select=*&estado=eq.asistira&etapa=in.(telemarketing,presentacion)&order=presenta_en.asc.nullslast,id.asc");
+  pintarRecepcion();
+}
+function pintarRecepcion(){
+  const todos=window.__REC||[];
+  const hoy=citadosDeHoy(todos,hoyStr());
+  const list=recepSub==='hoy'?hoy:todos;
+  const tabs=`<div class="subtabs">
+    <button class="st ${recepSub==='hoy'?'on':''}" onclick="recepSub='hoy';pintarRecepcion()">Citados hoy (${hoy.length})</button>
+    <button class="st ${recepSub==='todos'?'on':''}" onclick="recepSub='todos';pintarRecepcion()">Todos los citados (${todos.length})</button>
+  </div>`;
+  $('funCont').innerHTML=tabs+(list.length?list.map(recepCard).join('')
+    :`<div class="vacio"><b>${recepSub==='hoy'?'Nadie citado para hoy':'Nadie en recepción'}</b><p>Acá aparecen los prospectos que un TMK citó a presentación (<b>Asistirá</b>). Cuando lleguen, marcá la llegada, validá y calificá.</p></div>`);
+}
+async function marcarLlegada(id,btn){
+  if(btn) btn.disabled=true;
+  const ts=new Date().toISOString();
+  if(await funPatchLead(id,{recepcion_en:ts,recepcionado_por:USER})){
+    ev(id,'llegada','Llegó a recepción');
+    const l=(window.__REC||[]).find(x=>x.id===id); if(l){ l.recepcion_en=ts; l.recepcionado_por=USER; }
+    toast('Llegada registrada'); pintarRecepcion();
+  } else { if(btn) btn.disabled=false; toast('No se pudo'); }
 }
 function recepCard(l){
   const rest=(RESTAS.find(r=>r.id==l.restaurante_id)||{}).nombre||'';
+  const cita=l.presenta_en?(String(l.presenta_en).slice(0,10)+' '+String(l.presenta_en).slice(11,16)):'sin fecha de cita';
+  const llegada=l.recepcion_en
+    ? `<span class="tag" style="background:#e9f7ef;color:#1a8a54">Llegó · ${esc(new Date(l.recepcion_en).toLocaleTimeString('es-GT',{hour:'2-digit',minute:'2-digit'}))}</span>`
+    : `<button class="est" style="background:var(--kux);color:#fff;border-color:var(--kux)" onclick="marcarLlegada(${l.id},this)">Marcar llegada</button>`;
   return `<div class="lead" id="rec${l.id}" style="border-left-color:var(--amar)">
-    <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">${esc(l.telefono||'')}${rest?(' · '+esc(rest)):''}</div></div></div>
+    <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">${esc(l.telefono||'')}${rest?(' · '+esc(rest)):''} · cita: ${esc(cita)}</div></div><div style="flex:none">${llegada}</div></div>
     <div class="sub show" style="margin-top:12px">
       <div class="fld"><label>Edad</label><input type="number" id="edad${l.id}" inputmode="numeric" value="${l.edad||''}"></div>
       <div class="fld"><label>Estado civil</label><select id="ec${l.id}"><option value="">—</option><option ${l.estado_civil==='casado'?'selected':''}>casado</option><option ${l.estado_civil==='soltero'?'selected':''}>soltero</option><option ${l.estado_civil==='otro'?'selected':''}>otro</option></select></div>
@@ -2098,10 +2124,13 @@ function recepCard(l){
 async function recepcionar(id,ok,btn){
   btn.disabled=true;
   const g=x=>{const e=$(x+id);return e?e.value:'';};
+  const l=(window.__REC||[]).find(x=>x.id===id)||{};
+  // (M1c) si ya se marcó la llegada, esa hora NO se pisa al calificar
   const body={edad:g('edad')?Number(g('edad')):null, estado_civil:g('ec')||null, tarjetas_credito:g('ntc')?Number(g('ntc')):null, tipo_tarjetas:g('ttc')||null,
     califica:ok, motivo_no:ok?null:(g('mot')||null), vendedor_id:g('vend')?Number(g('vend')):null, cerrador_id:g('cerr')?Number(g('cerr')):null,
-    recepcion_en:new Date().toISOString(), recepcionado_por:USER, etapa:ok?'sala':'baja'};
-  if(await funPatchLead(id,body)){ ev(id,'sala',ok?'Calificó → sala':'No califica'); toast(ok?'Pasa a sala':'Marcado: no califica'); const c=$('rec'+id); if(c)c.remove(); }
+    recepcion_en:l.recepcion_en||new Date().toISOString(), recepcionado_por:l.recepcionado_por||USER, etapa:ok?'sala':'baja'};
+  if(await funPatchLead(id,body)){ ev(id,'sala',ok?'Calificó → sala':'No califica'); toast(ok?'Pasa a sala':'Marcado: no califica');
+    window.__REC=(window.__REC||[]).filter(x=>x.id!==id); const c=$('rec'+id); if(c)c.remove(); pintarRecepcion(); }
   else{ btn.disabled=false; toast('No se pudo'); }
 }
 
@@ -2113,16 +2142,25 @@ async function vistaCierre(){
   if(!cierreLeads.length){ $('funCont').innerHTML=`<div class="vacio"><b>Nadie en sala para cerrar</b><p>Acá caen los que calificaron en Recepción, listos para el contrato.</p></div>`; return; }
   $('funCont').innerHTML=cierreLeads.map(cierreCard).join('');
 }
+// (M1d) El contrato NACE de la tabla funnel_membresias (precio, descuento, enganche) —
+// nada de valores cableados en el HTML. montoMembresia() es pura → qa/marco.mjs.
+function montoMembresia(m){ return Math.max(0,(Number(m&&m.precio)||0)-(Number(m&&m.descuento)||0)); }
+function elegirMemb(id,tipo){
+  const m=MEMBS.find(x=>x.tipo===tipo); if(!m) return;
+  const mon=$('mon'+id); if(mon) mon.value=montoMembresia(m);
+  const eng=$('eng'+id); if(eng) eng.value=(m.enganche==null?'':m.enganche);
+}
 function cierreCard(l){
-  const memb=MEMBS.map((m,i)=>`<option value="${esc(m.tipo)}" data-p="${m.precio}">${esc(m.tipo)} · $${m.precio}</option>`).join('');
+  const memb=MEMBS.map(m=>`<option value="${esc(m.tipo)}">${esc(m.tipo)} · $${montoMembresia(m)}${Number(m.descuento)>0?(' (precio $'+m.precio+' − desc $'+m.descuento+')'):''}</option>`).join('');
   const plan=PLANES.map(p=>`<option>${esc(p.nombre)}</option>`).join('');
-  const p0=MEMBS[0]?MEMBS[0].precio:'';
+  const m0=MEMBS[0]||null;
   return `<div class="lead" id="cie${l.id}" style="border-left-color:var(--verde)">
     <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">Vendedor y cerrador asignados en recepción</div></div></div>
     <div class="sub show" style="margin-top:12px">
-      <div class="fld"><label>Membresía</label><select id="mem${l.id}" onchange="var o=this.options[this.selectedIndex];document.getElementById('mon${l.id}').value=o.getAttribute('data-p')||''">${memb}</select></div>
+      <div class="fld"><label>Membresía</label><select id="mem${l.id}" onchange="elegirMemb(${l.id},this.value)">${memb}</select></div>
       <div class="fld"><label>Plan de pago</label><select id="pln${l.id}">${plan}</select></div>
-      <div class="fld"><label>Monto (US$)</label><input type="number" id="mon${l.id}" inputmode="decimal" value="${p0}"></div>
+      <div class="fld"><label>Monto (US$) · precio − descuento</label><input type="number" id="mon${l.id}" inputmode="decimal" value="${m0?montoMembresia(m0):''}"></div>
+      <div class="fld"><label>Enganche / pago inicial (US$)</label><input type="number" id="eng${l.id}" inputmode="decimal" value="${m0&&m0.enganche!=null?m0.enganche:''}"></div>
       <div class="fld"><label>Vigencia (años)</label><select id="vig${l.id}"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select></div>
     </div>
     <div class="sub show">
@@ -2156,13 +2194,34 @@ table{width:100%;border-collapse:collapse}td{padding:7px 6px;border-bottom:1px s
 <div class="doc"><div class="t">CONTRATO DE MEMBRESÍA</div><div class="m">No. de socio: <b>${esc(d.no_socio||'—')}</b></div><div class="m">Fecha: ${fmt(hoy)}</div></div></div>
 <h2>Datos del socio</h2><table>${fila('Nombre',d.nombre)}${fila('Teléfono',d.telefono)}</table>
 <h2>Membresía</h2><table>${fila('Tipo de membresía',d.membresia)}${fila('Vigencia',(Number(d.anios)||4)+' años')}${fila('Ingreso',fmt(hoy))}${fila('Vence',fmt(vencIso))}</table>
-<h2>Inversión y plan de pago</h2><table>${fila('Plan de pago',d.plan)}</table>
+<h2>Inversión y plan de pago</h2><table>${fila('Plan de pago',d.plan)}${d.enganche>0?fila('Enganche (pago inicial)','US$ '+Number(d.enganche).toLocaleString('en-US',{minimumFractionDigits:2})):''}</table>
 <div class="monto"><span>Total de la membresía</span><span class="n">US$ ${Number(d.monto||0).toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>
 <h2>Equipo Kuxtal</h2><table>${fila('Vendedor (liner)',d.vendedor)}${fila('Cerrador (closer)',d.cerrador)}${fila('Digitador',d.digitador)}${fila('Verificador',d.verificador)}</table>
 <div class="firmas"><div>Firma del socio<br>${esc(d.nombre||'')}</div><div>Por Kuxtal Travels<br>${esc(d.cerrador||'')}</div></div>
 <div class="legal">Este contrato acredita la afiliación del socio al programa de membresías de Kuxtal Travels bajo el tipo y la vigencia arriba indicados. La membresía es válida desde la fecha de ingreso hasta su vencimiento y otorga acceso a los beneficios del club vigentes durante ese periodo. Documento generado electrónicamente por el sistema Kuxtal.</div></body></html>`;
   const w=window.open('','_blank'); if(!w){ toast('Permití las ventanas emergentes para imprimir'); return; }
   w.document.write(html); w.document.close(); w.focus(); setTimeout(()=>{ try{ w.print(); }catch(e){} }, 400);
+}
+// (M1d) ¿funnel_contratos ya tiene la columna 'enganche'? Se prueba UNA vez (mismo patrón
+// que probeOfertasExt): la migración 20260714_marco_funnel.sql la agrega; mientras no esté,
+// el enganche igual queda registrado en funnel_eventos (tipo 'enganche').
+let CONTR_ENG=null;
+async function probeContratosExt(){
+  if(CONTR_ENG!==null) return CONTR_ENG;
+  try{ const r=await api("funnel_contratos?select=enganche&limit=1"); CONTR_ENG=!!r.ok; }catch(e){ CONTR_ENG=false; }
+  return CONTR_ENG;
+}
+// Registra el enganche (pago inicial): PATCH al contrato si la columna existe + SIEMPRE
+// bitácora en funnel_eventos. Recibe apiFn para stubearse en QA. Tolerante: si el PATCH
+// falla (RLS/columna), el evento queda igual.
+async function registrarEnganche(cid,pid,enganche,planPago,apiFn,tieneCol,actor){
+  const out={patched:false,evento:false};
+  if(enganche==null||!(enganche>0)) return out;
+  if(tieneCol&&cid!=null){
+    try{ const r=await apiFn("funnel_contratos?id=eq."+cid,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({enganche})}); out.patched=!!r.ok; }catch(e){}
+  }
+  try{ const r2=await apiFn("funnel_eventos",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({prospecto_id:pid,tipo:'enganche',actor:actor||'crm',payload:{contrato_id:cid,enganche,plan_pago:planPago}})}); out.evento=!!r2.ok; }catch(e){}
+  return out;
 }
 async function cerrarContrato(id,btn){
   btn.disabled=true; btn.textContent='Cerrando…';
@@ -2176,7 +2235,10 @@ async function cerrarContrato(id,btn){
     const r=await api("rpc/funnel_cerrar_contrato",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     if(!r.ok){ toast('No se pudo cerrar el contrato'); btn.disabled=false; btn.innerHTML='<svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Cerrar contrato'; return; }
     let res={}; try{ res=await r.json(); }catch(e){}
-    imprimirContrato({ no_socio:res.no_socio, nombre:l.nombre, telefono:l.telefono, membresia:g('mem'), plan:g('pln'), monto:Number(g('mon'))||0, anios:anios,
+    // (M1d) enganche como pago inicial: a la fila del contrato (si hay columna) + bitácora
+    const eng=g('eng')?Number(g('eng')):null;
+    try{ await registrarEnganche(res.contrato_id,id,eng,g('pln'),api,await probeContratosExt(),USER); }catch(e){}
+    imprimirContrato({ no_socio:res.no_socio, nombre:l.nombre, telefono:l.telefono, membresia:g('mem'), plan:g('pln'), monto:Number(g('mon'))||0, enganche:eng, anios:anios,
       vendedor:agN(l.vendedor_id), cerrador:agN(l.cerrador_id), digitador:agN(g('dig')), verificador:agN(g('ver')) });
     toast('Contrato cerrado · socio creado · comisiones generadas'); const c=$('cie'+id); if(c)c.remove();
   }catch(e){ toast('Error al cerrar'); btn.disabled=false; btn.innerHTML='<svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Cerrar contrato'; }
@@ -2270,9 +2332,18 @@ function pvCard(l){
 }
 async function pvRecep(id,r){ if(await funPatchLead(id,{postventa_recepcion:r})){ ev(id,'postventa','recepción: '+r); toast('Anotado: '+r); document.querySelectorAll('#pv'+id+' .est').forEach(x=>{const on=x.textContent===r;x.classList.toggle('on',on);x.style.background=on?'var(--kux)':'';x.style.color=on?'#fff':'';}); } }
 async function pvContacto(id,btn){ if(await funPatchLead(id,{postventa_contactado:true,postventa_en:new Date().toISOString()})){ ev(id,'postventa','contactado bienvenida'); toast('Bienvenida registrada'); btn.innerHTML='Contactado <svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg>'; } }
-async function darBaja(id,btn){ const m=prompt('Motivo de la baja:'); if(m===null)return;
-  if(await funPatchLead(id,{etapa:'baja',motivo_baja:m||null,baja_en:new Date().toISOString()})){
-    ev(id,'baja',m||'baja');
+// (M1e) El motivo de la baja es OBLIGATORIO (el Expediente ya lo muestra: lee baja_en/motivo_baja).
+// normalizaMotivoBaja() es pura → qa/marco.mjs.
+function normalizaMotivoBaja(m){ const s=String(m==null?'':m).trim(); return s||null; }
+async function darBaja(id,btn){
+  let m=null;
+  for(;;){
+    const raw=prompt('Motivo de la baja (obligatorio):',m||''); if(raw===null) return;
+    m=normalizaMotivoBaja(raw); if(m) break;
+    toast('El motivo es obligatorio para dar de baja');
+  }
+  if(await funPatchLead(id,{etapa:'baja',motivo_baja:m,baja_en:new Date().toISOString()})){
+    ev(id,'baja',m);
     // Hilo conductor: si el prospecto ya es socio (socio_id), el socio también queda en estado 'baja'
     // (esto corre en el CRM con la sesión del usuario; la RLS decide qué puede tocar).
     try{
@@ -2402,8 +2473,19 @@ async function cargarMiDia(){
     $('funCont').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar tu día</b><p>Puede ser la conexión. <b onclick="funIrTab('midia')" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;
     return;
   }
-  leads=rows||[];
+  leads=ordenarMiDia(rows||[],hoyStr());
   renderWork();
+}
+// (M1b) Orden del día: recontactos VENCIDOS primero (más viejo arriba), después los
+// agendados a futuro, y al final los que no tienen fecha (por id). Pura → qa/marco.mjs.
+function ordenarMiDia(arr,hoy){
+  const key=l=>{
+    const f=l.recontacto_en?String(l.recontacto_en):'';
+    if(f&&f.slice(0,10)<=hoy) return [0,f];
+    if(f) return [1,f];
+    return [2,String(l.id==null?'':l.id).padStart(14,'0')];
+  };
+  return (arr||[]).slice().sort((a,b)=>{const ka=key(a),kb=key(b);return ka[0]-kb[0]||(ka[1]<kb[1]?-1:ka[1]>kb[1]?1:0);});
 }
 function pasa(l){ const e=estDe(l.estado);
   if(sub==='pend') return l.estado==='nuevo'||l.estado==='no_contesta';
@@ -2439,9 +2521,10 @@ function funCardHTML(l){
   const tel=telDig(l.telefono);
   const call=tel.length>=8?`<a class="ic wa" href="${waHref(l.telefono)}" target="_blank" rel="noopener" onclick="ev(${l.id},'contacto','WhatsApp')">${WA}</a><a class="ic tel" href="${telHref(l.telefono)}" onclick="ev(${l.id},'contacto','Llamada')">${TEL}</a>`:'';
   const rest=RESTAS.map(r=>`<option value="${r.id}" ${l.restaurante_id==r.id?'selected':''}>${esc(r.nombre)}</option>`).join('');
+  const vencida=recD&&recD<=hoyStr()&&!['asistira','no_interesado'].includes(l.estado);
   return `<div class="lead" style="border-left-color:${e.color}">
     <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div>
-      <div class="lmeta">${src?`<span class="src">${esc(src)}</span> · `:''}${esc(l.telefono||'sin teléfono')}</div></div>
+      <div class="lmeta">${src?`<span class="src">${esc(src)}</span> · `:''}${esc(l.telefono||'sin teléfono')}${vencida?' <span class="warn">recontacto vencido '+esc(recD)+'</span>':''}</div></div>
       <div class="lcall">${call}</div></div>
     <div class="lbl">Estado · editable</div>
     <div class="estados">${chipsEstado(l)}</div>
@@ -2450,12 +2533,13 @@ function funCardHTML(l){
       <div class="fld"><label>Hora</label><input type="time" value="${recH}" onchange="setRec(${l.id},null,this.value)"></div>
     </div>
     <div class="sub ${showAsi?'show':''}">
-      <div class="fld"><label>Restaurante</label><select onchange="setAsi(${l.id},'rest',this.value)"><option value="">Elegir…</option>${rest}</select></div>
-      <div class="fld"><label>Día</label><input type="date" value="${presD}" onchange="setAsi(${l.id},'presD',this.value)"></div>
-      <div class="fld"><label>Hora</label><input type="time" value="${presH}" onchange="setAsi(${l.id},'presH',this.value)"></div>
+      <div class="fld"><label>Restaurante</label><select id="rst${l.id}" onchange="setAsi(${l.id},'rest',this.value)"><option value="">Elegir…</option>${rest}</select></div>
+      <div class="fld"><label>Día</label><input type="date" id="prd${l.id}" value="${presD}" onchange="setAsi(${l.id},'presD',this.value)"></div>
+      <div class="fld"><label>Hora</label><input type="time" id="prh${l.id}" value="${presH}" onchange="setAsi(${l.id},'presH',this.value)"></div>
+      <button class="btn" style="margin:0;flex:1 1 100%;background:var(--lima-d)" onclick="citarPresentacion(${l.id})"><svg class="svic" aria-hidden="true"><use href="#ic-bell"/></svg> Citar a presentación</button>
     </div>
-    <div class="note"><textarea placeholder="Comentario del contacto…" onchange="setCom(${l.id},this.value)">${esc(l.comentario||'')}</textarea></div>
-    <div class="pin ${(showAsi&&l.restaurante_id)?'show':''}"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> Presentación asignada</div>
+    <div class="note"><textarea placeholder="Comentario de la gestión (queda en la bitácora)…" onchange="setCom(${l.id},this.value)">${esc(l.comentario||'')}</textarea></div>
+    <div class="pin ${(showAsi&&l.restaurante_id&&l.presenta_en)?'show':''}"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> Presentación asignada${l.presenta_en?(' · '+esc(String(l.presenta_en).slice(0,10)+' '+String(l.presenta_en).slice(11,16))):''}</div>
   </div>`;
 }
 function localL(id){ return leads.find(x=>x.id===id)||todos.find(x=>x.id===id); }
@@ -2489,7 +2573,24 @@ async function setAsi(id,k,v){ const l=localL(id); if(!l)return;
   if(k==='rest'){ l.restaurante_id=v?Number(v):null; if(await funPatchLead(id,{restaurante_id:l.restaurante_id})){ ev(id,'presentacion',{restaurante_id:l.restaurante_id}); toast('Restaurante asignado'); renderWork(); } }
   else{ const cur=(l.presenta_en||(hoyStr()+'T19:00:00')); const D=k==='presD'?v:cur.slice(0,10), H=k==='presH'?v:cur.slice(11,16)||'19:00'; l.presenta_en=D+'T'+H+':00'; if(await funPatchLead(id,{presenta_en:l.presenta_en})) toast('Presentación agendada'); }
 }
-let comT; function setCom(id,v){ const l=localL(id); if(l)l.comentario=v; clearTimeout(comT); comT=setTimeout(()=>funPatchLead(id,{comentario:v}),400); }
+// (M1b) El comentario de la gestión queda en la fila Y en la bitácora (funnel_eventos tipo 'gestion').
+let comT; function setCom(id,v){ const l=localL(id); if(l)l.comentario=v; clearTimeout(comT);
+  comT=setTimeout(async()=>{ if(await funPatchLead(id,{comentario:v}) && String(v||'').trim()) ev(id,'gestion',String(v).trim()); },400); }
+// (M1b) Citar a presentación: valida restaurante + día y guarda presenta_en + restaurante_id
+// + estado 'asistira' en UN solo PATCH. cuerpoCita() es pura → qa/marco.mjs.
+function cuerpoCita(rid,D,H){
+  if(!rid) return {error:'Elegí el restaurante'};
+  if(!D) return {error:'Poné el día de la presentación'};
+  return {body:{presenta_en:D+'T'+(H||'19:00')+':00',restaurante_id:Number(rid),estado:'asistira'}};
+}
+async function citarPresentacion(id){
+  const l=localL(id); if(!l) return;
+  const g=k=>{const e=$(k+id);return e?e.value:'';};
+  const c=cuerpoCita(g('rst')||l.restaurante_id, g('prd')||String(l.presenta_en||'').slice(0,10), g('prh')||String(l.presenta_en||'').slice(11,16));
+  if(c.error){ toast(c.error); return; }
+  if(await funPatchLead(id,c.body)){ Object.assign(l,c.body); ev(id,'citado','Presentación '+c.body.presenta_en.slice(0,10)+' '+c.body.presenta_en.slice(11,16)); toast('Citado a presentación'); renderWork(); }
+  else toast('No se pudo citar');
+}
 
 // ── TODOS (gerencia) ──
 async function cargarTodos(){
@@ -2533,9 +2634,10 @@ async function vistaCargar(){
       <textarea id="brows" placeholder="Familia López, 5541-2233&#10;Familia Girón, 4102-8890"></textarea>
       <button class="btn" id="bcrear" onclick="crearBase()">Crear base</button>
     </div>
+    <div id="repPrev"></div>
     <div class="panel">
       <h3>Bases cargadas</h3>
-      <div class="h">Repartí los prospectos SIN asignar entre los ${activos} TMK activos (equitativo). ${activos?'':'<svg class="svic" aria-hidden="true"><use href="#ic-alert"/></svg> No hay TMK activos — agregá en Equipo.'}</div>
+      <div class="h">Repartí los prospectos SIN asignar entre los ${activos} TMK activos (equitativo, round-robin). ${activos?'':'<svg class="svic" aria-hidden="true"><use href="#ic-alert"/></svg> No hay TMK activos — agregá en Equipo.'}</div>
       <div id="baseList"></div>
     </div>`;
   pintarBases();
@@ -2561,13 +2663,79 @@ async function crearBase(){
   }catch(e){ toast('No se pudo ('+e.message+')'); }
   finally{ b.disabled=false; b.textContent='Crear base'; }
 }
+// ── (M1a) REPARTO EQUITATIVO round-robin, con PREVIEW antes de escribir ──
+// Mismo criterio que el RPC funnel_repartir: los TMK activos se expanden por su PESO
+// (peso 2 = recibe doble turno) y los prospectos SIN tmk_id se reparten en ronda por id.
+// El offset rota quién arranca (botón "Re-repartir"). Función PURA → probada en qa/marco.mjs.
+function repartoRoundRobin(prospectos,agentes,offset){
+  const tmk=(agentes||[]).filter(a=>a.activo&&a.rol==='tmk').slice().sort((x,y)=>x.id-y.id);
+  const slots=[]; tmk.forEach(a=>{ const w=Math.max(1,Number(a.peso)||1); for(let i=0;i<w;i++) slots.push(a.id); });
+  const plan={}; tmk.forEach(a=>{plan[a.id]=[];});
+  const libres=(prospectos||[]).filter(p=>!p.tmk_id).slice().sort((x,y)=>x.id-y.id);
+  if(!slots.length) return {plan,sinAsignar:libres,total:libres.length};
+  libres.forEach((p,i)=>{ plan[slots[(i+(Number(offset)||0))%slots.length]].push(p); });
+  return {plan,sinAsignar:[],total:libres.length};
+}
+// Escribe el plan: un PATCH por agente (id=in.(...) y tmk_id=is.null como candado anti-doble
+// asignación) + los eventos 'asignado' en funnel_eventos. Recibe apiFn para poder stubearse en QA.
+async function aplicarReparto(plan,apiFn,actor){
+  let n=0; const evs=[]; let err=null;
+  try{
+    for(const aid of Object.keys(plan)){
+      const arr=plan[aid]||[]; if(!arr.length) continue;
+      const ids=arr.map(p=>p.id).join(',');
+      const r=await apiFn("funnel_prospectos?id=in.("+ids+")&tmk_id=is.null",{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify({tmk_id:Number(aid),actualizado_en:new Date().toISOString()})});
+      if(!r.ok) throw new Error('reparto '+r.status);
+      let filas=[]; try{ filas=await r.json(); }catch(e){}
+      n+=filas.length;
+      filas.forEach(p=>evs.push({prospecto_id:p.id,tipo:'asignado',actor:actor||'crm',payload:{agente_id:Number(aid)}}));
+    }
+  }catch(e){ err=e; } // (revisión adversaria) si un PATCH intermedio falla, los ya asignados NO se quedan sin bitácora
+  if(evs.length){ try{ await apiFn("funnel_eventos",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(evs)}); }catch(e){/* el reparto ya quedó; el evento es bitácora */} }
+  if(err) throw err;
+  return n;
+}
+let REP={base:null,nombre:'',offset:0,prosp:[],asignados:0};
 async function repartir(baseId,btn){
-  if(btn){ btn.disabled=true; btn.textContent='Repartiendo…'; }
-  try{ const r=await api("rpc/funnel_repartir",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({p_base:baseId})});
-    if(!r.ok){ const t=await r.text(); toast(''+(t.includes('TMK')?'No hay TMK activos — agregá en Equipo':'No se pudo repartir')); return; }
-    const n=await r.json(); toast(n>0?('Repartidos '+n+' entre los TMK'):'Nada por repartir (ya estaban asignados)');
-  }catch(e){ toast('No se pudo repartir'); }
+  if(btn){ btn.disabled=true; btn.textContent='Calculando…'; }
+  try{
+    if(!AGENTES.length) AGENTES=(await getJSON("funnel_agentes?select=*"))||[];
+    const rows=await getAllRows("funnel_prospectos?select=id,nombre,tmk_id&base_id=eq."+baseId+"&order=id.asc");
+    const b=BASES.find(x=>x.id===baseId)||{};
+    REP={base:baseId,nombre:b.nombre||('base '+baseId),offset:0,prosp:rows,asignados:rows.filter(p=>p.tmk_id).length};
+    pintarPreviewReparto();
+    const pv=$('repPrev'); if(pv) pv.scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(e){ toast('No pude leer la base'); }
   finally{ if(btn){ btn.disabled=false; btn.textContent='Repartir'; } }
+}
+function pintarPreviewReparto(){
+  const box=$('repPrev'); if(!box||REP.base==null) return;
+  const r=repartoRoundRobin(REP.prosp,AGENTES,REP.offset);
+  const agN=id=>{const a=AGENTES.find(x=>x.id==id);return a?a.nombre:('agente '+id);};
+  const filas=Object.entries(r.plan).map(([aid,arr])=>{
+    const nombres=arr.slice(0,3).map(p=>esc(p.nombre)).join(', ')+(arr.length>3?'…':'');
+    return `<div class="basecard"><div><b>${esc(agN(aid))}</b><div class="m">${nombres||'—'}</div></div><span class="tag">${arr.length}</span></div>`;
+  }).join('');
+  const sin=r.sinAsignar.length?`<div class="basecard" style="border-color:var(--rojo)"><div><b>Sin asignar (no hay TMK activos)</b><div class="m">${r.sinAsignar.slice(0,5).map(p=>esc(p.nombre)).join(', ')}${r.sinAsignar.length>5?'…':''}</div></div><span class="tag" style="background:#fdecea;color:#b3261e">${r.sinAsignar.length}</span></div>`:'';
+  box.innerHTML=`<div class="panel">
+    <h3>Preview del reparto · ${esc(REP.nombre)}</h3>
+    <div class="h">${r.total} sin asignar de ${REP.prosp.length} en la base${REP.asignados?(' ('+REP.asignados+' ya tenían TMK y no se tocan)'):''}. Nada se guarda hasta que confirmés.</div>
+    ${filas||'<div class="cap">No hay TMK activos — agregá en la pestaña Equipo.</div>'}${sin}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+      <button class="btn" style="margin:0;flex:1;background:var(--lima-d)" id="repOk" onclick="confirmarReparto(this)" ${r.total&&Object.keys(r.plan).length?'':'disabled'}>Confirmar reparto (${r.total})</button>
+      <button class="btn" style="margin:0;flex:none" onclick="REP.offset++;pintarPreviewReparto()">Re-repartir</button>
+      <button class="btn" style="margin:0;flex:none;background:var(--gris)" onclick="REP={base:null,nombre:'',offset:0,prosp:[],asignados:0};$('repPrev').innerHTML=''">Cancelar</button>
+    </div></div>`;
+}
+async function confirmarReparto(btn){
+  btn.disabled=true; btn.textContent='Repartiendo…';
+  try{
+    const r=repartoRoundRobin(REP.prosp,AGENTES,REP.offset);
+    const n=await aplicarReparto(r.plan,api,USER);
+    toast(n>0?('Repartidos '+n+' entre los TMK'):'Nada por repartir (ya estaban asignados)');
+    REP={base:null,nombre:'',offset:0,prosp:[],asignados:0};
+    await vistaCargar();
+  }catch(e){ toast('No se pudo repartir'); btn.disabled=false; btn.textContent='Confirmar reparto'; }
 }
 
 // ── EQUIPO (gerencia) ──
