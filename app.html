@@ -2064,18 +2064,44 @@ async function funIrTab(k){ funTab=k; funPintarTabs();
 }
 function opAgentes(rol,sel){ return AGENTES.filter(a=>a.activo&&a.rol===rol).map(a=>`<option value="${a.id}" ${sel==a.id?'selected':''}>${esc(a.nombre)}</option>`).join(''); }
 
-// ── RECEPCIÓN (sala de ventas: validar + calificar al llegar) ──
+// ── RECEPCIÓN (sala de ventas: los citados de HOY llegan, se valida, califica y asigna) ──
+// (M1c) citadosDeHoy() es pura → qa/marco.mjs.
+function citadosDeHoy(list,hoy){ return (list||[]).filter(l=>l.presenta_en&&String(l.presenta_en).slice(0,10)===hoy); }
+let recepSub='hoy';
 async function vistaRecepcion(){
-  $('funCap').textContent='Recepción de sala: validá al que llega, calificá y asigná vendedor/cerrador.';
+  $('funCap').textContent='Recepción de sala: marcá la llegada del citado, calificá y asigná vendedor/cerrador.';
   $('funCont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
-  const list=await getJSON("funnel_prospectos?select=*&estado=eq.asistira&etapa=in.(telemarketing,presentacion)&order=presenta_en.asc.nullslast,id.asc");
-  if(!list.length){ $('funCont').innerHTML=`<div class="vacio"><b>Nadie en recepción</b><p>Acá aparecen los prospectos que un TMK marcó como <b>Asistirá</b>. Cuando lleguen, los validás y calificás.</p></div>`; return; }
-  $('funCont').innerHTML=list.map(recepCard).join('');
+  window.__REC=await getJSON("funnel_prospectos?select=*&estado=eq.asistira&etapa=in.(telemarketing,presentacion)&order=presenta_en.asc.nullslast,id.asc");
+  pintarRecepcion();
+}
+function pintarRecepcion(){
+  const todos=window.__REC||[];
+  const hoy=citadosDeHoy(todos,hoyStr());
+  const list=recepSub==='hoy'?hoy:todos;
+  const tabs=`<div class="subtabs">
+    <button class="st ${recepSub==='hoy'?'on':''}" onclick="recepSub='hoy';pintarRecepcion()">Citados hoy (${hoy.length})</button>
+    <button class="st ${recepSub==='todos'?'on':''}" onclick="recepSub='todos';pintarRecepcion()">Todos los citados (${todos.length})</button>
+  </div>`;
+  $('funCont').innerHTML=tabs+(list.length?list.map(recepCard).join('')
+    :`<div class="vacio"><b>${recepSub==='hoy'?'Nadie citado para hoy':'Nadie en recepción'}</b><p>Acá aparecen los prospectos que un TMK citó a presentación (<b>Asistirá</b>). Cuando lleguen, marcá la llegada, validá y calificá.</p></div>`);
+}
+async function marcarLlegada(id,btn){
+  if(btn) btn.disabled=true;
+  const ts=new Date().toISOString();
+  if(await funPatchLead(id,{recepcion_en:ts,recepcionado_por:USER})){
+    ev(id,'llegada','Llegó a recepción');
+    const l=(window.__REC||[]).find(x=>x.id===id); if(l){ l.recepcion_en=ts; l.recepcionado_por=USER; }
+    toast('Llegada registrada'); pintarRecepcion();
+  } else { if(btn) btn.disabled=false; toast('No se pudo'); }
 }
 function recepCard(l){
   const rest=(RESTAS.find(r=>r.id==l.restaurante_id)||{}).nombre||'';
+  const cita=l.presenta_en?(String(l.presenta_en).slice(0,10)+' '+String(l.presenta_en).slice(11,16)):'sin fecha de cita';
+  const llegada=l.recepcion_en
+    ? `<span class="tag" style="background:#e9f7ef;color:#1a8a54">Llegó · ${esc(new Date(l.recepcion_en).toLocaleTimeString('es-GT',{hour:'2-digit',minute:'2-digit'}))}</span>`
+    : `<button class="est" style="background:var(--kux);color:#fff;border-color:var(--kux)" onclick="marcarLlegada(${l.id},this)">Marcar llegada</button>`;
   return `<div class="lead" id="rec${l.id}" style="border-left-color:var(--amar)">
-    <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">${esc(l.telefono||'')}${rest?(' · '+esc(rest)):''}</div></div></div>
+    <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">${esc(l.telefono||'')}${rest?(' · '+esc(rest)):''} · cita: ${esc(cita)}</div></div><div style="flex:none">${llegada}</div></div>
     <div class="sub show" style="margin-top:12px">
       <div class="fld"><label>Edad</label><input type="number" id="edad${l.id}" inputmode="numeric" value="${l.edad||''}"></div>
       <div class="fld"><label>Estado civil</label><select id="ec${l.id}"><option value="">—</option><option ${l.estado_civil==='casado'?'selected':''}>casado</option><option ${l.estado_civil==='soltero'?'selected':''}>soltero</option><option ${l.estado_civil==='otro'?'selected':''}>otro</option></select></div>
@@ -2098,10 +2124,13 @@ function recepCard(l){
 async function recepcionar(id,ok,btn){
   btn.disabled=true;
   const g=x=>{const e=$(x+id);return e?e.value:'';};
+  const l=(window.__REC||[]).find(x=>x.id===id)||{};
+  // (M1c) si ya se marcó la llegada, esa hora NO se pisa al calificar
   const body={edad:g('edad')?Number(g('edad')):null, estado_civil:g('ec')||null, tarjetas_credito:g('ntc')?Number(g('ntc')):null, tipo_tarjetas:g('ttc')||null,
     califica:ok, motivo_no:ok?null:(g('mot')||null), vendedor_id:g('vend')?Number(g('vend')):null, cerrador_id:g('cerr')?Number(g('cerr')):null,
-    recepcion_en:new Date().toISOString(), recepcionado_por:USER, etapa:ok?'sala':'baja'};
-  if(await funPatchLead(id,body)){ ev(id,'sala',ok?'Calificó → sala':'No califica'); toast(ok?'Pasa a sala':'Marcado: no califica'); const c=$('rec'+id); if(c)c.remove(); }
+    recepcion_en:l.recepcion_en||new Date().toISOString(), recepcionado_por:l.recepcionado_por||USER, etapa:ok?'sala':'baja'};
+  if(await funPatchLead(id,body)){ ev(id,'sala',ok?'Calificó → sala':'No califica'); toast(ok?'Pasa a sala':'Marcado: no califica');
+    window.__REC=(window.__REC||[]).filter(x=>x.id!==id); const c=$('rec'+id); if(c)c.remove(); pintarRecepcion(); }
   else{ btn.disabled=false; toast('No se pudo'); }
 }
 
