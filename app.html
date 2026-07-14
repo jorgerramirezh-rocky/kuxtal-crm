@@ -199,10 +199,58 @@
   .tcard.vip{border:1px solid rgba(242,201,76,.55);box-shadow:0 16px 40px rgba(11,28,46,.5),0 0 0 1px rgba(242,201,76,.15) inset}
   .qrbox{background:#fff;border-radius:14px;padding:14px;display:inline-block;margin:14px 0;box-shadow:0 3px 12px rgba(15,36,56,.1)}
   .codebig{font-size:26px;font-weight:800;letter-spacing:3px;color:var(--kux);font-variant-numeric:tabular-nums}
-  #valida{position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;padding:24px;color:#fff;text-align:center;background:var(--kux-d)}
-  #valida.ok{background:linear-gradient(135deg,#1a8a52,#22a06b)} #valida.bad{background:linear-gradient(135deg,#b3261e,#e5484d)}
-  #valida .vbig{font-size:64px} #valida .vt{font-size:26px;font-weight:800;margin:10px 0;word-break:break-word} #valida .vs{font-size:16px;opacity:.95}
-  #valida button{margin-top:22px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.45);color:#fff;padding:13px 24px;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px}
+  /* ── PANTALLA DE VALIDACIÓN · celebración premium de marca Kuxtal (portada de kuxtal-plataforma) ──
+     Escenario navy dominante (60%), texto blanco (30%), UN acento por estado (10%):
+     lima=éxito · dorado=ya usado · rojo=error. Sin emojis: sello vectorial. */
+  #valida{position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;
+    padding:24px;color:#fff;text-align:center;
+    background:radial-gradient(120% 82% at 50% 16%,#1c3f66 0%,#132c47 46%,#0b1c30 100%);
+    --acc:#8dc63f;--acc-ink:#bfe38a;--glow:rgba(141,198,63,.26);--metabg:rgba(141,198,63,.12);--metabd:rgba(141,198,63,.44)}
+  #valida.used{--acc:#f2a900;--acc-ink:#ffcf7a;--glow:rgba(242,169,0,.24);--metabg:rgba(242,169,0,.12);--metabd:rgba(242,169,0,.44)}
+  #valida.error{--acc:#e5484d;--acc-ink:#ffb3b5;--glow:rgba(229,72,77,.22);--metabg:rgba(229,72,77,.12);--metabd:rgba(229,72,77,.44)}
+  #valida::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .6s ease;
+    background:radial-gradient(58% 40% at 50% 30%,var(--glow),transparent 72%)}
+  #valida.show::before{opacity:1}
+  #valida .vsheet{position:relative;max-width:420px;width:100%;display:flex;flex-direction:column;align-items:center;
+    opacity:0;transform:translateY(14px) scale(.985);transition:opacity .34s ease,transform .34s cubic-bezier(.2,.7,.2,1)}
+  #valida.show .vsheet{opacity:1;transform:none}
+  /* sello / medallón vectorial */
+  #valida .vseal{width:104px;height:104px;margin-bottom:22px;color:var(--acc)}
+  #valida .vseal svg{width:100%;height:100%;overflow:visible}
+  #valida .vseal .ring{fill:none;stroke:var(--acc);stroke-width:2.5;transform-box:fill-box;transform-origin:center}
+  #valida .vseal .ring.gold{stroke:var(--amar);stroke-width:1.4;opacity:.6}
+  #valida .vseal .disc{fill:rgba(255,255,255,.05);stroke:rgba(255,255,255,.14);stroke-width:1}
+  #valida .vseal .mark{fill:none;stroke:var(--acc);stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
+  #valida .vseal .spin{transform-box:fill-box;transform-origin:center;animation:vspin 1s linear infinite}
+  #valida.show .vseal .ring{animation:vring .55s ease-out both}
+  #valida.ok.show .vseal .mark,#valida.used.show .vseal .mark,#valida.error.show .vseal .mark{
+    stroke-dasharray:var(--len,62);stroke-dashoffset:var(--len,62);animation:vdraw .55s .16s ease-out forwards}
+  @keyframes vring{from{transform:scale(.55);opacity:0}to{transform:scale(1);opacity:1}}
+  @keyframes vdraw{to{stroke-dashoffset:0}}
+  @keyframes vspin{to{transform:rotate(360deg)}}
+  /* jerarquía tipográfica */
+  #valida .veyebrow{font-size:12px;font-weight:800;letter-spacing:2.4px;text-transform:uppercase;color:var(--acc-ink)}
+  #valida .vt{font-family:'League Gothic',sans-serif;font-weight:400;font-size:clamp(30px,8.4vw,42px);
+    line-height:1.02;letter-spacing:.5px;margin:12px 0 0;width:100%;overflow-wrap:anywhere;text-wrap:balance}
+  #valida .vs{font-size:15.5px;line-height:1.5;color:rgba(255,255,255,.82);margin-top:10px;width:100%;max-width:34ch}
+  #valida .vmeta{display:none;margin-top:16px;padding:7px 15px;border-radius:999px;
+    font-size:12.5px;font-weight:700;letter-spacing:.3px;color:var(--acc-ink);
+    background:var(--metabg);border:1px solid var(--metabd)}
+  #valida .vmeta.on{display:inline-block}
+  #valida .vbtn{margin-top:26px;min-height:50px;padding:14px 30px;border-radius:14px;
+    font-size:15px;font-weight:800;letter-spacing:.3px;cursor:pointer;
+    background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.30);color:#fff;
+    transition:transform .15s ease,background .2s ease}
+  #valida.ok .vbtn{background:var(--lima);border-color:var(--lima);color:#0f2438}
+  #valida .vbtn:active{transform:scale(.96)}
+  #valida .vbtn:focus-visible{outline:3px solid var(--acc-ink);outline-offset:3px}
+  @media (prefers-reduced-motion:reduce){
+    #valida .vsheet{transition:opacity .2s ease;transform:none}
+    #valida::before{transition:none}
+    #valida.show .vseal .ring,#valida.ok.show .vseal .mark,#valida.used.show .vseal .mark,#valida.error.show .vseal .mark{animation:none}
+    #valida .vseal .mark{stroke-dashoffset:0}
+    #valida .vseal .spin{animation-duration:1.6s}
+  }
   /* ── TABLET / DESKTOP ── */
   @media (min-width:600px){
     .stats{grid-template-columns:repeat(4,1fr);gap:11px}
@@ -484,8 +532,17 @@
 <!-- Crear/editar tipo de membresía (gerencia/ventas) -->
 <div id="membModal" class="modal" style="display:none"><div class="mcard"><div id="membBody"></div></div></div>
 
-<!-- Pantalla de validación en el local -->
-<div id="valida"><div><div class="vbig" id="vico"></div><div class="vt" id="vt"></div><div class="vs" id="vs"></div><button onclick="cerrarValida()">Listo</button></div></div>
+<!-- Pantalla de validación en el local (celebración premium) -->
+<div id="valida" role="dialog" aria-modal="true" aria-live="polite">
+  <div class="vsheet">
+    <div class="vseal" id="vseal" aria-hidden="true"></div>
+    <div class="veyebrow" id="veyebrow"></div>
+    <h2 class="vt" id="vt"></h2>
+    <p class="vs" id="vs"></p>
+    <div class="vmeta" id="vmeta"></div>
+    <button class="vbtn" id="vbtn" onclick="cerrarValida()">Listo</button>
+  </div>
+</div>
 
 <!-- Tour guiado (primer ingreso / repetible) -->
 <div id="tourOv"><div id="tourSpot"></div><div id="tourCard"></div></div>
@@ -1609,24 +1666,44 @@ async function generarCodigo(id){
     addInter(id,'beneficio','Generó código de descuento '+codigo);
   }catch(e){ toast('No se pudo generar'); }
 }
-function showValida(cls,ico,t,s){ const v=$('valida'); v.className=cls; $('vico').innerHTML=ico; $('vt').textContent=t; $('vs').textContent=s||''; v.style.display='flex'; }
-const vicon=id=>`<svg class="svic" aria-hidden="true"><use href="#ic-${id}"/></svg>`;
-function cerrarValida(){ $('valida').style.display='none'; history.replaceState(null,'',location.pathname); if($('app').style.display!=='block') location.reload(); }
+// Sellos vectoriales por estado (sin emojis). El acento lo pinta el CSS.
+const VSEAL={
+  loading:'<svg viewBox="0 0 104 104"><circle class="disc" cx="52" cy="52" r="40"/><g class="spin"><path class="mark" d="M52 12 A40 40 0 0 1 92 52"/></g></svg>',
+  ok:'<svg viewBox="0 0 104 104"><circle class="ring gold" cx="52" cy="52" r="49"/><circle class="disc" cx="52" cy="52" r="40"/><circle class="ring" cx="52" cy="52" r="40"/><path class="mark" d="M34 53 L46 65 L70 39" style="--len:62"/></svg>',
+  used:'<svg viewBox="0 0 104 104"><circle class="ring gold" cx="52" cy="52" r="49"/><circle class="disc" cx="52" cy="52" r="40"/><circle class="ring" cx="52" cy="52" r="40"/><path class="mark" d="M52 33 L52 53 L65 61" style="--len:34"/></svg>',
+  error:'<svg viewBox="0 0 104 104"><circle class="disc" cx="52" cy="52" r="40"/><circle class="ring" cx="52" cy="52" r="40"/><path class="mark" d="M52 32 L52 56" style="--len:24"/><circle cx="52" cy="69" r="3.4" style="fill:var(--acc);stroke:none"/></svg>'
+};
+const VEYE={loading:'',ok:'Beneficio confirmado',used:'Beneficio ya utilizado',error:'No se pudo aplicar'};
+function showValida(state,title,sub,meta){
+  const v=$('valida'); v.className=state;
+  $('vseal').innerHTML=VSEAL[state]||VSEAL.error;
+  $('veyebrow').textContent=VEYE[state]||'';
+  $('vt').textContent=title||'';
+  $('vs').textContent=sub||'';
+  const m=$('vmeta'); if(meta){m.textContent=meta;m.classList.add('on');}else{m.textContent='';m.classList.remove('on');}
+  $('vbtn').style.display = state==='loading' ? 'none' : '';
+  v.style.display='flex';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>v.classList.add('show')));
+}
+function cerrarValida(){ const v=$('valida'); v.classList.remove('show'); v.style.display='none'; history.replaceState(null,'',location.pathname); if($('app').style.display!=='block') location.reload(); }
 async function validarCodigo(codigo){
-  showValida('',vicon('clock'),'Validando…','');
+  showValida('loading','Validando…','Confirmando el beneficio del socio');
   try{
     const r=await fetch(SB_URL+"/rest/v1/codigos?codigo=eq."+encodeURIComponent(codigo)+"&select=*,socios(nombre,tipo_norm,vencimiento)",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
     const d=await r.json(), c=d&&d[0];
-    if(!c) return showValida('bad',vicon('x'),'Código inválido','');
-    if(c.usado) return showValida('bad',vicon('ban'),'Código ya usado',new Date(c.usado_en).toLocaleString('es-GT'));
-    if(new Date(c.expira_en)<new Date()) return showValida('bad',vicon('clock'),'Código vencido','Pedile al socio uno nuevo');
-    if(c.socios&&c.socios.vencimiento&&new Date(c.socios.vencimiento)<new Date()) return showValida('bad',vicon('clock'),'Membresía vencida','Renová para usar beneficios');
+    if(!c) return showValida('error','Código no encontrado','Revisá el código o pedile al socio que genere uno nuevo.');
+    if(c.usado){ const f=c.usado_en?new Date(c.usado_en).toLocaleString('es-GT',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; return showValida('used','Ya se había usado','Cada código sirve una sola vez.', f?('Usado el '+f):''); }
+    if(new Date(c.expira_en)<new Date()) return showValida('error','El código venció','Los códigos duran 15 minutos. Pedile al socio uno nuevo.');
+    if(c.socios&&c.socios.vencimiento&&new Date(c.socios.vencimiento)<new Date()) return showValida('error','Membresía vencida','Renová para volver a disfrutar los beneficios.');
     await fetch(SB_URL+"/rest/v1/codigos?id=eq."+c.id,{method:"PATCH",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({usado:true,usado_en:new Date().toISOString(),usado_por:USER})});
     await fetch(SB_URL+"/rest/v1/usos",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_id:c.socio_id,tipo:'descuento',codigo:codigo,usuario:USER})});
     addInter(c.socio_id,'uso','Usó beneficio (descuento) '+codigo);
     const so=c.socios||{};
-    showValida('ok',vicon('check'),(so.tipo_norm||'Socio')+' · '+(so.nombre||''),'Disfrutá tu beneficio');
-  }catch(e){ showValida('bad',vicon('alert'),'No se pudo validar','Reintentá'); }
+    const of=(typeof OFERTAS!=='undefined'&&OFERTAS)?OFERTAS.find(o=>o.id===c.oferta_id):null;
+    const titulo=(of&&of.titulo)?of.titulo:'Beneficio Kuxtal';
+    const paraQuien=so.nombre?('Aplicado para '+so.nombre+' · disfrutá tu beneficio'):'Beneficio aplicado · disfrutalo';
+    showValida('ok',titulo,paraQuien, so.tipo_norm||null);
+  }catch(e){ showValida('error','No se pudo validar','Revisá la conexión e intentá de nuevo.'); }
 }
 async function arrancar(){
   $('gate').style.display='none'; $('app').style.display='none'; $('load').style.display='flex';
