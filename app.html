@@ -727,6 +727,33 @@ async function marcarLead(id,estado){
   }catch(e){ if(typeof toast==='function') toast('No se pudo, probá de nuevo'); }
 }
 // ── Panel del Bot & WhatsApp (administración dentro del CRM) ──
+// Conversaciones del bot — LECTURA con el mismo token de staff del CRM (la RLS conv_sel_staff lo permite).
+let BOTCONV=null, cargandoConv=false;
+function cargarBotConv(){
+  if(BOTCONV!==null||cargandoConv) return;
+  cargandoConv=true;
+  sbGet('kuxtal_bot_conversaciones','select=*&order=ultima_actividad.desc&limit=100')
+    .then(rows=>{ BOTCONV=rows; cargandoConv=false; if(tab==='bot')render(); })
+    .catch(()=>{ BOTCONV='error'; cargandoConv=false; if(tab==='bot')render(); });
+}
+function convCard(c){
+  const f=c.ultima_actividad?new Date(c.ultima_actividad).toLocaleString('es-GT',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+  const est=c.estado||'abierta';
+  const estCol={abierta:['#fff3d6','#7a5f16'],en_curso:['#eaf3ff','#245078'],cerrada:['#e9f7ef','#1a8a52']}[est]||['#eef1f5','#50607a'];
+  const lead=(c.lead_id!=null)?((LEADS||[]).find(l=>l.id==c.lead_id)||null):null;
+  const leadTxt=c.lead_id!=null?(' · Lead vinculado: '+(lead?esc(lead.nombre||('#'+c.lead_id)):('#'+esc(String(c.lead_id))))):'';
+  return `<div class="ocard"><div class="oemoji"><svg class="svic" aria-hidden="true"><use href="#ic-chat"/></svg></div><div class="obody">
+    <div class="otit">${esc(c.contacto||('Chat '+(c.chat_id||'')))} <span class="odesc" style="background:${estCol[0]};color:${estCol[1]}">${esc(est)}</span></div>
+    <div class="odescr">Canal: ${esc(c.canal||'—')}${leadTxt}</div>
+    <div class="ometa">Última actividad: ${f}</div>
+  </div></div>`;
+}
+function botConvHTML(){
+  if(BOTCONV==='error') return `<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar las conversaciones</b><p>Puede ser la conexión. <b onclick="BOTCONV=null;render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;
+  if(BOTCONV===null) return `<div class="vacio"><span class="spin"></span> Cargando conversaciones…</div>`;
+  if(!BOTCONV.length) return `<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-chat"/></svg></span><b>El bot aún no tiene conversaciones</b><p>Cuando alguien le escriba, acá vas a ver el contacto, el canal, el estado y su última actividad.</p></div>`;
+  return BOTCONV.map(convCard).join('');
+}
 function botPanel(botLeads){
   const FN="https://tevzfdiumfekvapamovw.supabase.co/functions/v1/kuxtal-bot";
   const listado = botLeads.length ? botLeads.map(leadCard).join('')
@@ -738,6 +765,8 @@ function botPanel(botLeads){
   </div></div>
   <h3 style="margin:18px 0 10px;color:var(--kux)"><svg class="svic" aria-hidden="true"><use href="#ic-target"/></svg> Prospectos que captó el bot (${botLeads.length})</h3>
   ${listado}
+  <h3 style="margin:24px 0 10px;color:var(--kux)"><svg class="svic" aria-hidden="true"><use href="#ic-chat"/></svg> Conversaciones del bot${Array.isArray(BOTCONV)?' ('+BOTCONV.length+')':''}</h3>
+  ${botConvHTML()}
   <h3 style="margin:24px 0 10px;color:var(--kux)"><svg class="svic" aria-hidden="true"><use href="#ic-phone"/></svg> Cómo conectar WhatsApp (guía de Meta)</h3>
   <div class="ocard"><div class="obody" style="font-size:14.5px;line-height:1.75">
     <b>1.</b> Entrá a <b>business.facebook.com</b> → creá/entrá a la cuenta Meta Business de Kuxtal.<br>
@@ -1528,6 +1557,7 @@ function render(){
     }
     const botLeads=LEADS.filter(l=>l.origen==='bot'&&l.estado!=='descartado');
     $('lista').innerHTML=botPanel(botLeads);
+    cargarBotConv(); // lectura en paralelo; re-pinta al llegar
     return;
   }
   if(tab==='activacion'){$('lista').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-luggage"/></svg></span><b>Falta capturar el "uso del Club"</b><p>Saber qué socios ya viajaron/usaron beneficios revela quiénes están en riesgo de NO renovar — el dato que más mueve los +US$600K de 2028-2031. Cuando lo captures, esta pestaña se enciende sola.</p></div>`;return;}
