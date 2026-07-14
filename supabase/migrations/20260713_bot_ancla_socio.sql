@@ -33,7 +33,10 @@ alter table public.kuxtal_bot_conversaciones
 
 -- (b) RPC con p_socio_id opcional. DROP + CREATE porque cambia la firma.
 --     El bot v8 desplegado llama SIN p_socio_id → sigue funcionando (default null).
+--     Se dropean AMBAS firmas (la vieja de 7 params y la nueva de 8) para que la
+--     migración sea re-ejecutable sin error si ya se aplicó una vez.
 drop function if exists public.funnel_reservar_cliente(text, text, date, integer, text, bigint, text);
+drop function if exists public.funnel_reservar_cliente(text, text, date, integer, text, bigint, text, bigint);
 
 create function public.funnel_reservar_cliente(
   p_socio text,
@@ -72,11 +75,13 @@ begin
   -- Ancla al socio real: p_socio_id (viene de la conversación anclada por DPI) o,
   -- si no vino, lookup interno por nombre exacto / No. de socio. Es resolución
   -- SERVIDOR-adentro: nada de esto se divulga al chat (candado de privacidad intacto).
+  -- Solo ancla si el match es ÚNICO: hay homónimos en el padrón y un limit 1 sin
+  -- order by anclaría a un socio ARBITRARIO (peor que dejar null para revisión humana).
   v_socio_id := p_socio_id;
   if v_socio_id is null then
-    select id into v_socio_id from socios
+    select min(id) into v_socio_id from socios
       where lower(nombre) = lower(p_socio) or no_socio = trim(p_socio)
-      limit 1;
+      having count(distinct id) = 1;
   end if;
 
   -- La reserva nace como SOLICITUD ('solicitada'): el equipo la confirma después.
@@ -95,14 +100,22 @@ revoke all on function public.funnel_reservar_cliente(text, text, date, integer,
 revoke all on function public.funnel_reservar_cliente(text, text, date, integer, text, bigint, text, bigint) from authenticated;
 grant execute on function public.funnel_reservar_cliente(text, text, date, integer, text, bigint, text, bigint) to service_role;
 
--- (c) Backfill de reservas viejas del bot: mismo criterio determinista que el RPC
---     (nombre exacto o No. de socio exacto). Idempotente; matches verificados con
---     SELECTs antes de versionar esta migración.
+-- (c) Backfill de reservas viejas del bot: mismo criterio que el RPC (nombre exacto
+--     o No. de socio exacto), y SOLO si el match es único (mismo candado anti-homónimos
+--     que el RPC: un UPDATE...FROM con 2+ matches anclaría a un socio arbitrario).
+--     Idempotente; matches verificados con SELECTs antes de versionar esta migración.
 update public.funnel_reservas r
-   set socio_id = s.id
-  from public.socios s
- where r.socio_id is null
-   and (lower(s.nombre) = lower(trim(r.socio_nombre)) or s.no_socio = trim(r.socio_nombre));
+   set socio_id = m.socio_id
+  from (
+    select r2.id as reserva_id, min(s.id) as socio_id
+      from public.funnel_reservas r2
+      join public.socios s
+        on (lower(s.nombre) = lower(trim(r2.socio_nombre)) or s.no_socio = trim(r2.socio_nombre))
+     where r2.socio_id is null
+     group by r2.id
+    having count(distinct s.id) = 1
+  ) m
+ where r.id = m.reserva_id;
 
 -- (d) Backfill lead_id de conversaciones desde leads por chat_id (leads.chat_id es único).
 update public.kuxtal_bot_conversaciones c
