@@ -1699,11 +1699,11 @@ async function expedienteHTML(x){
       if(p.recepcion_en) ev.push({f:String(p.recepcion_en).slice(0,10), ic:'ic-users', t:'Asistió a la presentación', s:''});
       if(p.baja_en) ev.push({f:String(p.baja_en).slice(0,10), ic:'ic-ban', t:'Baja del club', s:p.motivo_baja||''});
     });
-    const ids=ps.map(p=>p.id).filter(v=>v!=null);
-    if(ids.length){
-      const cs=await getJSON('funnel_contratos?select=*&prospecto_id=in.('+ids.join(',')+')');
-      cs.forEach(c=>ev.push({f:String(c.creado_en||c.firmado_en||'').slice(0,10), ic:'ic-edit', t:'Contrato firmado · '+(c.tipo_membresia||'—')+' $'+Number(c.monto||0).toLocaleString('es-GT'), s:c.plan_pago||''}));
-    }
+  }catch(e){}
+  // Contratos firmados (funnel_contratos.socio_id apunta directo al socio — confirmado en la base)
+  try{
+    const cs=await getJSON('funnel_contratos?select=tipo_membresia,monto,plan_pago,creado_en,firmado_en&socio_id=eq.'+x.id);
+    cs.forEach(c=>ev.push({f:String(c.firmado_en||c.creado_en||'').slice(0,10), ic:'ic-edit', t:'Contrato firmado · '+(c.tipo_membresia||'—')+' $'+Number(c.monto||0).toLocaleString('es-GT'), s:c.plan_pago||''}));
   }catch(e){}
   // Interacciones del CRM (llamadas, notas, WhatsApp, ediciones…). El tipo 'uso' se
   // omite acá porque el canje ya entra como hito propio desde la tabla usos (evita duplicados).
