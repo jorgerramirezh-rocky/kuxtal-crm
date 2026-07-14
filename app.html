@@ -763,6 +763,21 @@ async function probeOfertasExt(){
 }
 function audLabel(o){ const t=o.tipo_objetivo; if(t==='todos') return 'Para todos los socios'; if(t==='publico') return 'Todo público · publicable en la web'; return 'Exclusivo '+esc(t||'—'); }
 function cuponLabel(o){ return o.cupon_multi?'Cupón multi-uso':'Cupón 1 uso por socio'; }
+// Cupos: usos por oferta (solo ofertas con cantidad definida) — lectura con count=exact.
+let CUPOS=null, cargandoCupos=false;
+async function cargarCupos(){
+  const pend=(OFERTAS||[]).filter(o=>o.cantidad!=null&&(CUPOS===null||CUPOS[o.id]===undefined));
+  if(!pend.length||cargandoCupos) return;
+  cargandoCupos=true;
+  try{
+    const m=CUPOS||{};
+    for(const o of pend){ m[o.id]=await sbCountExact('usos?select=oferta_id&oferta_id=eq.'+o.id); }
+    CUPOS=m;
+    if(tab==='promos') render();
+  }catch(e){/* sin conteo no se marca 'Agotado'; usarPromo/validarCodigo igual verifican */}
+  finally{ cargandoCupos=false; }
+}
+const cuposAgotados=o=>o.cantidad!=null&&CUPOS&&CUPOS[o.id]!=null&&CUPOS[o.id]>=o.cantidad;
 function ofertaCard(o){
   const acc = ROLE==='admin' ? `<div style="display:flex;flex-direction:column;gap:6px;flex:none;align-self:flex-start">
       <button class="eb" aria-label="Editar promoción" onclick="editarPromo(${o.id})"><svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg></button>
@@ -771,10 +786,12 @@ function ofertaCard(o){
   const foto = o.foto ? `<div style="margin-top:8px"><img src="${esc(o.foto)}" alt="" loading="lazy" style="max-width:100%;max-height:160px;border-radius:10px;object-fit:cover"></div>` : '';
   const linkOk=o.link&&/^https?:\/\//i.test(o.link);
   const linea2=[]; if(o.ubicacion) linea2.push(esc(o.ubicacion)); if(linkOk) linea2.push(`<a href="${esc(o.link)}" target="_blank" rel="noopener" style="color:var(--kux);font-weight:700">Ver más →</a>`);
-  return `<div class="ocard" style="align-items:flex-start"><div class="oemoji">${esc(o.emoji||'✈️')}</div><div class="obody">
-    <div class="otit">${esc(o.titulo)} ${o.descuento?`<span class="odesc">${esc(o.descuento)}</span>`:''}</div>
+  const agot=cuposAgotados(o);
+  const cuposTxt=o.cantidad!=null?(' · Cupos: '+esc(String(o.cantidad))+(CUPOS&&CUPOS[o.id]!=null?(' ('+CUPOS[o.id]+' usados)'):'')):'';
+  return `<div class="ocard${agot?' isused':''}" style="align-items:flex-start"><div class="oemoji">${esc(o.emoji||'✈️')}</div><div class="obody">
+    <div class="otit">${esc(o.titulo)} ${o.descuento?`<span class="odesc">${esc(o.descuento)}</span>`:''}${agot?' <span class="odesc" style="background:#fdecea;color:#b3261e">Agotado</span>':''}</div>
     <div class="odescr">${esc(o.descripcion||'')}</div>${foto}
-    <div class="ometa">${audLabel(o)}${o.vigencia_hasta?' · hasta '+fechaTxt(o.vigencia_hasta):''} · ${cuponLabel(o)}${o.cantidad!=null?' · Cupos: '+esc(String(o.cantidad)):''}</div>
+    <div class="ometa">${audLabel(o)}${o.vigencia_hasta?' · hasta '+fechaTxt(o.vigencia_hasta):''} · ${cuponLabel(o)}${cuposTxt}</div>
     ${linea2.length?`<div class="ometa" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:3px">${linea2.join(' · ')}</div>`:''}
   </div>${acc}</div>`;
 }
@@ -934,6 +951,15 @@ async function sbGet(tabla,qs,reint){
   const r=await fetch(SB_URL+"/rest/v1/"+tabla+"?"+qs,{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
   if(r.status===401){ if(!reint && await refrescar()) return sbGet(tabla,qs,true); throw new Error("401"); }
   if(!r.ok) throw new Error(String(r.status)); return await r.json();
+}
+// Cuenta filas SIN traerlas: HEAD + Prefer count=exact (lectura pura). Esquiva el tope
+// max_rows=1000 de PostgREST: el conteo viene en el header Content-Range ("0-0/N").
+async function sbCountExact(path){
+  const sep=path.includes('?')?'&':'?';
+  const r=await api(path+sep+'limit=1',{method:'HEAD',headers:{Prefer:'count=exact'}});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const t=(r.headers.get('content-range')||'').split('/')[1];
+  return (t&&t!=='*')?Number(t):0;
 }
 
 // ── SECCIÓN 1 · Alertas de calidad ──
@@ -1454,7 +1480,9 @@ function render(){
     const activas = OFERTAS.length?OFERTAS.map(ofertaCard).join(''):`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-gift"/></svg></span><b>Sin promociones activas</b><p>${ROLE==='admin'?'Creá la primera con el botón de arriba.':'Pronto habrá novedades.'}</p></div>`;
     const cancel = (ROLE==='admin'&&verCancel)?`<h3 style="margin:18px 0 10px;color:var(--gris)"><svg class="svic" aria-hidden="true"><use href="#ic-folder"/></svg> Historial de canceladas</h3>`+canceladasHTML():'';
     const analit = (ROLE==='admin'&&verUsos)?`<h3 style="margin:18px 0 10px;color:var(--gris)"><svg class="svic" aria-hidden="true"><use href="#ic-ticket"/></svg> Promos más usadas</h3>`+analiticaPromosHTML():'';
-    $('lista').innerHTML=head+activas+cancel+analit; return;
+    $('lista').innerHTML=head+activas+cancel+analit;
+    cargarCupos(); // en cuanto haya conteos, re-pinta y marca 'Agotado' (lectura, no bloquea)
+    return;
   }
   if(tab==='leads'){
     if(LEADS===null){
@@ -1596,7 +1624,11 @@ function ofertaBenef(o,n,sid){
     ? `<span class="obadge used"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> Usado</span>`
     : `<span class="obadge use">${(multi&&n>0)?('Usado '+n+(n===1?' vez · ':' veces · ')):''}Usar →</span>`;
   const attrs = bloqueado ? '' : `onclick="usarPromo(${sid},${o.id})" style="cursor:pointer"`;
-  return `<div class="ocard${bloqueado?' isused':''}" ${attrs}><div class="oemoji">${esc(o.emoji||'✈️')}</div><div class="obody"><div class="otit">${esc(o.titulo)} ${o.descuento?`<span class="odesc">${esc(o.descuento)}</span>`:''}</div><div class="odescr">${esc(o.descripcion||'')}</div><div class="ometa">${o.vigencia_hasta?'Vigente hasta '+fechaTxt(o.vigencia_hasta):''}${multi?' · multi-uso':''}</div></div>${right}</div>`;
+  // Mismo detalle visual que la tarjeta admin: foto, ubicación y link (el link no dispara el canje)
+  const foto = o.foto ? `<div style="margin-top:8px"><img src="${esc(o.foto)}" alt="" loading="lazy" style="max-width:100%;max-height:160px;border-radius:10px;object-fit:cover"></div>` : '';
+  const linkOk=o.link&&/^https?:\/\//i.test(o.link);
+  const linea2=[]; if(o.ubicacion) linea2.push(esc(o.ubicacion)); if(linkOk) linea2.push(`<a href="${esc(o.link)}" target="_blank" rel="noopener" style="color:var(--kux);font-weight:700" onclick="event.stopPropagation()">Ver más →</a>`);
+  return `<div class="ocard${bloqueado?' isused':''}" ${attrs}><div class="oemoji">${esc(o.emoji||'✈️')}</div><div class="obody"><div class="otit">${esc(o.titulo)} ${o.descuento?`<span class="odesc">${esc(o.descuento)}</span>`:''}</div><div class="odescr">${esc(o.descripcion||'')}</div>${foto}<div class="ometa">${o.vigencia_hasta?'Vigente hasta '+fechaTxt(o.vigencia_hasta):''}${multi?' · multi-uso':''}</div>${linea2.length?`<div class="ometa" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:3px">${linea2.join(' · ')}</div>`:''}</div>${right}</div>`;
 }
 // Devuelve {oferta_id: veces_usada} para este socio.
 async function usosDeSocio(sid){ try{ const r=await fetch(SB_URL+"/rest/v1/usos?socio_id=eq."+sid+"&select=oferta_id",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}}); if(!r.ok) return {}; const m={}; (await r.json()).forEach(u=>{ if(u.oferta_id!=null) m[u.oferta_id]=(m[u.oferta_id]||0)+1; }); return m; }catch(e){ return {}; } }
@@ -1631,6 +1663,12 @@ async function usarPromo(sid,ofId){
   if(!confirm(`¿Usar «${o.titulo}»? Se generará tu código para mostrar en el local.`)) return;
   const codigo=randCode(), expira=new Date(Date.now()+15*60000).toISOString();
   try{
+    // Cupos: si la promo tiene cantidad limitada, verificá ANTES de generar el código (lectura count=exact)
+    if(o.cantidad!=null){
+      const usados=await sbCountExact('usos?select=oferta_id&oferta_id=eq.'+ofId);
+      if(CUPOS) CUPOS[ofId]=usados;
+      if(usados>=o.cantidad){ toast('Cupos agotados — esta promo llegó a su límite'); return; }
+    }
     const r=await fetch(SB_URL+"/rest/v1/codigos",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_id:sid,oferta_id:ofId,codigo:codigo,tipo:'descuento',expira_en:expira})});
     if(!r.ok) throw 0;
     addInter(sid,'beneficio','Generó código para '+o.titulo+' ('+codigo+')');
@@ -1695,8 +1733,19 @@ async function validarCodigo(codigo){
     if(c.usado){ const f=c.usado_en?new Date(c.usado_en).toLocaleString('es-GT',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; return showValida('used','Ya se había usado','Cada código sirve una sola vez.', f?('Usado el '+f):''); }
     if(new Date(c.expira_en)<new Date()) return showValida('error','El código venció','Los códigos duran 15 minutos. Pedile al socio uno nuevo.');
     if(c.socios&&c.socios.vencimiento&&new Date(c.socios.vencimiento)<new Date()) return showValida('error','Membresía vencida','Renová para volver a disfrutar los beneficios.');
+    // Cupos: si la oferta del código tiene cantidad limitada, bloqueá el canje al llegar al tope
+    if(c.oferta_id!=null){
+      const ofr=await fetch(SB_URL+"/rest/v1/ofertas?id=eq."+c.oferta_id+"&select=cantidad",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
+      const ofd=ofr.ok?await ofr.json():[];
+      const cant=(ofd&&ofd[0])?ofd[0].cantidad:null;
+      if(cant!=null){
+        const usados=await sbCountExact('usos?select=oferta_id&oferta_id=eq.'+c.oferta_id);
+        if(usados>=cant) return showValida('error','Cupos agotados','Esta promoción ya llegó a su límite de canjes.');
+      }
+    }
     await fetch(SB_URL+"/rest/v1/codigos?id=eq."+c.id,{method:"PATCH",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({usado:true,usado_en:new Date().toISOString(),usado_por:USER})});
-    await fetch(SB_URL+"/rest/v1/usos",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_id:c.socio_id,tipo:'descuento',codigo:codigo,usuario:USER})});
+    // Registro del canje CON la oferta (antes iba sin oferta_id y la analítica/cupos no podían contarlo)
+    await fetch(SB_URL+"/rest/v1/usos",{method:"POST",headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_id:c.socio_id,oferta_id:c.oferta_id??null,tipo:'descuento',codigo:codigo,usuario:USER})});
     addInter(c.socio_id,'uso','Usó beneficio (descuento) '+codigo);
     const so=c.socios||{};
     const of=(typeof OFERTAS!=='undefined'&&OFERTAS)?OFERTAS.find(o=>o.id===c.oferta_id):null;
