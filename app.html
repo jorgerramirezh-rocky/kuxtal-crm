@@ -1097,13 +1097,19 @@ function orgNodoHTML(a,agentes,hijosDe,vistos){
     ${hijos?`<div class="orgkids">${hijos}</div>`:''}
   </div>`;
 }
-// Escritura genérica gateada por RLS (patrón de nuevaPromo)
+// Escritura genérica gateada por RLS (patrón de nuevaPromo).
+// Nunca lanza: un fallo de red devuelve false (el caller reactiva botón / hace rollback).
+// sbwStatus guarda el último HTTP status para distinguir causas (p.ej. 409 = duplicado).
+let sbwStatus=0;
 async function sbWrite(metodo,tabla,qs,body,reint){
-  const h={apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,Prefer:"return=minimal"};
-  if(body)h["Content-Type"]="application/json";
-  const r=await fetch(SB_URL+"/rest/v1/"+tabla+(qs?("?"+qs):""),{method:metodo,headers:h,body:body?JSON.stringify(body):undefined});
-  if(r.status===401 && !reint){ if(await refrescar()) return sbWrite(metodo,tabla,qs,body,true); }
-  return r.ok;
+  try{
+    const h={apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,Prefer:"return=minimal"};
+    if(body)h["Content-Type"]="application/json";
+    const r=await fetch(SB_URL+"/rest/v1/"+tabla+(qs?("?"+qs):""),{method:metodo,headers:h,body:body?JSON.stringify(body):undefined});
+    sbwStatus=r.status;
+    if(r.status===401 && !reint){ if(await refrescar()) return sbWrite(metodo,tabla,qs,body,true); }
+    return r.ok;
+  }catch(e){ sbwStatus=0; return false; }
 }
 async function toggleRolFlag(clave,campo,valor){
   const r=ROLDATA.roles.find(x=>x.clave===clave); if(!r)return; const prev=r[campo]; r[campo]=valor; render();
@@ -1174,7 +1180,7 @@ function membresiasPanel(){
   const cards=MEMBDATA.map(m=>{
     const mon=esc(m.moneda||'USD');
     const chips=[
-      `<span class="membchip">Costo <b>${mon} ${numFmt(m.costo)}</b></span>`,
+      `<span class="membchip">Costo <b>${m.costo==null?'—':mon+' '+numFmt(m.costo)}</b></span>`,
       `<span class="membchip">Descuento <b>${m.descuento==null?'—':numFmt(m.descuento)+'%'}</b></span>`,
       `<span class="membchip">Enganche <b>${m.enganche==null?'—':mon+' '+numFmt(m.enganche)}</b></span>`,
       `<span class="membchip">Orden <b>${m.orden==null?'—':numFmt(m.orden)}</b></span>`
@@ -1234,7 +1240,7 @@ async function guardarMemb(){
   if(membEdit&&membEdit.id){ ok=await sbWrite('PATCH','funnel_membresias','id=eq.'+membEdit.id,body); }
   else{ body.activo=true; ok=await sbWrite('POST','funnel_membresias','',body); }
   if(ok){ const editaba=membEdit&&membEdit.id; cerrarMemb(); MEMBDATA=null; if(tab==='membresias'&&!cargandoMembs) cargarMembs(); toast(editaba?'Membresía actualizada':'Membresía creada'); }
-  else{ $('m_err').textContent='No se pudo guardar (¿tenés permiso?).'; btn.disabled=false; btn.textContent=txt; }
+  else{ $('m_err').textContent=sbwStatus===409?'Ya existe un tipo con ese nombre.':'No se pudo guardar (¿tenés permiso?).'; btn.disabled=false; btn.textContent=txt; }
 }
 async function toggleMembActivo(id){
   if(!puedeEditar())return;
