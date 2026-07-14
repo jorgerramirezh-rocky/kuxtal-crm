@@ -2332,9 +2332,18 @@ function pvCard(l){
 }
 async function pvRecep(id,r){ if(await funPatchLead(id,{postventa_recepcion:r})){ ev(id,'postventa','recepción: '+r); toast('Anotado: '+r); document.querySelectorAll('#pv'+id+' .est').forEach(x=>{const on=x.textContent===r;x.classList.toggle('on',on);x.style.background=on?'var(--kux)':'';x.style.color=on?'#fff':'';}); } }
 async function pvContacto(id,btn){ if(await funPatchLead(id,{postventa_contactado:true,postventa_en:new Date().toISOString()})){ ev(id,'postventa','contactado bienvenida'); toast('Bienvenida registrada'); btn.innerHTML='Contactado <svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg>'; } }
-async function darBaja(id,btn){ const m=prompt('Motivo de la baja:'); if(m===null)return;
-  if(await funPatchLead(id,{etapa:'baja',motivo_baja:m||null,baja_en:new Date().toISOString()})){
-    ev(id,'baja',m||'baja');
+// (M1e) El motivo de la baja es OBLIGATORIO (el Expediente ya lo muestra: lee baja_en/motivo_baja).
+// normalizaMotivoBaja() es pura → qa/marco.mjs.
+function normalizaMotivoBaja(m){ const s=String(m==null?'':m).trim(); return s||null; }
+async function darBaja(id,btn){
+  let m=null;
+  for(;;){
+    const raw=prompt('Motivo de la baja (obligatorio):',m||''); if(raw===null) return;
+    m=normalizaMotivoBaja(raw); if(m) break;
+    toast('El motivo es obligatorio para dar de baja');
+  }
+  if(await funPatchLead(id,{etapa:'baja',motivo_baja:m,baja_en:new Date().toISOString()})){
+    ev(id,'baja',m);
     // Hilo conductor: si el prospecto ya es socio (socio_id), el socio también queda en estado 'baja'
     // (esto corre en el CRM con la sesión del usuario; la RLS decide qué puede tocar).
     try{
