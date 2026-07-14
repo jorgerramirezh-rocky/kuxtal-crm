@@ -1690,9 +1690,38 @@ async function renderCard(){ const x=gente.find(g=>g.id===cardCtx.sid); if(!x||!
 async function expedienteHTML(x){
   const ev=[];
   if(x.ingreso) ev.push({f:x.ingreso, ic:'ic-user', t:'Se hizo socio N° '+(x.no||'—'), s:x.tipo?('Membresía '+x.tipo):''});
+  // Hitos del EMBUDO ligados a este socio (funnel_prospectos.socio_id) + contratos firmados
+  try{
+    const ps=await getJSON('funnel_prospectos?select=id,creado_en,presenta_en,recepcion_en,baja_en,motivo_baja&socio_id=eq.'+x.id);
+    ps.forEach(p=>{
+      if(p.creado_en) ev.push({f:String(p.creado_en).slice(0,10), ic:'ic-target', t:'Entró al embudo como prospecto (lead)', s:''});
+      if(p.presenta_en) ev.push({f:String(p.presenta_en).slice(0,10), ic:'ic-bell', t:'Citado a presentación', s:''});
+      if(p.recepcion_en) ev.push({f:String(p.recepcion_en).slice(0,10), ic:'ic-users', t:'Asistió a la presentación', s:''});
+      if(p.baja_en) ev.push({f:String(p.baja_en).slice(0,10), ic:'ic-ban', t:'Baja del club', s:p.motivo_baja||''});
+    });
+    const ids=ps.map(p=>p.id).filter(v=>v!=null);
+    if(ids.length){
+      const cs=await getJSON('funnel_contratos?select=*&prospecto_id=in.('+ids.join(',')+')');
+      cs.forEach(c=>ev.push({f:String(c.creado_en||c.firmado_en||'').slice(0,10), ic:'ic-edit', t:'Contrato firmado · '+(c.tipo_membresia||'—')+' $'+Number(c.monto||0).toLocaleString('es-GT'), s:c.plan_pago||''}));
+    }
+  }catch(e){}
+  // Interacciones del CRM (llamadas, notas, WhatsApp, ediciones…). El tipo 'uso' se
+  // omite acá porque el canje ya entra como hito propio desde la tabla usos (evita duplicados).
+  try{
+    const is=await traerInter(x.id);
+    const TICO={nota:'ic-note',llamada:'ic-phone',whatsapp:'ic-chat',estado:'ic-bookmark',edicion:'ic-edit',beneficio:'ic-gift',reserva:'ic-luggage'};
+    const TLBL={nota:'Nota',llamada:'Llamada',whatsapp:'WhatsApp',estado:'Cambio de estado',edicion:'Edición de ficha',beneficio:'Generó código de beneficio',reserva:'Reserva'};
+    (is||[]).forEach(i=>{ if(i.tipo==='uso') return; ev.push({f:String(i.creado_en||'').slice(0,10), ic:TICO[i.tipo]||'ic-note', t:TLBL[i.tipo]||i.tipo, s:i.nota||''}); });
+  }catch(e){}
+  // Canjes de beneficios (tabla usos)
+  try{
+    const us=await getJSON('usos?select=*&socio_id=eq.'+x.id);
+    us.forEach(u=>ev.push({f:String(u.creado_en||u.usado_en||'').slice(0,10), ic:'ic-ticket', t:'Canjeó beneficio'+(u.codigo?(' ('+u.codigo+')'):''), s:u.tipo||''}));
+  }catch(e){}
   try{
     const rs=await getJSON('funnel_reservas?select=destino,fecha_viaje,personas,estado,creado_en&socio_id=eq.'+x.id);
-    rs.forEach(r=>ev.push({f:(r.fecha_viaje||r.creado_en||'').slice(0,10), ic:'ic-plane', t:'Reserva: '+(r.destino||'destino')+(r.personas?' · '+r.personas+' pers':''), s:r.estado||''}));
+    // Fecha del hito = cuándo se CREÓ la reserva; la fecha del viaje va al subtítulo
+    rs.forEach(r=>ev.push({f:String(r.creado_en||'').slice(0,10), ic:'ic-plane', t:'Reserva: '+(r.destino||'destino')+(r.personas?' · '+r.personas+' pers':''), s:[r.estado||'',r.fecha_viaje?('Viaje: '+fechaTxt(r.fecha_viaje)):''].filter(Boolean).join(' · ')}));
   }catch(e){}
   if(x.venc){ const vd=x.dv!=null&&x.dv<0; ev.push({f:x.venc, ic:'ic-clock', t:vd?'Membresía vencida':'Vigente hasta '+fechaTxt(x.venc), s:''}); }
   if(!ev.length) return '';
@@ -2238,7 +2267,18 @@ function pvCard(l){
 }
 async function pvRecep(id,r){ if(await funPatchLead(id,{postventa_recepcion:r})){ ev(id,'postventa','recepción: '+r); toast('Anotado: '+r); document.querySelectorAll('#pv'+id+' .est').forEach(x=>{const on=x.textContent===r;x.classList.toggle('on',on);x.style.background=on?'var(--kux)':'';x.style.color=on?'#fff':'';}); } }
 async function pvContacto(id,btn){ if(await funPatchLead(id,{postventa_contactado:true,postventa_en:new Date().toISOString()})){ ev(id,'postventa','contactado bienvenida'); toast('Bienvenida registrada'); btn.innerHTML='Contactado <svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg>'; } }
-async function darBaja(id,btn){ const m=prompt('Motivo de la baja:'); if(m===null)return; if(await funPatchLead(id,{etapa:'baja',motivo_baja:m||null,baja_en:new Date().toISOString()})){ ev(id,'baja',m||'baja'); toast('Socio dado de baja'); const c=$('pv'+id); if(c)c.remove(); } }
+async function darBaja(id,btn){ const m=prompt('Motivo de la baja:'); if(m===null)return;
+  if(await funPatchLead(id,{etapa:'baja',motivo_baja:m||null,baja_en:new Date().toISOString()})){
+    ev(id,'baja',m||'baja');
+    // Hilo conductor: si el prospecto ya es socio (socio_id), el socio también queda en estado 'baja'
+    // (esto corre en el CRM con la sesión del usuario; la RLS decide qué puede tocar).
+    try{
+      const p=await getJSON('funnel_prospectos?select=socio_id&id=eq.'+id);
+      const sid=p&&p[0]&&p[0].socio_id;
+      if(sid){ await patchSocio(sid,{estado:'baja'}); const gx=gente.find(g=>g.id===sid); if(gx)gx.estado='baja'; }
+    }catch(e){/* la baja del embudo ya quedó; el estado del socio se puede corregir a mano */}
+    toast('Socio dado de baja'); const c=$('pv'+id); if(c)c.remove();
+  } }
 
 // ── RESERVAS (expediente del viaje: "del post-it al fólder") ──
 const EST_RES=['solicitada','cotizada','confirmada','pagada','viajó','cancelada'];
@@ -2273,7 +2313,10 @@ async function addReserva(){
   const _nrm=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
   const _g=gente.find(s=>_nrm(s.n)===_nrm(soc)); const _sid=_g?_g.id:null;
   try{ const r=await api("funnel_reservas",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({socio_nombre:soc,socio_id:_sid,destino:dest,fecha_viaje:$('rfec').value||null,personas:Number($('rper').value)||1,gestionado_por:USER})});
-    if(!r.ok)throw 0; toast('Reserva creada'); await vistaReservas();
+    if(!r.ok)throw 0;
+    // Aviso honesto: si el nombre no calzó con ningún socio, la reserva queda suelta (no sale en su Expediente)
+    toast(_sid?'Reserva creada':'Reserva creada SIN ligar al socio — revisá el nombre');
+    await vistaReservas();
   }catch(e){ toast('No se pudo'); } finally{ b.disabled=false; b.textContent='Crear reserva'; }
 }
 
