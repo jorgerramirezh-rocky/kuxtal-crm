@@ -108,10 +108,14 @@ function norm(t: string) {
 // Divulgación mínima: solo traemos/mostramos estado de membresía + tipo; NUNCA
 // nombre, No. de socio, DPI, copropietario ni notas del CRM (serían datos de
 // terceros ante un DPI ajeno). El bot corre con SERVICE_ROLE; el candado es la lógica.
-const COLS_SOCIO = "tipo, tipo_norm, vencimiento";
-// Extrae un DPI (13 dígitos consecutivos) de un texto libre, si lo hay.
+// `id` es solo para ANCLAR la conversación al socio (uso interno); jamás se muestra.
+const COLS_SOCIO = "id, tipo, tipo_norm, vencimiento";
+// Extrae un DPI (13 dígitos) de un texto libre, si lo hay. Tolerante a espacios,
+// puntos y guiones («1234 56789 0123», «1234.5678.90123»): se buscan los 13 dígitos
+// sobre el texto SIN esos separadores, manteniendo el candado de DPI exacto.
 function extraerDPI(texto: string): string | null {
-  const m = (texto || "").match(/(?<!\d)(\d{13})(?!\d)/);
+  const limpio = (texto || "").replace(/[\s.\-]/g, "");
+  const m = limpio.match(/(?<!\d)(\d{13})(?!\d)/);
   return m ? m[1] : null;
 }
 // Traduce la fecha de vencimiento a un estado humano (vigente / por vencer / vencida).
@@ -135,7 +139,9 @@ function fichaSocioSegura(s: Record<string, unknown>): string {
 }
 // CANDADO: reviso membresía SOLO con DPI exacto (13 díg.). No busca por número de
 // socio ni por nombre (ambos enumerables). Devuelve mensaje humano; fail-safe.
-async function buscarSocio(termino: string): Promise<string> {
+// Si `convId` viene, ANCLA la conversación al socio encontrado (socio_id) — dato
+// interno del CRM, jamás divulgado al chat.
+async function buscarSocio(termino: string, convId: number | null = null): Promise<string> {
   const clean = (termino || "").replace(/[\s.\-]/g, "");
   if (!/^\d{13}$/.test(clean)) {
     return "Para cuidar los datos de la comunidad, reviso la membresía solo con el DPI completo (13 dígitos) del titular ✈. Pasame el DPI, o escribime «hablar con una persona» y te paso con el equipo. 🙏";
@@ -146,6 +152,14 @@ async function buscarSocio(termino: string): Promise<string> {
     const filas = data || [];
     if (!filas.length) {
       return "No encontré una membresía con ese DPI 🤔. Verificá que estén los 13 dígitos completos, o escribime «hablar con una persona» y te ayudo. ✈";
+    }
+    // Ancla conversación → socio (best-effort: si la columna aún no existe o la
+    // escritura falla, la consulta del cliente sale igual).
+    if (convId && filas[0].id) {
+      const { error: eAncla } = await db.from("kuxtal_bot_conversaciones").update({
+        socio_id: filas[0].id
+      }).eq("id", convId);
+      if (eAncla) console.warn("ancla socio_id:", scrub(eAncla.message || eAncla));
     }
     // Uno o varios (copropietarios comparten DPI): damos el estado, sin listar personas.
     return `Esto es lo que tengo de esa membresía ✈\n\n${fichaSocioSegura(filas[0])}\n\nEs la info que la comunidad Kuxtal tiene registrada, no un documento oficial. Si algo no cuadra, avisale al equipo. 🙏`;
@@ -210,6 +224,39 @@ async function registrarConversacion(chatId: string, contacto: string) {
     return null;
   }
 }
+// 🎯 F2 Kaizen (08-jul) + ancla (13-jul): todo el que le escribe al bot queda como
+// lead en el CRM y la conversación queda ANCLADA a ese lead (lead_id) — cierra
+// hz_248731fe: antes el upsert de primer contacto no seteaba lead_id nunca.
+// Se llama SIN await (fire-and-forget): registrar JAMÁS rompe la conversación.
+async function vincularLead(chatId: string, contacto: string, convId: number | null) {
+  try {
+    const { data: up, error } = await db.from("leads").upsert({
+      chat_id: chatId,
+      nombre: contacto || "(sin nombre)",
+      origen: "bot",
+      estado: "nuevo",
+      nota: "Primer contacto por el bot de Telegram"
+    }, {
+      onConflict: "chat_id",
+      ignoreDuplicates: true
+    }).select("id").maybeSingle();
+    if (error) console.warn("lead upsert:", scrub(error.message || error));
+    // Con ignoreDuplicates, el upsert no devuelve fila si el lead ya existía:
+    // en ese caso lo leemos por chat_id (único) para poder anclar igual.
+    let leadId = up ? up.id : null;
+    if (!leadId) {
+      const { data: ex } = await db.from("leads").select("id").eq("chat_id", chatId).limit(1).maybeSingle();
+      leadId = ex ? ex.id : null;
+    }
+    if (leadId && convId) {
+      await db.from("kuxtal_bot_conversaciones").update({
+        lead_id: leadId
+      }).eq("id", convId).is("lead_id", null);
+    }
+  } catch (e) {
+    console.error("vincularLead:", scrub(e));
+  }
+}
 // Handoff a humano: crea un lead (origen='bot') + una interacción para que el
 // equipo lo vea en el CRM, y marca la conversación en curso. Best-effort.
 async function escalarHumano(chatId: string, contacto: string, texto: string, convId: number | null) {
@@ -250,7 +297,7 @@ async function responderPorReglas(chatId: string, chatIdNum: number, texto: stri
   // ninguna regla. Funciona aunque todavía no exista la fila de regla en la DB.
   const dpi = extraerDPI(texto);
   if (dpi) {
-    await reply(chatIdNum, await buscarSocio(dpi));
+    await reply(chatIdNum, await buscarSocio(dpi, convId));
     return;
   }
   let regla = null;
@@ -309,6 +356,8 @@ async function manejar(chatId: string, chatIdNum: number, texto: string, contact
   const s = await leerSesion(chatId);
   // Captación/seguimiento: toda conversación queda registrada en el CRM.
   const convId = await registrarConversacion(chatId, contacto);
+  // Lead de primer contacto + ancla conversación→lead. Fire-and-forget (sin await).
+  vincularLead(chatId, contacto, convId);
   // El wizard de reservas manda SOLO cuando hay una reserva en curso.
   const PASOS_WIZARD = [
     "nombre",
@@ -335,7 +384,7 @@ async function manejar(chatId: string, chatIdNum: number, texto: string, contact
     case "buscar_socio":
       {
         // El usuario respondió → buscarSocio exige DPI exacto (candado de privacidad).
-        const msg = await buscarSocio(t);
+        const msg = await buscarSocio(t, convId);
         await borrarSesion(chatId);
         await reply(chatIdNum, msg);
         return;
@@ -398,6 +447,15 @@ async function manejar(chatId: string, chatIdNum: number, texto: string, contact
         }
         // Confirmado → llamar al RPC con service role.
         try {
+          // Ancla al socio real: si la conversación quedó anclada por DPI, pasamos
+          // ese socio_id al RPC. Best-effort: si la columna aún no existe o la
+          // lectura falla, la solicitud sale igual (p_socio_id = null).
+          let socioId: number | null = null;
+          if (convId) {
+            const { data: conv, error: eConv } = await db.from("kuxtal_bot_conversaciones").select("socio_id").eq("id", convId).maybeSingle();
+            if (eConv) console.warn("leer socio_id de conversación:", scrub(eConv.message || eConv));
+            else if (conv && conv.socio_id) socioId = Number(conv.socio_id);
+          }
           const { data, error } = await db.rpc("funnel_reservar_cliente", {
             p_socio: String(s.datos.socio || ""),
             p_destino: String(s.datos.destino || ""),
@@ -405,7 +463,8 @@ async function manejar(chatId: string, chatIdNum: number, texto: string, contact
             p_personas: Number(s.datos.personas || 1),
             p_notas: null,
             p_prospecto: null,
-            p_fuente: chatId
+            p_fuente: chatId,
+            p_socio_id: socioId
           });
           if (error && String(error.message || "").includes("limite")) {
             await reply(chatIdNum, "Ya hiciste varias reservas hoy ✈. Probá mañana o escribile al equipo de Kuxtal. 🙏");
@@ -414,7 +473,9 @@ async function manejar(chatId: string, chatIdNum: number, texto: string, contact
           if (error) throw error;
           const idReserva = data; // bigint (id de reserva)
           await borrarSesion(chatId);
-          await reply(chatIdNum, `¡Reserva confirmada! ✈🎉\n\n` + `Tu número de reserva es #${idReserva}.\n` + `Guardalo. En breve el equipo de Kuxtal se pone en contacto para los detalles.\n\n` + `Gracias por viajar con nosotros — cada destino, una historia. 🌎`);
+          // Es una SOLICITUD (nace 'solicitada' en el CRM): el equipo la confirma
+          // después. No prometemos «confirmada» — eso lo decide una persona.
+          await reply(chatIdNum, `¡Solicitud de reserva recibida! ✈\n\n` + `Tu número de solicitud es #${idReserva}.\n` + `Guardalo. El equipo de Kuxtal la revisa y se pone en contacto para confirmarla y coordinar los detalles.\n\n` + `Gracias por viajar con nosotros — cada destino, una historia. 🌎`);
         } catch (e) {
           console.error("funnel_reservar_cliente error:", scrub(e));
           // NO borramos la sesión: el cliente puede reintentar el «sí» sin recargar datos.
@@ -497,20 +558,8 @@ Deno.serve(async (req)=>{
       await reply(chatIdNum, "Por ahora te entiendo por texto ✈. Escribime tu consulta (membresía, destinos, reservas o descuentos) y con gusto te ayudo.");
       return new Response("ok");
     }
-    // 🎯 F2 Kaizen (08-jul): todo el que le escribe al bot queda como lead en el CRM.
-    // Fire-and-forget: sin await ni throw — registrar JAMÁS rompe la conversación.
-    db.from("leads").upsert({
-      chat_id: chatId,
-      nombre: contacto || "(sin nombre)",
-      origen: "bot",
-      estado: "nuevo",
-      nota: "Primer contacto por el bot de Telegram"
-    }, {
-      onConflict: "chat_id",
-      ignoreDuplicates: true
-    }).then(({ error })=>{
-      if (error) console.warn("lead upsert:", scrub(error.message || error));
-    });
+    // 🎯 El lead de primer contacto + ancla al lead ahora viven en vincularLead()
+    // (se dispara dentro de manejar, ya con el id de la conversación a mano).
     await manejar(chatId, chatIdNum, texto, contacto);
     return new Response("ok");
   } catch (e) {
