@@ -1099,7 +1099,7 @@ function membresiasPanel(){
     const ben=m.beneficios?`<div class="mben">${esc(m.beneficios)}</div>`:'';
     const estadoTxt=m.activo?'Activo':'Inactivo';
     return `<div class="membcard${m.activo?'':' off'}">
-      <div class="mtop"><div><div class="mtit">${esc(m.tipo||'(sin nombre)')}</div><span class="pill ${m.activo?'on':''}" style="margin-top:6px" onclick="toggleMembActivo(${m.id})">${estadoTxt}</span></div>
+      <div class="mtop"><div><div class="mtit">${esc(m.tipo||'(sin nombre)')}</div><span class="pill ${m.activo?'on':''}" style="margin-top:6px;cursor:default">${estadoTxt}</span></div>
       <div class="mprice">${mon} ${numFmt(m.precio)}</div></div>
       <div class="mmeta">${chips}</div>
       ${ben}
