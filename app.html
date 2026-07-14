@@ -2402,8 +2402,19 @@ async function cargarMiDia(){
     $('funCont').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar tu día</b><p>Puede ser la conexión. <b onclick="funIrTab('midia')" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;
     return;
   }
-  leads=rows||[];
+  leads=ordenarMiDia(rows||[],hoyStr());
   renderWork();
+}
+// (M1b) Orden del día: recontactos VENCIDOS primero (más viejo arriba), después los
+// agendados a futuro, y al final los que no tienen fecha (por id). Pura → qa/marco.mjs.
+function ordenarMiDia(arr,hoy){
+  const key=l=>{
+    const f=l.recontacto_en?String(l.recontacto_en):'';
+    if(f&&f.slice(0,10)<=hoy) return [0,f];
+    if(f) return [1,f];
+    return [2,String(l.id==null?'':l.id).padStart(14,'0')];
+  };
+  return (arr||[]).slice().sort((a,b)=>{const ka=key(a),kb=key(b);return ka[0]-kb[0]||(ka[1]<kb[1]?-1:ka[1]>kb[1]?1:0);});
 }
 function pasa(l){ const e=estDe(l.estado);
   if(sub==='pend') return l.estado==='nuevo'||l.estado==='no_contesta';
@@ -2439,9 +2450,10 @@ function funCardHTML(l){
   const tel=telDig(l.telefono);
   const call=tel.length>=8?`<a class="ic wa" href="${waHref(l.telefono)}" target="_blank" rel="noopener" onclick="ev(${l.id},'contacto','WhatsApp')">${WA}</a><a class="ic tel" href="${telHref(l.telefono)}" onclick="ev(${l.id},'contacto','Llamada')">${TEL}</a>`:'';
   const rest=RESTAS.map(r=>`<option value="${r.id}" ${l.restaurante_id==r.id?'selected':''}>${esc(r.nombre)}</option>`).join('');
+  const vencida=recD&&recD<=hoyStr()&&!['asistira','no_interesado'].includes(l.estado);
   return `<div class="lead" style="border-left-color:${e.color}">
     <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div>
-      <div class="lmeta">${src?`<span class="src">${esc(src)}</span> · `:''}${esc(l.telefono||'sin teléfono')}</div></div>
+      <div class="lmeta">${src?`<span class="src">${esc(src)}</span> · `:''}${esc(l.telefono||'sin teléfono')}${vencida?' <span class="warn">recontacto vencido '+esc(recD)+'</span>':''}</div></div>
       <div class="lcall">${call}</div></div>
     <div class="lbl">Estado · editable</div>
     <div class="estados">${chipsEstado(l)}</div>
@@ -2450,12 +2462,13 @@ function funCardHTML(l){
       <div class="fld"><label>Hora</label><input type="time" value="${recH}" onchange="setRec(${l.id},null,this.value)"></div>
     </div>
     <div class="sub ${showAsi?'show':''}">
-      <div class="fld"><label>Restaurante</label><select onchange="setAsi(${l.id},'rest',this.value)"><option value="">Elegir…</option>${rest}</select></div>
-      <div class="fld"><label>Día</label><input type="date" value="${presD}" onchange="setAsi(${l.id},'presD',this.value)"></div>
-      <div class="fld"><label>Hora</label><input type="time" value="${presH}" onchange="setAsi(${l.id},'presH',this.value)"></div>
+      <div class="fld"><label>Restaurante</label><select id="rst${l.id}" onchange="setAsi(${l.id},'rest',this.value)"><option value="">Elegir…</option>${rest}</select></div>
+      <div class="fld"><label>Día</label><input type="date" id="prd${l.id}" value="${presD}" onchange="setAsi(${l.id},'presD',this.value)"></div>
+      <div class="fld"><label>Hora</label><input type="time" id="prh${l.id}" value="${presH}" onchange="setAsi(${l.id},'presH',this.value)"></div>
+      <button class="btn" style="margin:0;flex:1 1 100%;background:var(--lima-d)" onclick="citarPresentacion(${l.id})"><svg class="svic" aria-hidden="true"><use href="#ic-bell"/></svg> Citar a presentación</button>
     </div>
-    <div class="note"><textarea placeholder="Comentario del contacto…" onchange="setCom(${l.id},this.value)">${esc(l.comentario||'')}</textarea></div>
-    <div class="pin ${(showAsi&&l.restaurante_id)?'show':''}"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> Presentación asignada</div>
+    <div class="note"><textarea placeholder="Comentario de la gestión (queda en la bitácora)…" onchange="setCom(${l.id},this.value)">${esc(l.comentario||'')}</textarea></div>
+    <div class="pin ${(showAsi&&l.restaurante_id&&l.presenta_en)?'show':''}"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> Presentación asignada${l.presenta_en?(' · '+esc(String(l.presenta_en).slice(0,10)+' '+String(l.presenta_en).slice(11,16))):''}</div>
   </div>`;
 }
 function localL(id){ return leads.find(x=>x.id===id)||todos.find(x=>x.id===id); }
@@ -2489,7 +2502,24 @@ async function setAsi(id,k,v){ const l=localL(id); if(!l)return;
   if(k==='rest'){ l.restaurante_id=v?Number(v):null; if(await funPatchLead(id,{restaurante_id:l.restaurante_id})){ ev(id,'presentacion',{restaurante_id:l.restaurante_id}); toast('Restaurante asignado'); renderWork(); } }
   else{ const cur=(l.presenta_en||(hoyStr()+'T19:00:00')); const D=k==='presD'?v:cur.slice(0,10), H=k==='presH'?v:cur.slice(11,16)||'19:00'; l.presenta_en=D+'T'+H+':00'; if(await funPatchLead(id,{presenta_en:l.presenta_en})) toast('Presentación agendada'); }
 }
-let comT; function setCom(id,v){ const l=localL(id); if(l)l.comentario=v; clearTimeout(comT); comT=setTimeout(()=>funPatchLead(id,{comentario:v}),400); }
+// (M1b) El comentario de la gestión queda en la fila Y en la bitácora (funnel_eventos tipo 'gestion').
+let comT; function setCom(id,v){ const l=localL(id); if(l)l.comentario=v; clearTimeout(comT);
+  comT=setTimeout(async()=>{ if(await funPatchLead(id,{comentario:v}) && String(v||'').trim()) ev(id,'gestion',String(v).trim()); },400); }
+// (M1b) Citar a presentación: valida restaurante + día y guarda presenta_en + restaurante_id
+// + estado 'asistira' en UN solo PATCH. cuerpoCita() es pura → qa/marco.mjs.
+function cuerpoCita(rid,D,H){
+  if(!rid) return {error:'Elegí el restaurante'};
+  if(!D) return {error:'Poné el día de la presentación'};
+  return {body:{presenta_en:D+'T'+(H||'19:00')+':00',restaurante_id:Number(rid),estado:'asistira'}};
+}
+async function citarPresentacion(id){
+  const l=localL(id); if(!l) return;
+  const g=k=>{const e=$(k+id);return e?e.value:'';};
+  const c=cuerpoCita(g('rst')||l.restaurante_id, g('prd')||String(l.presenta_en||'').slice(0,10), g('prh')||String(l.presenta_en||'').slice(11,16));
+  if(c.error){ toast(c.error); return; }
+  if(await funPatchLead(id,c.body)){ Object.assign(l,c.body); ev(id,'citado','Presentación '+c.body.presenta_en.slice(0,10)+' '+c.body.presenta_en.slice(11,16)); toast('Citado a presentación'); renderWork(); }
+  else toast('No se pudo citar');
+}
 
 // ── TODOS (gerencia) ──
 async function cargarTodos(){
