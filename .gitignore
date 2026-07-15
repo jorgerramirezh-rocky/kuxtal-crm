@@ -1,0 +1,4 @@
+# Artefactos de build/deploy (NO son "trabajo", son generados) — 15-jul
+.netlify/
+supabase/.temp/
+.DS_Store
