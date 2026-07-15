@@ -1,0 +1,31 @@
+-- ─────────────────────────────────────────────────────────────
+-- Promociones v2 — columnas EXTENDIDAS de la tabla `ofertas`
+-- BORRADOR: aditivo y reversible. NO se aplica sin OK de George.
+--
+-- Por qué: link / ubicacion / foto / cupón-multi NO tienen dónde
+-- vivir en `ofertas` hoy (no hay esas columnas ni un jsonb). El CRM
+-- ya está preparado para usarlas EN CUANTO existan (probeOfertasExt
+-- las detecta solo). Mientras no se aplique, esas 4 no se guardan;
+-- todo lo demás (editar, audiencia/publico, cancelar+historial,
+-- cupón 1-uso) ya funciona con el esquema actual.
+--
+-- Seguro: solo AGREGA columnas nullable, no toca datos existentes,
+-- las políticas RLS actuales de `ofertas` aplican igual a las nuevas.
+-- Aplicar en: Supabase Kuxtal (tevzfdiumfekvapamovw) → SQL Editor.
+-- Revertir: ALTER TABLE public.ofertas DROP COLUMN <col>;
+-- ─────────────────────────────────────────────────────────────
+
+alter table public.ofertas
+  add column if not exists link        text,
+  add column if not exists ubicacion   text,
+  add column if not exists foto         text,   -- URL de la foto (o base64 si se decide)
+  add column if not exists cupon_multi  boolean not null default false;  -- false = 1 uso por socio · true = multi-uso
+
+comment on column public.ofertas.link        is 'Link opcional de la promo (sitio/reserva)';
+comment on column public.ofertas.ubicacion   is 'Ubicación / sede opcional de la promo';
+comment on column public.ofertas.foto         is 'URL de foto opcional de la promo';
+comment on column public.ofertas.cupon_multi  is 'false = cupón 1 uso por socio; true = multi-uso';
+
+-- Nota sobre AUDIENCIA "todo público": se guarda como tipo_objetivo='publico'
+-- (columna que YA existe, sin flag nuevo). La web publica lee:
+--   select * from ofertas where activa = true and tipo_objetivo = 'publico';
