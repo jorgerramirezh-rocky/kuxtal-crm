@@ -199,6 +199,25 @@
   .tcard.vip{border:1px solid rgba(242,201,76,.55);box-shadow:0 16px 40px rgba(11,28,46,.5),0 0 0 1px rgba(242,201,76,.15) inset}
   .qrbox{background:#fff;border-radius:14px;padding:14px;display:inline-block;margin:14px 0;box-shadow:0 3px 12px rgba(15,36,56,.1)}
   .codebig{font-size:26px;font-weight:800;letter-spacing:3px;color:var(--kux);font-variant-numeric:tabular-nums}
+  /* ── Pantalla del cliente al tocar "Usar" (post-canje) ── celebración con jerarquía:
+     qué ganó → cómo/dónde usarlo → vigencia. Mismo lenguaje de marca que #valida
+     (navy + lima + dorado), en línea dentro de la tarjeta, sin overlay. */
+  .reveal{max-width:380px;margin:2px auto 0;text-align:center;opacity:0;transform:translateY(14px);animation:reveal-in .5s cubic-bezier(.2,.8,.2,1) .05s forwards}
+  @keyframes reveal-in{to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.reveal{animation:none;opacity:1;transform:none}}
+  .reveal-badge{display:inline-flex;align-items:center;gap:6px;background:var(--kux-l);color:var(--kux-d);font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:6px 13px;border-radius:999px}
+  .reveal-badge svg{width:13px;height:13px}
+  .reveal-emoji{font-size:44px;margin:16px 0 0;line-height:1}
+  .reveal-tit{font-family:'League Gothic',sans-serif;font-weight:400;font-size:clamp(26px,7.6vw,32px);color:var(--kux);letter-spacing:.3px;line-height:1.08;margin-top:4px;overflow-wrap:break-word}
+  .reveal-dto{display:inline-block;margin-top:8px}
+  .reveal-card{overflow:hidden;position:relative;margin-top:18px;background:linear-gradient(160deg,#0a1a2b,#16304f 55%,#1b365d);border-radius:20px;padding:22px 18px 4px;box-shadow:0 18px 40px rgba(11,28,46,.38),inset 0 1px 0 rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.1)}
+  .reveal-card .qrbox{margin:0 auto}
+  .reveal-card .codebig{color:#fff;margin:12px 0 0}
+  .reveal-perf{border-top:1px dashed rgba(255,255,255,.22);margin:18px -18px 0}
+  .reveal-info{padding:14px 2px 16px;display:flex;flex-direction:column;gap:9px}
+  .reveal-row{display:flex;align-items:center;gap:8px;font-size:12.5px;color:rgba(255,255,255,.84);text-align:left;line-height:1.35}
+  .reveal-row svg{color:var(--lima);flex:none}
+  .reveal-hint{font-size:12px;color:var(--gris);margin-top:14px;line-height:1.5}
   /* ── PANTALLA DE VALIDACIÓN · celebración premium de marca Kuxtal (portada de kuxtal-plataforma) ──
      Escenario navy dominante (60%), texto blanco (30%), UN acento por estado (10%):
      lima=éxito · dorado=ya usado · rojo=error. Sin emojis: sello vectorial. */
@@ -1757,16 +1776,26 @@ async function usarPromo(sid,ofId){
 }
 function mostrarQR(o,codigo){
   const url="https://jorgerramirezh-rocky.github.io/kuxtal-crm/validar.html?c="+codigo;
-  $(cardCtx.target).innerHTML=`<div style="text-align:center">
-    <div style="font-size:36px">${esc(o.emoji||'🎁')}</div>
-    <h3 style="color:var(--kux);margin:6px 0">${esc(o.titulo)}</h3>
-    ${o.descuento?`<div class="odesc" style="display:inline-block;margin-bottom:10px">${esc(o.descuento)}</div>`:''}
-    <div class="qrbox"><div id="qrc"></div></div>
-    <div class="codebig">${codigo}</div>
-    <div style="color:var(--gris);font-size:12px;margin-top:4px">Mostralo en el local · vence en 15 min · ${o.cupon_multi?'multi-uso':'un solo uso'}</div>
-    <button class="btn-c edit" style="margin-top:14px" onclick="volverTarjeta()">← Volver a mi tarjeta</button>
+  const vigRow=o.vigencia_hasta?`<div class="reveal-row"><svg class="svic" aria-hidden="true"><use href="#ic-bell"/></svg> Promo vigente hasta ${esc(fechaTxt(o.vigencia_hasta))}</div>`:'';
+  $(cardCtx.target).innerHTML=`<div class="reveal" role="status" aria-live="polite">
+    <span class="reveal-badge"><svg class="svic" aria-hidden="true"><use href="#ic-sparkle"/></svg> Código listo</span>
+    <div class="reveal-emoji">${esc(o.emoji||'🎁')}</div>
+    <h3 class="reveal-tit">${esc(o.titulo)}</h3>
+    ${o.descuento?`<div class="odesc reveal-dto">${esc(o.descuento)}</div>`:''}
+    <div class="reveal-card">
+      <div class="qrbox"><div id="qrc"></div></div>
+      <div class="codebig">${codigo}</div>
+      <div class="reveal-perf" aria-hidden="true"></div>
+      <div class="reveal-info">
+        <div class="reveal-row"><svg class="svic" aria-hidden="true"><use href="#ic-ticket"/></svg> Mostralo en el local para aplicarlo${o.cupon_multi?' · multi-uso':' · un solo uso'}</div>
+        <div class="reveal-row"><svg class="svic" aria-hidden="true"><use href="#ic-clock"/></svg> Este código vence en 15 min</div>
+        ${vigRow}
+      </div>
+    </div>
+    <p class="reveal-hint">Enseñale la pantalla al equipo del local, o dejá que escaneen el QR.</p>
+    <button class="btn-c" style="width:100%;margin-top:16px;background:var(--kux)" onclick="volverTarjeta()">← Volver a mi tarjeta</button>
   </div>`;
-  if(window.QRCode) new QRCode(document.getElementById('qrc'),{text:url,width:210,height:210,correctLevel:QRCode.CorrectLevel.M});
+  if(window.QRCode) new QRCode(document.getElementById('qrc'),{text:url,width:190,height:190,correctLevel:QRCode.CorrectLevel.M});
 }
 function volverTarjeta(){ renderCard(); }
 function cerrarTarjeta(){ $('tarjeta').style.display='none'; }
