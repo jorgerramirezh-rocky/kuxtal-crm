@@ -1756,6 +1756,42 @@ async function mostrarMiembro(){
   if(!gente[0]){ $('lista').innerHTML='<div class="vacio">No encontramos tu membresía.</div>'; return; }
   $('lista').innerHTML='<div id="miembroCard" style="max-width:460px;margin:14px auto 0"></div>';
   cardCtx={sid:gente[0].id,target:'miembroCard'}; await renderCard();
+  await pintarMisReservas(gente[0].id);
+}
+// Lado cliente: sus reservas + la respuesta del equipo (estado/notas), con aviso de "nuevo"
+// que persiste en este dispositivo (localStorage) — cero backend nuevo.
+const RESVKEY='kux_res_vistas';
+function loadResVistas(){ try{ return JSON.parse(localStorage.getItem(RESVKEY)||'{}'); }catch(e){ return {}; } }
+function esResNueva(vistas,r){ return !!r.actualizado_en && (!vistas[r.id] || new Date(r.actualizado_en)>new Date(vistas[r.id])); }
+function marcarResVistas(rows){
+  const v=loadResVistas();
+  rows.forEach(r=>{ if(r.actualizado_en) v[r.id]=r.actualizado_en; });
+  try{ localStorage.setItem(RESVKEY,JSON.stringify(v)); }catch(e){}
+}
+async function pintarMisReservas(sid){
+  const el=$('miembroCard'); if(!el) return;
+  let rows=[];
+  try{ rows=await getJSON("funnel_reservas?select=id,destino,fecha_viaje,fecha_regreso,personas,estado,notas,actualizado_en&socio_id=eq."+sid+"&order=actualizado_en.desc.nullslast,id.desc&limit=20"); }
+  catch(e){ return; } // sin reservas visibles (o RLS aún no las expone al cliente) — no rompemos la tarjeta
+  if(!rows.length) return;
+  const vistas=loadResVistas();
+  const html=`<h4 class="bh">Tus reservas</h4>`+rows.map(r=>{
+    const nueva=esResNueva(vistas,r);
+    const respuesta=r.notas?`<div class="odescr" style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--linea)"><b>Respuesta del equipo:</b> ${esc(r.notas)}</div>`:'';
+    return `<div class="basecard">
+      <div style="min-width:0">
+        <b>${esc(r.destino||'Tu viaje')}</b>
+        <div class="ometa">${r.fecha_viaje?fechaTxt(r.fecha_viaje):'Sin fecha aún'}${r.fecha_regreso?(' → '+fechaTxt(r.fecha_regreso)):''}${r.personas?(' · '+r.personas+' pers'):''}</div>
+        ${respuesta}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:none">
+        ${nueva?'<span class="badge" style="background:var(--lima-d);color:#fff">Nuevo</span>':''}
+        ${badgeRes(r.estado)}
+      </div>
+    </div>`;
+  }).join('');
+  el.insertAdjacentHTML('beforeend',html);
+  marcarResVistas(rows);
 }
 async function usarPromo(sid,ofId){
   const o=OFERTAS.find(x=>x.id===ofId); if(!o) return;
