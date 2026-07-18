@@ -1756,6 +1756,46 @@ async function mostrarMiembro(){
   if(!gente[0]){ $('lista').innerHTML='<div class="vacio">No encontramos tu membresía.</div>'; return; }
   $('lista').innerHTML='<div id="miembroCard" style="max-width:460px;margin:14px auto 0"></div>';
   cardCtx={sid:gente[0].id,target:'miembroCard'}; await renderCard();
+  await pintarMisReservas(gente[0].id);
+}
+// Lado cliente: sus reservas + la RESPUESTA que el equipo le escribió a propósito.
+// Lee la VISTA segura funnel_reservas_cliente (SOLO columnas seguras, encerrada por
+// socio via el claim JWT) — NUNCA la tabla base ni el campo interno `notas`.
+// El aviso "Nuevo" persiste en este dispositivo (localStorage) — cero backend nuevo.
+const RESVKEY='kux_res_vistas';
+function loadResVistas(){ try{ return JSON.parse(localStorage.getItem(RESVKEY)||'{}'); }catch(e){ return {}; } }
+function esResNueva(vistas,r){ return !!r.actualizado_en && (!vistas[r.id] || new Date(r.actualizado_en)>new Date(vistas[r.id])); }
+function marcarResVistas(rows){
+  const v=loadResVistas();
+  rows.forEach(r=>{ if(r.actualizado_en) v[r.id]=r.actualizado_en; });
+  try{ localStorage.setItem(RESVKEY,JSON.stringify(v)); }catch(e){}
+}
+async function pintarMisReservas(sid){
+  const el=$('miembroCard'); if(!el) return;
+  let rows=[];
+  // Vista cara-al-cliente: sin `notas`. El filtro por socio lo hace la propia vista
+  // en el servidor; el socio_id=eq acá es solo claridad (belt-and-suspenders).
+  try{ rows=await getJSON("funnel_reservas_cliente?select=id,destino,fecha_viaje,fecha_regreso,personas,estado,respuesta_socio,actualizado_en&socio_id=eq."+sid+"&order=actualizado_en.desc.nullslast,id.desc&limit=20"); }
+  catch(e){ return; } // sin reservas visibles — no rompemos la tarjeta
+  if(!rows.length) return;
+  const vistas=loadResVistas();
+  const html=`<h4 class="bh">Tus reservas</h4>`+rows.map(r=>{
+    const nueva=esResNueva(vistas,r);
+    const respuesta=r.respuesta_socio?`<div class="odescr" style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--linea)"><b>Respuesta del equipo:</b> ${esc(r.respuesta_socio)}</div>`:'';
+    return `<div class="basecard">
+      <div style="min-width:0">
+        <b>${esc(r.destino||'Tu viaje')}</b>
+        <div class="ometa">${r.fecha_viaje?fechaTxt(r.fecha_viaje):'Sin fecha aún'}${r.fecha_regreso?(' → '+fechaTxt(r.fecha_regreso)):''}${r.personas?(' · '+r.personas+' pers'):''}</div>
+        ${respuesta}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:none">
+        ${nueva?'<span class="badge" style="background:var(--lima-d);color:#fff">Nuevo</span>':''}
+        ${badgeRes(r.estado)}
+      </div>
+    </div>`;
+  }).join('');
+  el.insertAdjacentHTML('beforeend',html);
+  marcarResVistas(rows);
 }
 async function usarPromo(sid,ofId){
   const o=OFERTAS.find(x=>x.id===ofId); if(!o) return;
@@ -2442,7 +2482,8 @@ function abrirExp(id){
     <div class="expsec"><div class="t">Hotel</div>
       <div class="row"><div class="fld"><label>Hotel</label><input id="xhot" value="${esc(r.hotel||'')}" placeholder="Nombre del hotel"></div><div class="fld"><label>No. de confirmación</label><input id="xcon" value="${esc(r.confirmacion||'')}" placeholder="Ej. ABC-1234"></div></div></div>
     <div class="expsec"><div class="t">Itinerario</div><div id="xit"></div><button class="itadd" onclick="addTramo()">+ Agregar tramo</button></div>
-    <div class="expsec"><div class="t">Notas</div><div class="note" style="margin:0"><textarea id="xnot" placeholder="Notas del viaje…">${esc(r.notas||'')}</textarea></div></div>
+    <div class="expsec"><div class="t">Respuesta al socio <span style="font-weight:600;color:var(--lima-d)">(la ve el cliente)</span></div><div class="note" style="margin:0"><textarea id="xresp" placeholder="Mensaje para el cliente: confirmación, próximos pasos…">${esc(r.respuesta_socio||'')}</textarea></div></div>
+    <div class="expsec"><div class="t">Notas internas <span style="font-weight:600;color:var(--gris)">(privadas del equipo)</span></div><div class="note" style="margin:0"><textarea id="xnot" placeholder="Notas del viaje…">${esc(r.notas||'')}</textarea></div></div>
     <button class="btn lima" id="xguardar" onclick="guardarExp()">Guardar fólder</button>
     <div class="expfoot">${ult}</div>`;
   pintarTramos();
@@ -2469,6 +2510,7 @@ async function guardarExp(){
     presupuesto_cotizado:num($('xcot').value), presupuesto_pagado:num($('xpag').value),
     hotel:$('xhot').value.trim()||null, confirmacion:$('xcon').value.trim()||null,
     itinerario:it, notas:$('xnot').value.trim()||null,
+    respuesta_socio:$('xresp').value.trim()||null,
     actualizado_en:new Date().toISOString(), actualizado_por:USER };
   try{
     const r=await api("funnel_reservas?id=eq."+EXP.id,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify(body)});
