@@ -297,7 +297,12 @@ function ok(d, codigo){
   document.body.classList.remove('is-muted');
   accent('lima'); setSeal('check');
   $('eyebrow').textContent='Beneficio confirmado';
-  $('titulo').innerHTML='¡Felicidades,<br><span class="nom">'+esc(d.nombre)+'</span>!';
+  // El nombre del socio (PII) solo llega si el comercio va autenticado; si no,
+  // celebramos sin nombre (la edge function ya no lo entrega en anónimo).
+  const nom=(d.nombre==null?'':String(d.nombre)).trim();
+  $('titulo').innerHTML = nom
+    ? '¡Felicidades,<br><span class="nom">'+esc(nom)+'</span>!'
+    : '¡Beneficio confirmado!';
   $('lede').textContent='Tu beneficio del Club quedó validado. ¡Que lo disfrutés!';
 
   // ticket con datos REALES
@@ -320,9 +325,14 @@ function ok(d, codigo){
   confetti();
 }
 
-/* Fallas: mismo mapa de reasons que antes (falta/invalido/usado/vencido/membresia_vencida/error) */
+/* Fallas. La edge function ahora COLAPSA todos los estados no canjeables en un
+   único reason 'no_valido' (anti-enumeración, hallazgo 881a3070): ya no manda
+   usado/vencido/membresia_vencida/error por separado ni la fecha de uso. Dejamos
+   los viejos por compatibilidad, pero el camino real es no_valido/falta. */
 const REASONS={
-  falta:   {tone:'coral',glyph:'x',    eyebrow:'Falta el código', titulo:'No hay código para validar', lede:'Escaneá el QR de tu tarjeta Kuxtal para validar tu beneficio.', status:'Sin código'},
+  falta:     {tone:'coral',glyph:'x',eyebrow:'Falta el código', titulo:'No hay código para validar', lede:'Escaneá el QR de tu tarjeta Kuxtal para validar tu beneficio.', status:'Sin código'},
+  no_valido: {tone:'coral',glyph:'x',eyebrow:'No pudimos validar', titulo:'Este código no es válido', lede:'Puede que ya se haya usado, esté vencido o el enlace esté mal. Pedí uno nuevo desde tu tarjeta del Club.', status:'No válido'},
+  // ---- compat (ya no los envía el servidor) ----
   invalido:{tone:'coral',glyph:'x',    eyebrow:'Código inválido', titulo:'No reconocemos este código', lede:'Revisá el enlace o pedí uno nuevo desde tu tarjeta.', status:'Inválido'},
   usado:   {tone:'gold', glyph:'check',eyebrow:'Beneficio ya usado', titulo:'Este código ya se canjeó', lede:'Este beneficio ya lo disfrutaste. Buscá el próximo en tu tarjeta del Club.', status:'Usado'},
   vencido: {tone:'gold', glyph:'clock',eyebrow:'Código vencido', titulo:'Este código ya venció', lede:'Pedí uno nuevo desde tu tarjeta del Club.', status:'Vencido'},
