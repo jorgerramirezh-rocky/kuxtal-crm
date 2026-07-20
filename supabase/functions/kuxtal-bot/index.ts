@@ -18,6 +18,7 @@
 //       Si está seteado, se registra con Telegram y se exige en cada update.
 //   SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY los inyecta Supabase automáticamente.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { esEstadoAvisable, extraerChatIdReserva, mensajeAvisoReserva } from "./notificar_logic.ts";
 const BOT_TOKEN = Deno.env.get("KUXTAL_BOT_TOKEN");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -27,8 +28,15 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const WEBHOOK_SECRET = Deno.env.get("KUXTAL_WEBHOOK_SECRET") || "";
 // Setup del webhook: gateado por un secreto SEPARADO, por header (no en la URL).
 const SETUP_SECRET = Deno.env.get("KUXTAL_SETUP_SECRET") || "";
+// Secreto del trigger interno (Postgres → este endpoint) que avisa al cliente
+// cuando el equipo confirma/cancela su reserva (pendiente 414f85aa). A diferencia
+// del WEBHOOK_SECRET de Telegram, ESTE candado es SIEMPRE obligatorio (falla
+// CERRADO si falta): un abuso acá manda mensajes reales a chats reales de clientes
+// suplantando a Kuxtal, no es un simple update de estado de conversación.
+const NOTIFY_SECRET = Deno.env.get("KUXTAL_NOTIFY_SECRET") || "";
 if (!BOT_TOKEN) console.warn("⚠️ KUXTAL_BOT_TOKEN vacío: el bot no puede hablar con Telegram hasta setearlo.");
 if (!WEBHOOK_SECRET) console.warn("⚠️ KUXTAL_WEBHOOK_SECRET vacío: webhook SIN candado anti-suplantación (seteá el secreto para blindarlo).");
+if (!NOTIFY_SECRET) console.warn("⚠️ KUXTAL_NOTIFY_SECRET vacío: el aviso de confirmar/cancelar reserva queda DESACTIVADO (falla cerrado a propósito).");
 const db = createClient(SUPABASE_URL!, SERVICE_KEY!);
 // Nunca filtrar un secreto en un mensaje de error o log.
 function scrub(x: unknown) {
@@ -37,7 +45,8 @@ function scrub(x: unknown) {
     BOT_TOKEN,
     SERVICE_KEY,
     WEBHOOK_SECRET,
-    SETUP_SECRET
+    SETUP_SECRET,
+    NOTIFY_SECRET
   ]){
     if (sec) s = s.split(sec).join("***");
   }
@@ -492,10 +501,61 @@ async function manejar(chatId: string, chatIdNum: number, texto: string, contact
       }
   }
 }
+// ── Aviso al cliente: confirmar/cancelar reserva (pendiente 414f85aa) ────────
+// Lo dispara un trigger de Postgres (AFTER UPDATE en funnel_reservas, ver
+// supabase/migrations/20260720_reservas_avisar_cliente.sql) vía pg_net cuando el
+// equipo cambia `estado` a 'confirmada' o 'cancelada'. Candado SIEMPRE cerrado:
+// sin NOTIFY_SECRET configurado, o si no matchea, 403 — a diferencia del webhook
+// de Telegram (que arranca abierto a propósito para no dejar el bot sordo), acá
+// un abuso manda mensajes reales a chats reales de clientes suplantando a Kuxtal.
+async function avisarReserva(req: Request): Promise<Response> {
+  if (!NOTIFY_SECRET || req.headers.get("x-notify-secret") !== NOTIFY_SECRET) {
+    return new Response("no", {
+      status: 403
+    });
+  }
+  let body: Record<string, unknown> = {};
+  try {
+    body = await req.json();
+  } catch  {
+    return new Response("bad request", {
+      status: 400
+    });
+  }
+  const id = Number(body.id);
+  if (!Number.isInteger(id) || id <= 0) return new Response("bad request", {
+    status: 400
+  });
+  try {
+    const { data: r, error } = await db.from("funnel_reservas").select("estado, destino, fecha_viaje, personas, respuesta_socio, notas").eq("id", id).maybeSingle();
+    if (error) throw error;
+    // Fuente de verdad = la fila AHORA, no lo que mandó el trigger: si volvió a
+    // cambiar de estado entre el UPDATE y esta llamada, avisamos lo REAL vigente.
+    if (!r || !esEstadoAvisable(r.estado)) return new Response("ok"); // nada que avisar
+    const chatId = extraerChatIdReserva(r.notas as string | null);
+    const chatIdNum = Number(chatId);
+    if (!chatId || !Number.isFinite(chatIdNum)) return new Response("ok"); // reserva sin chat (no vino del bot) — nada que avisar por acá
+    await reply(chatIdNum, mensajeAvisoReserva(r.estado, {
+      destino: r.destino,
+      fecha_viaje: r.fecha_viaje,
+      personas: r.personas,
+      respuesta_socio: r.respuesta_socio,
+      notas: r.notas
+    }));
+    return new Response("ok");
+  } catch (e) {
+    console.error("avisarReserva:", scrub(e));
+    return new Response("ok"); // 200: best-effort, nunca rompe al trigger que lo llama (fire-and-forget)
+  }
+}
 // ── HTTP ─────────────────────────────────────────────────────────────────────
 Deno.serve(async (req)=>{
   try {
     const url = new URL(req.url);
+    // ✉️ Aviso de confirmar/cancelar reserva — ver avisarReserva() arriba.
+    if (url.searchParams.get("notificar") === "1") {
+      return await avisarReserva(req);
+    }
     // 🛠️ Setup (una vez): registra el secret_token del webhook usando el bot token
     // del runtime. Gateado por SETUP_SECRET en HEADER. ?setup=1 muestra el estado;
     // &apply=1 lo aplica sobre la URL de webhook ya registrada.
