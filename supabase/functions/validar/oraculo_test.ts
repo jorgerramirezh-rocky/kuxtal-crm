@@ -10,6 +10,8 @@ import {
   NO_VALIDO,
   evaluar,
   exito,
+  fechaGT,
+  membresiaVencida,
   rateLimited,
   clientIp,
   MAX_HITS,
@@ -105,4 +107,42 @@ Deno.test("(b) clientIp toma la primera IP de x-forwarded-for", () => {
   const req = new Request("https://x/validar?c=1", { headers: { "x-forwarded-for": "198.51.100.9, 10.0.0.1" } });
   assertEquals(clientIp(req), "198.51.100.9");
   assertEquals(clientIp(new Request("https://x/")), "anon");
+});
+
+// ---------- (d) LA FECHA SE MIDE EN GUATEMALA (UTC-6) ----------
+// Cada caso REPRODUCE el defecto viejo: con la comparación anterior
+// (`new Date(vencimiento) < now`) los cuatro daban NO_VALIDO.
+const GT_TARDE = new Date("2026-08-12T02:00:00Z"); // 11-ago 20:00 en Guatemala
+const GT_MANANA = new Date("2026-08-11T16:00:00Z"); // 11-ago 10:00 en Guatemala
+
+Deno.test("(d) fechaGT devuelve el día de Guatemala, no el de UTC", () => {
+  assertEquals(fechaGT(GT_TARDE), "2026-08-11", "a las 20:00 del 11-ago en GT todavía es 11-ago");
+  assertEquals(fechaGT(GT_MANANA), "2026-08-11");
+  assertEquals(fechaGT(new Date("2026-08-12T06:00:00Z")), "2026-08-12", "medianoche de GT sí cambia el día");
+});
+
+Deno.test("(d) la membresía vale HASTA EL FINAL del día que vence (hora de Guatemala)", () => {
+  // Vence HOY: vigente todo el día, de la mañana a la noche.
+  assertEquals(membresiaVencida("2026-08-11", GT_MANANA), false);
+  assertEquals(membresiaVencida("2026-08-11", GT_TARDE), false);
+  // Vence MAÑANA: obviamente vigente (el defecto viejo la rechazaba después de las 18:00).
+  assertEquals(membresiaVencida("2026-08-12", GT_TARDE), false);
+  // Venció AYER: sí está vencida.
+  assertEquals(membresiaVencida("2026-08-10", GT_TARDE), true);
+  // Timestamp completo (como lo devuelve PostgREST en algunos casos): se usa el día.
+  assertEquals(membresiaVencida("2026-08-11T00:00:00Z", GT_TARDE), false);
+  // Dato sucio o ausente → no bloquea al socio (el CRM ya lo alerta).
+  assertEquals(membresiaVencida(null, GT_TARDE), false);
+  assertEquals(membresiaVencida("", GT_TARDE), false);
+  assertEquals(membresiaVencida("no es fecha", GT_TARDE), false);
+});
+
+Deno.test("(d) el canje NO se rechaza por zona horaria: socio vigente a las 8 de la noche", () => {
+  const c = { ...codigoValido(), expira_en: "2026-08-12T02:10:00Z" };
+  // Vence hoy (11-ago) → el beneficio se aplica.
+  assertEquals(evaluar({ ...c, socios: { ...c.socios, vencimiento: "2026-08-11" } }, GT_TARDE).ok, true);
+  // Vence mañana (12-ago) → se aplica.
+  assertEquals(evaluar({ ...c, socios: { ...c.socios, vencimiento: "2026-08-12" } }, GT_TARDE).ok, true);
+  // Venció ayer (10-ago) → NO se aplica (no aflojamos la regla de negocio).
+  assertEquals(j(evaluar({ ...c, socios: { ...c.socios, vencimiento: "2026-08-10" } }, GT_TARDE)), j(NO_VALIDO));
 });

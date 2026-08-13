@@ -599,7 +599,31 @@ const LS="kux_sesion";
 let SES=null, USER="equipo", ROLE="invitado", gente=[], OFERTAS=[], LEADS=null, cargandoLeads=false, FUNNEL=null, cargandoFunnel=false, BI={}, tab="tablero", vf=90, dirF="todos", dirTipo="", dirCloser="", verLim=60, editId=null, cardCtx={sid:null,target:'tarjetaBody'}, charts={};
 const EDITORES=['admin','gerente_general','gerente_ventas'];
 const puedeEditar=()=>EDITORES.includes(ROLE);
-const HOY=new Date(); HOY.setHours(0,0,0,0);
+// ── EL DÍA SE MIDE EN GUATEMALA (UTC-6), NUNCA EN UTC ──────────────────────────
+// Antes "hoy" salía de new Date().toISOString(): a partir de las 6 de la tarde hora
+// de Guatemala el CRM ya creía que era el día siguiente. Consecuencias reales:
+// Recepción vaciaba "Citados hoy" justo cuando llegan los citados de las 7 pm, y el
+// contrato impreso salía fechado mañana (ingreso y vencimiento corridos un día).
+// Estos ayudantes son PUROS y los prueba qa/marco.mjs con reloj falso.
+const TZ_GT='America/Guatemala';
+// Fecha de calendario (AAAA-MM-DD) de un instante, en hora de Guatemala.
+function fechaGT(d){
+  const x=d||new Date();
+  try{ return new Intl.DateTimeFormat('en-CA',{timeZone:TZ_GT,year:'numeric',month:'2-digit',day:'2-digit'}).format(x); }
+  catch(e){ return new Date(x.getTime()-6*3600000).toISOString().slice(0,10); } // respaldo: UTC-6 a mano
+}
+// AAAA-MM-DD de una fecha LOCAL (sin pasar por UTC, que corre el día).
+function isoLocal(d){ const p=n=>String(n).padStart(2,'0'); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
+// ¿La membresía ya venció? Solo si su fecha es ANTERIOR a hoy en Guatemala: la
+// membresía vale HASTA EL FINAL del día que dice vencer. Mismo criterio que la
+// edge function `validar` (supabase/functions/validar/logic.ts) — si los dos no
+// coinciden, el socio ve el beneficio en su tarjeta y el comercio se lo niega.
+function membresiaVencidaGT(venc,ahora){
+  const s=String(venc==null?'':venc).slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false; // sin fecha o dato sucio → no se castiga al socio
+  return s<fechaGT(ahora);
+}
+const HOY=new Date(fechaGT()+"T00:00:00");
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -738,12 +762,36 @@ function leadCard(l){
     </div>
   </div></div>`;
 }
+// "Descartar" está pegado a los otros tres botones: un toque de más y el interesado
+// desaparecía de la lista para siempre (se sacaba de LEADS en memoria y la pestaña
+// filtra los descartados) — sin preguntar y sin forma de recuperarlo desde el CRM.
+// Regla del ecosistema: datos ambiguos se ALERTAN, no se borran. Ahora se confirma,
+// el prospecto NO se saca de la memoria y queda recuperable en "Descartados".
+let verDescartados=false;
 async function marcarLead(id,estado){
+  if(estado==='descartado'){
+    const l=(LEADS||[]).find(x=>x.id===id);
+    const quien=(l&&l.nombre)?('a '+l.nombre):'a este interesado';
+    if(!confirm('¿Descartar '+quien+'?\n\nSale de tu lista de seguimiento. No se borra: queda en "Descartados" y lo podés recuperar cuando querás.')) return;
+  }
   try{ await patchLead(id,{estado});
-    if(estado==='descartado'){ LEADS=(LEADS||[]).filter(x=>x.id!==id); }
-    else { const l=(LEADS||[]).find(x=>x.id===id); if(l) l.estado=estado; }
-    if(typeof toast==='function') toast('Actualizado'); render();
+    const l=(LEADS||[]).find(x=>x.id===id); if(l) l.estado=estado;
+    if(typeof toast==='function') toast(estado==='descartado'?'Descartado — queda guardado en "Descartados"':'Actualizado'); render();
   }catch(e){ if(typeof toast==='function') toast('No se pudo, probá de nuevo'); }
+}
+async function recuperarLead(id){
+  try{ await patchLead(id,{estado:'nuevo'});
+    const l=(LEADS||[]).find(x=>x.id===id); if(l) l.estado='nuevo';
+    if(typeof toast==='function') toast('Recuperado — vuelve a tu lista'); render();
+  }catch(e){ if(typeof toast==='function') toast('No se pudo, probá de nuevo'); }
+}
+function leadDescartadoCard(l){
+  let f=''; try{ f=new Date(l.creado_en).toLocaleDateString('es-GT',{day:'2-digit',month:'short'}); }catch(e){}
+  return `<div class="ocard isused"><div class="oemoji"><svg class="svic" aria-hidden="true"><use href="#ic-target"/></svg></div><div class="obody">
+    <div class="otit">${esc(l.nombre||'Interesado')} <span class="odesc" style="background:#f1f3f5;color:#6b7688">Descartado</span></div>
+    <div class="odescr"><svg class="svic" aria-hidden="true"><use href="#ic-phone"/></svg> ${esc(l.telefono||'—')} · vino de ${esc(l.origen||'web')}</div>
+    <div class="ometa">Llegó ${f}</div>
+  </div><button class="eb" style="flex:none;align-self:flex-start" onclick="recuperarLead('${l.id}')"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> Recuperar</button></div>`;
 }
 // ── Panel del Bot & WhatsApp (administración dentro del CRM) ──
 // Conversaciones del bot — LECTURA con el mismo token de staff del CRM (la RLS conv_sel_staff lo permite).
@@ -1366,7 +1414,7 @@ function reintentarFunnelBI(){
 const chipTipo=t=>({VIP:'vip',Exclusivo:'exc',Gold:'gold'}[t]||'reg');
 const fechaTxt=s=>s?new Date(s+"T00:00:00").toLocaleDateString('es-GT',{day:'numeric',month:'short',year:'numeric'}):'—';
 const sem=dv=>dv==null?{c:'g',t:'Sin fecha'}:dv<0?{c:'r',t:'Venció hace '+(-dv)+'d'}:dv<=30?{c:'r',t:'Vence en '+dv+'d'}:dv<=90?{c:'a',t:'Vence en '+dv+'d'}:{c:'v',t:'Vence '+fechaTxt(vencDe(dv))};
-function vencDe(dv){const d=new Date(HOY);d.setDate(d.getDate()+dv);return d.toISOString().slice(0,10);}
+function vencDe(dv){const d=new Date(HOY);d.setDate(d.getDate()+dv);return isoLocal(d);}
 function ir(t){tab=t;verLim=60;document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x.dataset.t===t));render();}
 function verRevisar(){dirF='revisar';ir('todos');}
 function up(el,to,fmt){const dur=900,t0=performance.now();(function f(t){let p=Math.min(1,(t-t0)/dur);p=1-Math.pow(1-p,3);el.textContent=fmt(to*p);if(p<1)requestAnimationFrame(f);})(t0);}
@@ -1564,8 +1612,13 @@ function render(){
       return;
     }
     const act=LEADS.filter(l=>l.estado!=='descartado');
-    if(!act.length){ $('lista').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-target"/></svg></span><b>Sin prospectos por ahora</b><p>Acá caen SOLOS los interesados que dejan sus datos en la web de Kuxtal. Cuando llegue uno, aparece listo para llamarlo por WhatsApp y darle seguimiento.</p></div>`; return; }
-    $('lista').innerHTML=act.map(leadCard).join('');
+    const desc=LEADS.filter(l=>l.estado==='descartado');
+    // Los descartados no se esconden para siempre: quedan a un toque de distancia.
+    const head=desc.length?`<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap"><button class="fb${verDescartados?' on':''}" onclick="verDescartados=!verDescartados;render()"><svg class="svic" aria-hidden="true"><use href="#ic-folder"/></svg> Descartados (${desc.length})</button></div>`:'';
+    const cuerpo=act.length?act.map(leadCard).join('')
+      :`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-target"/></svg></span><b>Sin prospectos por ahora</b><p>Acá caen SOLOS los interesados que dejan sus datos en la web de Kuxtal. Cuando llegue uno, aparece listo para llamarlo por WhatsApp y darle seguimiento.</p></div>`;
+    const descHTML=(verDescartados&&desc.length)?`<h3 style="margin:18px 0 10px;color:var(--gris)"><svg class="svic" aria-hidden="true"><use href="#ic-folder"/></svg> Descartados — se pueden recuperar</h3>`+desc.map(leadDescartadoCard).join(''):'';
+    $('lista').innerHTML=head+cuerpo+descHTML;
     return;
   }
   if(tab==='bot'){
@@ -1877,11 +1930,15 @@ async function validarCodigo(codigo){
   showValida('loading','Validando…','Confirmando el beneficio del socio');
   try{
     const r=await fetch(SB_URL+"/rest/v1/codigos?codigo=eq."+encodeURIComponent(codigo)+"&select=*,socios(nombre,tipo_norm,vencimiento)",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
-    const d=await r.json(), c=d&&d[0];
+    // Si la CONSULTA falla (red, permiso, 4xx/5xx) NO es que el código no exista:
+    // decirle "código no encontrado" mandaba al socio a generar otro que tampoco
+    // iba a servir. Se avisa el problema real y se ofrece reintentar.
+    if(!r.ok) return showValida('error','No se pudo consultar el código','No pudimos preguntarle a la base — no es culpa del código. Revisá la conexión y probá de nuevo.');
+    const d=await r.json(), c=Array.isArray(d)?d[0]:null;
     if(!c) return showValida('error','Código no encontrado','Revisá el código o pedile al socio que genere uno nuevo.');
     if(c.usado){ const f=c.usado_en?new Date(c.usado_en).toLocaleString('es-GT',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; return showValida('used','Ya se había usado','Cada código sirve una sola vez.', f?('Usado el '+f):''); }
     if(new Date(c.expira_en)<new Date()) return showValida('error','El código venció','Los códigos duran 15 minutos. Pedile al socio uno nuevo.');
-    if(c.socios&&c.socios.vencimiento&&new Date(c.socios.vencimiento)<new Date()) return showValida('error','Membresía vencida','Renová para volver a disfrutar los beneficios.');
+    if(c.socios&&membresiaVencidaGT(c.socios.vencimiento)) return showValida('error','Membresía vencida','Renová para volver a disfrutar los beneficios.');
     // Cupos: si la oferta del código tiene cantidad limitada, bloqueá el canje al llegar al tope
     if(c.oferta_id!=null){
       const ofr=await fetch(SB_URL+"/rest/v1/ofertas?id=eq."+c.oferta_id+"&select=cantidad",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
@@ -2053,7 +2110,9 @@ let esGerente=false, verTodo=false, miAgente=null;
 let ESTADOS=[], RESTAS=[], AGENTES=[], MEMBS=[], PLANES=[], BASES=[], leads=[], todos=[], cierreLeads=[];
 let funTab='', sub='pend', funCargado=false;
 const puedeEmbudo=()=> verTodo || ['tmk','telemarketing'].includes(ROLE);
-const hoyStr=()=>new Date().toISOString().slice(0,10);
+// hoyStr = el día de HOY en Guatemala (ver fechaGT arriba). Se declara como función
+// para que el marco de QA (qa/marco.mjs) pueda extraerla y probarla con reloj falso.
+function hoyStr(){ return fechaGT(); }
 const estDe=c=>ESTADOS.find(e=>e.clave===c)||{clave:c,etiqueta:c,color:'#8a94a6'};
 
 // ── REST helpers (con refresh en 401) — usan la sesión del CRM ──
@@ -2240,11 +2299,20 @@ function cierreCard(l){
   </div>`;
 }
 // ── CONTRATO IMPRIMIBLE (marca Kuxtal) ──
+// (M1d) Vencimiento del contrato: se calcula sobre la FECHA de ingreso (día de
+// Guatemala), no sobre el instante UTC. Antes usaba new Date()+toISOString(), así que
+// un contrato cerrado de noche salía impreso fechado mañana. Pura → qa/marco.mjs.
+function vencimientoContrato(hoyISO,anios){
+  const p=String(hoyISO||'').split('-').map(Number);
+  const n=Number(anios)||4;
+  const d=new Date(p[0]+n,(p[1]||1)-1,p[2]||1);
+  const z=x=>String(x).padStart(2,'0');
+  return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate());
+}
 function imprimirContrato(d){
   const fmt=iso=>{try{return new Date(iso+'T12:00:00').toLocaleDateString('es-GT',{day:'2-digit',month:'long',year:'numeric'});}catch(e){return iso||'';}};
   const hoy=hoyStr();
-  const venc=new Date(); venc.setFullYear(venc.getFullYear()+(Number(d.anios)||4));
-  const vencIso=venc.toISOString().slice(0,10);
+  const vencIso=vencimientoContrato(hoy,d.anios);
   const fila=(l,v)=>`<tr><td class="k">${esc(l)}</td><td class="v">${esc(v||'—')}</td></tr>`;
   const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Contrato Kuxtal · ${esc(d.nombre||'')}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=League+Gothic&display=swap" rel="stylesheet">
@@ -2728,7 +2796,24 @@ async function crearBase(){
     if(!rb.ok) throw new Error('base '+rb.status);
     const base=(await rb.json())[0];
     const payload=parsed.map(p=>({base_id:base.id,nombre:p.nombre,telefono:p.telefono,estado:'nuevo'}));
-    for(let i=0;i<payload.length;i+=200){ const chunk=payload.slice(i,i+200); const rp=await api("funnel_prospectos",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(chunk)}); if(!rp.ok) throw new Error('prospectos '+rp.status); }
+    // La carga va por tandas de 200. Si una tanda falla a mitad de camino, las
+    // anteriores YA quedaron guardadas: decir solo "no se pudo" empujaba a repetir
+    // la carga completa y duplicar media base (dos TMK llamando a la misma familia).
+    // Ahora se dice exactamente cuántos entraron y desde qué fila seguir.
+    let metidos=0;
+    for(let i=0;i<payload.length;i+=200){
+      const chunk=payload.slice(i,i+200);
+      const rp=await api("funnel_prospectos",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(chunk)});
+      if(!rp.ok){
+        if(metidos===0) throw new Error('prospectos '+rp.status); // no entró ninguno: se puede reintentar entero
+        // El total de la base queda honesto (best-effort: si no se puede, igual avisamos).
+        try{ await api("funnel_bases?id=eq."+base.id,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({total:metidos})}); }catch(_e){}
+        alert('Carga a medias en la base «'+nom+'».\n\nSe guardaron '+metidos+' de '+payload.length+' prospectos.\n\nNO repitás la carga completa: duplicarías los '+metidos+' que ya entraron. Borrá del cuadro las primeras '+metidos+' líneas y creá otra base con las que faltan (de la fila '+(metidos+1)+' en adelante).');
+        toast('Carga parcial: '+metidos+' de '+payload.length+' — no repitás la carga entera');
+        return; // NO se limpia el cuadro: el texto pegado es lo que necesita para seguir
+      }
+      metidos+=chunk.length;
+    }
     toast('Base creada ('+parsed.length+')'); $('bnom').value='';$('brows').value='';
     await vistaCargar();
   }catch(e){ toast('No se pudo ('+e.message+')'); }

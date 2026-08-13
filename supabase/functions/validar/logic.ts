@@ -21,14 +21,44 @@ export type Exito = { ok: true; promo: unknown; nombre?: string; tipo?: string }
 // deno-lint-ignore no-explicit-any
 type Row = any;
 
+// ── (d) LA FECHA SE MIDE EN GUATEMALA, NO EN UTC ────────────────────────────
+// `socios.vencimiento` es una FECHA de calendario (AAAA-MM-DD), no un instante.
+// Comparar `new Date("2026-08-12") < now` la trata como medianoche UTC = 18:00
+// del día ANTERIOR en Guatemala (UTC-6): desde las 6 de la tarde el servidor ya
+// creía que era mañana y rechazaba membresías vigentes. Peor: una membresía que
+// vence HOY quedaba rechazada TODO el día, mientras el CRM y la tarjeta del socio
+// la mostraban vigente y le generaban el código. El socio quedaba parado frente
+// al comercio con un beneficio que su app decía tener y el escáner negaba.
+// Regla: la membresía vale HASTA EL FINAL del día indicado, hora de Guatemala.
+export const TZ_GT = "America/Guatemala";
+
+// Fecha de calendario (AAAA-MM-DD) del instante `now` en Guatemala.
+export function fechaGT(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: TZ_GT,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
+// ¿La membresía ya venció? Solo si su fecha es ANTERIOR al día de hoy en Guatemala.
+// Fecha ausente o ilegible → NO bloquea el canje (el CRM ya la alerta como dato por
+// revisar; negarle el beneficio al socio por un dato sucio del padrón sería castigarlo).
+export function membresiaVencida(venc: unknown, now: Date = new Date()): boolean {
+  const s = String(venc ?? "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  return s < fechaGT(now);
+}
+
 // (a) Clasificación de estado. Devuelve {ok:true} SOLO si el código es canjeable;
 // en cualquier otro caso NO_VALIDO — sin distinguir el motivo (oráculo cerrado).
 export function evaluar(c: Row, now: Date = new Date()): { ok: true } | NoValido {
   if (!c) return NO_VALIDO;                                        // inexistente
   if (c.usado) return NO_VALIDO;                                   // ya usado
-  if (new Date(c.expira_en) < now) return NO_VALIDO;              // vencido
+  if (new Date(c.expira_en) < now) return NO_VALIDO;              // vencido (instante real: sí es UTC)
   const soc = c.socios || {};
-  if (soc.vencimiento && new Date(soc.vencimiento) < now) return NO_VALIDO; // membresía vencida
+  if (membresiaVencida(soc.vencimiento, now)) return NO_VALIDO;   // membresía vencida (día de Guatemala)
   return { ok: true };
 }
 

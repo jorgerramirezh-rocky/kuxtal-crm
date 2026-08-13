@@ -19,6 +19,8 @@
 //   SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY los inyecta Supabase automáticamente.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { esEstadoAvisable, extraerChatIdReserva, mensajeAvisoReserva } from "./notificar_logic.ts";
+// El día se calcula en la hora de Guatemala (UTC-6), no en UTC: ver fecha_logic.ts.
+import { estadoMembresia } from "./fecha_logic.ts";
 const BOT_TOKEN = Deno.env.get("KUXTAL_BOT_TOKEN");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -126,18 +128,6 @@ function extraerDPI(texto: string): string | null {
   const limpio = (texto || "").replace(/[\s.\-]/g, "");
   const m = limpio.match(/(?<!\d)(\d{13})(?!\d)/);
   return m ? m[1] : null;
-}
-// Traduce la fecha de vencimiento a un estado humano (vigente / por vencer / vencida).
-function estadoMembresia(venc: string | null) {
-  if (!venc) return { emoji: "⚠️", txt: "sin fecha de vencimiento registrada" };
-  const d = new Date(String(venc) + "T00:00:00Z");
-  if (isNaN(d.getTime())) return { emoji: "⚠️", txt: `vencimiento no reconocido (${venc})` };
-  const hoy = new Date();
-  const hoyUTC = Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate());
-  const dias = Math.round((d.getTime() - hoyUTC) / 86400000);
-  if (dias < 0) return { emoji: "🔴", txt: `VENCIDA hace ${-dias} día(s) — venció el ${venc}` };
-  if (dias <= 30) return { emoji: "🟡", txt: `vigente pero vence pronto: en ${dias} día(s) (el ${venc})` };
-  return { emoji: "🟢", txt: `vigente hasta el ${venc}` };
 }
 // Ficha MÍNIMA (candado): solo estado de membresía + tipo. Sin nombre, No. de
 // socio, DPI ni copropietario — nada que identifique a la persona o a terceros.

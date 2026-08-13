@@ -21,8 +21,9 @@ function extraer(nombre){
   return src.slice(i,k+1);
 }
 
-const FN=['repartoRoundRobin','aplicarReparto','ordenarMiDia','cuerpoCita','citadosDeHoy','montoMembresia','registrarEnganche','normalizaMotivoBaja'];
-const sandbox={console};
+const FN=['repartoRoundRobin','aplicarReparto','ordenarMiDia','cuerpoCita','citadosDeHoy','montoMembresia','registrarEnganche','normalizaMotivoBaja',
+  'fechaGT','isoLocal','hoyStr','vencimientoContrato','membresiaVencidaGT'];
+const sandbox={console,TZ_GT:'America/Guatemala'};
 vm.createContext(sandbox);
 for(const f of FN) vm.runInContext(extraer(f),sandbox);
 
@@ -145,5 +146,41 @@ console.log('\n(e) normalizaMotivoBaja');
   ok(sandbox.normalizaMotivoBaja('  se mudó ')==='se mudó', 'recorta espacios');
 }
 
-console.log(fail?`\n❌ QA marco FALLÓ (${fail})`:'\n✅ QA marco OK — reparto, mi día, recepción, contrato y baja');
+// ── (f) El día se mide en GUATEMALA (UTC-6), no en UTC ──
+// Cada caso REPRODUCE el defecto viejo (new Date().toISOString()): a las 8 de la
+// noche el CRM ya creía que era mañana → Recepción vaciaba "Citados hoy" justo a la
+// hora de las presentaciones y el contrato salía impreso con fecha de mañana.
+console.log('\n(f) fechaGT + hoyStr + vencimientoContrato (reloj de Guatemala)');
+{
+  const RealDate=Date;
+  const congelar=iso=>{ sandbox.Date=class extends RealDate{
+    constructor(...a){ a.length?super(...a):super(iso); }
+    static now(){ return new RealDate(iso).getTime(); }
+  }; };
+  const soltar=()=>{ sandbox.Date=RealDate; };
+
+  congelar('2026-08-12T02:00:00Z');           // = 11-ago 20:00 en Guatemala
+  ok(sandbox.fechaGT()==='2026-08-11', 'a las 20:00 del 11-ago en Guatemala TODAVÍA es 11-ago (fue '+sandbox.fechaGT()+')');
+  ok(sandbox.hoyStr()==='2026-08-11', 'hoyStr() usa el día de Guatemala, no el de UTC (fue '+sandbox.hoyStr()+')');
+  const citados=[{id:1,presenta_en:'2026-08-11T19:00:00'},{id:2,presenta_en:'2026-08-12T19:00:00'}];
+  const hoyRec=sandbox.citadosDeHoy(citados,sandbox.hoyStr()).map(l=>l.id);
+  ok(hoyRec.join(',')==='1', 'Recepción a las 8 pm sigue mostrando al citado de HOY, no al de mañana (fue '+hoyRec.join(',')+')');
+  ok(sandbox.membresiaVencidaGT('2026-08-11')===false, 'membresía que vence HOY: vigente a las 8 pm');
+  ok(sandbox.membresiaVencidaGT('2026-08-12')===false, 'membresía que vence MAÑANA: vigente');
+  ok(sandbox.membresiaVencidaGT('2026-08-10')===true, 'membresía que venció ayer: sí está vencida');
+  ok(sandbox.membresiaVencidaGT(null)===false && sandbox.membresiaVencidaGT('x')===false, 'sin fecha o dato sucio → no se le niega el beneficio al socio');
+
+  congelar('2026-08-12T06:00:00Z');           // medianoche exacta en Guatemala
+  ok(sandbox.hoyStr()==='2026-08-12', 'a la medianoche de Guatemala sí cambia el día');
+  congelar('2026-08-12T05:59:00Z');           // un minuto antes
+  ok(sandbox.hoyStr()==='2026-08-11', 'un minuto antes de la medianoche todavía es ayer');
+  soltar();
+
+  ok(sandbox.vencimientoContrato('2026-08-11',4)==='2030-08-11', 'contrato de 4 años firmado el 11-ago vence el 11-ago de 2030');
+  ok(sandbox.vencimientoContrato('2026-08-11','')==='2030-08-11', 'sin años → 4 por defecto');
+  ok(sandbox.vencimientoContrato('2026-12-31',1)==='2027-12-31', 'cruza el fin de año sin correrse');
+  ok(sandbox.isoLocal(new Date(2026,7,11))==='2026-08-11', 'isoLocal no pasa por UTC');
+}
+
+console.log(fail?`\n❌ QA marco FALLÓ (${fail})`:'\n✅ QA marco OK — reparto, mi día, recepción, contrato, baja y fechas de Guatemala');
 process.exit(fail?1:0);
