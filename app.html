@@ -12,8 +12,10 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=League+Gothic&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- CDN con SRI obligatorio: si el archivo servido cambia UN byte, el navegador lo BLOQUEA.
+     Sin integrity, cualquier cambio en el CDN corre con la sesión de Supabase del socio. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" integrity="sha512-CQBWl4fJHWbryGE+Pc7UAxWMUMNMWzWxF4SQo9CgkJIN1kx6djDQZjh3Y8SZ1d+6I+1zze6Z7kHXO7q3UyZAWw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
   :root{--kux:#1b365d;--kux-d:#0f2438;--kux-l:#e9eef5;--lima:#8dc63f;--lima-d:#6f9e12;
     --rojo:#e5484d;--amar:#f2a900;--verde:#22a06b;--gris:#6b7688;--tinta:#0f2438;--rojo-t:#b0121c;--gold-t:#7e5c06;--papel:#f4f6f8;--linea:#e6ebef;}
