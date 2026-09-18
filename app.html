@@ -359,13 +359,14 @@
   .est:active{transform:scale(.96)}
   /* bloque 2: resultado de la llamada — botones grandes, pensados para el pulgar */
   .resrow{display:flex;gap:7px;flex-wrap:wrap}
-  .res{flex:1 1 0;min-width:96px;min-height:44px;border:1px solid var(--linea);background:#fafbfc;border-radius:11px;padding:9px 10px;font-size:13.5px;font-weight:700;color:var(--tinta);cursor:pointer;font-family:inherit}
+  .res{flex:1 1 0;min-width:0;min-height:44px;border:1px solid var(--linea);background:#fafbfc;border-radius:11px;padding:9px 6px;font-size:13.5px;line-height:1.2;overflow-wrap:anywhere;font-weight:700;color:var(--tinta);cursor:pointer;font-family:inherit}
   .res.on{background:var(--kux);border-color:var(--kux);color:#fff}
   .res.ok{border-color:var(--lima-d);color:var(--lima-d)}
   .res.no{border-color:#b3261e;color:#b3261e}
   .res:disabled{opacity:.5;cursor:wait}
   .res:active{transform:scale(.97)}
   .res:focus-visible{outline:3px solid rgba(27,54,93,.35);outline-offset:2px}
+  @media (max-width:380px){.res{font-size:12.5px;padding:8px 4px}}
   /* En el CRM ".estados" lleva margin-left:auto; dentro del embudo NO */
   #embudo .estados{margin-left:0;gap:6px}
   /* ".sub" del embudo (contenedor de campos) va SCOPEADO para no chocar con .panel .sub del CRM */
