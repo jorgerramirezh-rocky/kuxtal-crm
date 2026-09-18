@@ -361,7 +361,8 @@
   .resrow{display:flex;gap:7px;flex-wrap:wrap}
   .res{flex:1 1 0;min-width:0;min-height:44px;border:1px solid var(--linea);background:#fafbfc;border-radius:11px;padding:9px 6px;font-size:13.5px;line-height:1.2;overflow-wrap:anywhere;font-weight:700;color:var(--tinta);cursor:pointer;font-family:inherit}
   .res.on{background:var(--kux);border-color:var(--kux);color:#fff}
-  .res.ok{border-color:var(--lima-d);color:var(--lima-d)}
+  .res.ok{border-color:#4b6b0b;color:#4b6b0b}
+  .res.conf{background:#b3261e;border-color:#b3261e;color:#fff}
   .res.no{border-color:#b3261e;color:#b3261e}
   .res:disabled{opacity:.5;cursor:wait}
   .res:active{transform:scale(.97)}
@@ -579,7 +580,7 @@
 <!-- F4: Expediente de la reserva (fólder del viaje) — traído del embudo -->
 <div id="expOv" role="dialog" aria-modal="true" aria-label="Expediente de la reserva"><div class="expcard" id="expCard"></div></div>
 
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <!-- MODAL editar socio -->
 <div id="modal" class="modal" style="display:none">
@@ -2707,7 +2708,7 @@ async function cargarMiDia(){
     $('funCont').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar tu día</b><p>Puede ser la conexión. <b onclick="funIrTab('midia')" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;
     return;
   }
-  leads=ordenarMiDia(rows||[],hoyStr());
+  leads=ordenarMiDia(rows||[],hoyStr()); RECIEN.clear(); BORRADOR={}; CONFIRMA={};
   renderWork();
 }
 // (M1b) Orden del día: recontactos VENCIDOS primero (más viejo arriba), después los
@@ -2724,6 +2725,7 @@ function ordenarMiDia(arr,hoy){
 }
 // Bloque 2: las pestañas de Mi día, por resultado de la llamada.
 function pasa(l){
+  if(RECIEN.has(l.id)) return true; // lo recién anotado se queda a la vista (p. ej. para citarlo) hasta cambiar de pestaña
   if(sub==='pend') return l.estado==='nuevo'||l.estado==='no_contesta';
   if(sub==='hoy') return l.estado==='recontactar' && !!l.recontacto_en && partesGT(l.recontacto_en).d<=hoyStr();
   if(sub==='prog') return l.estado==='recontactar' && !!l.recontacto_en && partesGT(l.recontacto_en).d>hoyStr();
@@ -2734,7 +2736,7 @@ function pasa(l){
 function subbar(){
   const cnt=f=>{const p=sub;sub=f;const n=leads.filter(pasa).length;sub=p;return n;};
   return `<div class="subtabs">
-    ${[['pend','Por llamar'],['hoy','Volver a llamar hoy'],['prog','Reprogramados'],['cont','Contestaron'],['asi','Citados']].map(([k,t])=>`<button class="st ${sub===k?'on':''}" onclick="sub='${k}';renderWork()">${t} (${cnt(k)})</button>`).join('')}
+    ${[['pend','Por llamar'],['hoy','Volver a llamar hoy'],['prog','Reprogramados'],['cont','Contestaron'],['asi','Citados']].map(([k,t])=>`<button class="st ${sub===k?'on':''}" onclick="sub='${k}';RECIEN.clear();renderWork()">${t} (${cnt(k)})</button>`).join('')}
   </div>`;
 }
 function renderWork(){
@@ -2743,16 +2745,29 @@ function renderWork(){
     : `<div class="vacio"><b>Nada por acá</b><p>${sub==='pend'?'Terminaste tus pendientes. ¡Bien!':'Sin registros en esta vista.'}</p></div>`);
 }
 // Qué panel tiene abierto cada tarjeta ('contesto' | 'reprog') y lo que ya marcó de socio.
-let ABIERTO={}, SOCIO={}, ENVIANDO=new Set(), TOPE_INTENTOS=3;
+let ABIERTO={}, SOCIO={}, ENVIANDO=new Set(), TOPE_INTENTOS=3, RECIEN=new Set(), BORRADOR={}, CONFIRMA={};
+// Lo que el telemarketer ya escribió en fecha/hora/restaurante sobrevive a cada repintado.
+function borrador(id,k,v){ (BORRADOR[id]=BORRADOR[id]||{})[k]=v; }
+function valB(id,k,def){ const b=BORRADOR[id]; return (b&&b[k]!==undefined)?b[k]:def; }
 function abrirPanel(id,k){ ABIERTO[id]=ABIERTO[id]===k?null:k; renderWork(); }
 function marcarSocio(id,v){ SOCIO[id]=v; renderWork(); }
-function btnRes(id,k,t,clase,extra){ const on=ABIERTO[id]===k; return `<button class="res ${clase||''} ${on?'on':''}" ${ENVIANDO.has(id)?'disabled':''} ${extra||''} onclick="${k==='no_contesta'?`anotar(${id},'no_contesta')`:`abrirPanel(${id},'${k}')`}">${t}</button>`; }
+function btnRes(id,k,t,clase,extra){
+  const on=ABIERTO[id]===k, conf=(k==='no_contesta'&&CONFIRMA[id]&&Date.now()-CONFIRMA[id]<5000);
+  return `<button class="res ${clase||''} ${on?'on':''} ${conf?'conf':''}" aria-pressed="${on?'true':'false'}" ${ENVIANDO.has(id)?'disabled':''} ${extra||''} onclick="${k==='no_contesta'?`noContesto(${id})`:`abrirPanel(${id},'${k}')`}">${conf?'¿Seguro? Tocá otra vez':t}</button>`;
+}
+// «No contestó» manda el prospecto a un compañero y no se deshace: pide un segundo toque (5 s).
+function noContesto(id){
+  if(CONFIRMA[id]&&Date.now()-CONFIRMA[id]<5000){ delete CONFIRMA[id]; anotar(id,'no_contesta'); return; }
+  CONFIRMA[id]=Date.now(); renderWork();
+  setTimeout(()=>{ if(CONFIRMA[id]&&Date.now()-CONFIRMA[id]>=5000){ delete CONFIRMA[id]; renderWork(); } },5100);
+}
 function funCardHTML(l){
   const e=estDe(l.estado);
   const rec=partesGT(l.recontacto_en), pres=partesGT(l.presenta_en);
   const tel=telDig(l.telefono);
   const call=tel.length>=8?`<a class="ic wa" href="${waHref(l.telefono)}" target="_blank" rel="noopener" aria-label="WhatsApp" onclick="ev(${l.id},'contacto','WhatsApp')">${WA}</a><a class="ic tel" href="${telHref(l.telefono)}" aria-label="Llamar" onclick="ev(${l.id},'contacto','Llamada')">${TEL}</a>`:'';
-  const rest=RESTAS.map(r=>`<option value="${r.id}" ${l.restaurante_id==r.id?'selected':''}>${esc(r.nombre)}</option>`).join('');
+  const rsel=valB(l.id,'rst',l.restaurante_id);
+  const rest=RESTAS.map(r=>`<option value="${r.id}" ${rsel==r.id?'selected':''}>${esc(r.nombre)}</option>`).join('');
   const vencida=l.estado==='recontactar'&&rec.d&&rec.d<=hoyStr();
   const socio=(SOCIO[l.id]!==undefined)?SOCIO[l.id]:l.es_socio;
   const intentos=Number(l.intentos)||0;
@@ -2776,19 +2791,19 @@ function funCardHTML(l){
     </div>
     <div class="sub ${panel==='contesto'?'show':''}">
       <div class="fld" style="flex:1 1 100%"><label>¿Ya es socio de Kuxtal?</label>
-        <div class="resrow"><button class="res ${socio===true?'on':''}" onclick="marcarSocio(${l.id},true)">Sí, es socio</button><button class="res ${socio===false?'on':''}" onclick="marcarSocio(${l.id},false)">No es socio</button></div></div>
+        <div class="resrow"><button class="res ${socio===true?'on':''}" aria-pressed="${socio===true}" onclick="marcarSocio(${l.id},true)">Sí, es socio</button><button class="res ${socio===false?'on':''}" aria-pressed="${socio===false}" onclick="marcarSocio(${l.id},false)">No es socio</button></div></div>
       <div class="fld" style="flex:1 1 100%"><label>¿Le interesa?</label>
         <div class="resrow"><button class="res ok" ${dis} onclick="anotar(${l.id},'interesado')">Interesado</button><button class="res no" ${dis} onclick="anotar(${l.id},'no_interesado')">No interesado</button></div></div>
     </div>
     <div class="sub ${panel==='reprog'?'show':''}">
-      <div class="fld"><label>Volver a llamar — día</label><input type="date" id="rcd${l.id}" min="${hoyStr()}" value="${rec.d}"></div>
-      <div class="fld"><label>Hora</label><input type="time" id="rch${l.id}" value="${rec.h}"></div>
-      <button class="btn" style="margin:0;flex:1 1 100%" ${dis} onclick="anotar(${l.id},'reprogramar')">Guardar: vuelve a mí a esa hora</button>
+      <div class="fld"><label>Volver a llamar — día</label><input type="date" id="rcd${l.id}" min="${hoyStr()}" value="${esc(valB(l.id,'rcd',rec.d))}" onchange="borrador(${l.id},'rcd',this.value)"></div>
+      <div class="fld"><label>Hora</label><input type="time" id="rch${l.id}" value="${esc(valB(l.id,'rch',rec.h))}" onchange="borrador(${l.id},'rch',this.value)"></div>
+      <button class="btn" style="margin:0;flex:1 1 100%" ${dis} onclick="anotar(${l.id},'reprogramar')">Guardar y volver a llamar</button>
     </div>
     <div class="sub ${verCita?'show':''}">
-      <div class="fld"><label>Restaurante</label><select id="rst${l.id}"><option value="">Elegir…</option>${rest}</select></div>
-      <div class="fld"><label>Día</label><input type="date" id="prd${l.id}" min="${hoyStr()}" value="${pres.d}"></div>
-      <div class="fld"><label>Hora</label><input type="time" id="prh${l.id}" value="${pres.h}"></div>
+      <div class="fld"><label>Restaurante</label><select id="rst${l.id}" onchange="borrador(${l.id},'rst',this.value)"><option value="">Elegir…</option>${rest}</select></div>
+      <div class="fld"><label>Día</label><input type="date" id="prd${l.id}" min="${hoyStr()}" value="${esc(valB(l.id,'prd',pres.d))}" onchange="borrador(${l.id},'prd',this.value)"></div>
+      <div class="fld"><label>Hora</label><input type="time" id="prh${l.id}" value="${esc(valB(l.id,'prh',pres.h))}" onchange="borrador(${l.id},'prh',this.value)"></div>
       <button class="btn" style="margin:0;flex:1 1 100%;background:var(--lima-d)" ${dis} onclick="anotar(${l.id},'citar')"><svg class="svic" aria-hidden="true"><use href="#ic-bell"/></svg> ${l.estado==='asistira'?'Cambiar la cita':'Citar a presentación'}</button>
     </div>
     <div class="note"><textarea aria-label="Nota de la llamada" placeholder="Nota de la llamada (queda en la bitácora)…" onchange="anotarNota(${l.id},this.value)">${esc(l.comentario||'')}</textarea></div>
@@ -2856,7 +2871,7 @@ async function anotar(id,res){
   ENVIANDO.delete(id);
   if(!r.ok){ renderWork(); toast(r.msg); return; }
   const d=r.data||{};
-  ABIERTO[id]=null; delete SOCIO[id];
+  ABIERTO[id]=null; delete SOCIO[id]; delete BORRADOR[id]; RECIEN.add(id);
   if(d.estado==='no_contactable'){ leads=leads.filter(x=>x.id!==id); toast('Quedó como no contactable ('+d.intentos+' intentos)'); }
   else if(d.sigue_conmigo===false){ leads=leads.filter(x=>x.id!==id); toast('No contestó: pasa a un compañero (intento '+d.intentos+' de '+TOPE_INTENTOS+')'); }
   else{
@@ -2865,7 +2880,7 @@ async function anotar(id,res){
     if(res==='reprogramar') l.recontacto_en=pr.params.p_cuando;
     if(res==='citar'){ l.restaurante_id=pr.params.p_restaurante; l.presenta_en=pr.params.p_cuando; }
     if(res==='interesado'||res==='no_interesado'||res==='citar') l.recontacto_en=null;
-    toast({interesado:'Anotado: interesado',no_interesado:'Anotado: no interesado',reprogramar:'Listo: te vuelve a vos a esa hora',citar:'Citado a presentación',no_contesta:'Anotado: no contestó'}[res]||'Anotado');
+    toast({interesado:'Anotado: interesado. Ya podés citarlo aquí abajo',no_interesado:'Anotado: no interesado',reprogramar:'Listo: te vuelve a vos a esa hora',citar:'Citado a presentación',no_contesta:'Anotado: no contestó'}[res]||'Anotado');
   }
   renderWork();
 }
