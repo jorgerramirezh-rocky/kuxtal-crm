@@ -235,16 +235,23 @@ comment on function public.funnel_tmk_resultado(bigint, text, boolean, timestamp
 
 -- ── 6b. la bitácora de resultados no se falsea ───────────────────────────
 -- A quién le toca un «no contestó» sale de funnel_eventos: esos tipos los escriben SOLO
--- las funciones (security definer). Desde la pantalla quedan los de siempre (contacto, etc.).
+-- las funciones (security definer). Desde la pantalla quedan los de siempre (contacto,
+-- recepción, enganche…) y el «asignado» del reparto, que solo hace gerencia. Todo evento
+-- de la pantalla va firmado con el correo de la cuenta y sobre un prospecto que esa cuenta ve.
 drop policy if exists fev_ins on public.funnel_eventos;
 create policy fev_ins on public.funnel_eventos for insert to authenticated with check (
   public.funnel_es_staff()
-  and tipo not in ('no_contesta','interesado','no_interesado','reprogramar','citar','nota','asignado')
-  -- el telemarketer solo anota sobre SUS prospectos (y con su propio correo como actor)
-  and (not public.funnel_es_tmk() or (
-        prospecto_id in (select l.id from public.funnel_tmk_mi_lista() l)
-        and actor is not distinct from (auth.jwt()->>'email')))
+  and prospecto_id is not null
+  and actor = (auth.jwt()->>'email')
+  and (lower(btrim(tipo)) not in ('no_contesta','interesado','no_interesado','reprogramar','citar','nota','asignado')
+       or (tipo = 'asignado' and public.funnel_es_gerente()))
+  and case when public.funnel_es_tmk()
+        then prospecto_id in (select l.id from public.funnel_tmk_mi_lista() l)
+        else exists (select 1 from public.funnel_prospectos p where p.id = prospecto_id)
+      end
 );
+-- TRUNCATE salta RLS y triggers: nadie de la pantalla lo necesita en estas tablas.
+revoke truncate on public.funnel_eventos, public.funnel_prospectos, public.funnel_parametros from anon, authenticated;
 
 -- ── 7. reparto parejo, pero al azar ────────────────────────────────────────
 create or replace function public.funnel_repartir(p_base bigint) returns integer

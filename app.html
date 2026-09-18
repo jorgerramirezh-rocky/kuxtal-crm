@@ -2997,7 +2997,9 @@ async function aplicarReparto(plan,apiFn,actor){
       filas.forEach(p=>evs.push({prospecto_id:p.id,tipo:'asignado',actor:actor||'crm',payload:{agente_id:Number(aid)}}));
     }
   }catch(e){ err=e; } // (revisión adversaria) si un PATCH intermedio falla, los ya asignados NO se quedan sin bitácora
-  if(evs.length){ try{ await apiFn("funnel_eventos",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(evs)}); }catch(e){/* el reparto ya quedó; el evento es bitácora */} }
+  // El reparto ya quedó; la bitácora se intenta y, si falla, SE AVISA (antes se callaba).
+  if(evs.length){ let bitOk=false; try{ const rb=await apiFn("funnel_eventos",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(evs)}); bitOk=!!(rb&&rb.ok); }catch(e){}
+    if(!bitOk&&typeof toast==='function') toast('Repartido, pero no se pudo anotar en la bitácora'); }
   if(err) throw err;
   return n;
 }
