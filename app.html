@@ -596,9 +596,18 @@
 const SB_URL="https://tevzfdiumfekvapamovw.supabase.co";
 const SB_PUB="sb_publishable_MMVJjzrA1rHdnMWxl0zeMA_DTDTTGTJ";
 const LS="kux_sesion";
-let SES=null, USER="equipo", ROLE="invitado", gente=[], OFERTAS=[], LEADS=null, cargandoLeads=false, FUNNEL=null, cargandoFunnel=false, BI={}, tab="tablero", vf=90, dirF="todos", dirTipo="", dirCloser="", verLim=60, editId=null, cardCtx={sid:null,target:'tarjetaBody'}, charts={};
+let SES=null, USER="equipo", UID=null, ROLE="invitado", gente=[], OFERTAS=[], LEADS=null, cargandoLeads=false, FUNNEL=null, cargandoFunnel=false, BI={}, tab="tablero", vf=90, dirF="todos", dirTipo="", dirCloser="", verLim=60, editId=null, cardCtx={sid:null,target:'tarjetaBody'}, charts={};
 const EDITORES=['admin','gerente_general','gerente_ventas'];
 const puedeEditar=()=>EDITORES.includes(ROLE);
+// Bloque 1: editar SOCIOS lo decide la matriz de la pestaña Roles (la misma que aplica la base).
+let MIS_PERMISOS={};
+const puedeEditarSocios=()=>!!MIS_PERMISOS.editar_socios;
+async function cargarMisPermisos(){
+  if(ROLE==='cliente'){ MIS_PERMISOS={}; return; }
+  try{ const rows=await sbGet('funnel_permisos','select=permiso,permitido&rol_clave=eq.'+encodeURIComponent(ROLE));
+    MIS_PERMISOS=Object.fromEntries((rows||[]).map(r=>[r.permiso,!!r.permitido])); }
+  catch(e){ MIS_PERMISOS={}; toast('No pude leer tus permisos: por ahora no vas a ver el botón Editar.'); }
+}
 const HOY=new Date(); HOY.setHours(0,0,0,0);
 
 const $=id=>document.getElementById(id);
@@ -695,10 +704,12 @@ async function traerSocios(reintento){
   return g;
 }
 async function patchSocio(id,body,reintento){
-  const r=await fetch(SB_URL+"/rest/v1/socios?id=eq."+id,{method:"PATCH",
-    headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(body)});
+  const r=await fetch(SB_URL+"/rest/v1/socios?id=eq."+id+"&select=id",{method:"PATCH",
+    headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify(body)});
   if(r.status===401){ if(!reintento && await refrescar()) return patchSocio(id,body,true); throw 0; }
   if(!r.ok) throw 0;
+  // La base filtra en silencio lo que tu rol no puede editar (200 con 0 filas): eso NO es «guardado».
+  const filas=await r.json().catch(()=>[]); if(!Array.isArray(filas)||!filas.length) throw 0;
 }
 
 async function traerOfertas(){
@@ -989,7 +1000,7 @@ let ALERTAS=null, cargandoCal=false, caF='';
 let ROLDATA=null, cargandoRoles=false;
 const esAdmin=()=>ROLE==='admin';
 const TIPO_LBL={dpi_duplicado:'DPI duplicado',dpi_invalido:'DPI inválido',telefono_invalido:'Teléfono inválido',vencimiento_vacio:'Sin vencimiento',no_socio_duplicado:'No. socio duplicado',no_socio_invalido:'No. socio inválido'};
-const PERM_LBL={ver_socios:'Ver socios',editar_socios:'Editar socios',cerrar_contrato:'Cerrar contrato',ver_comisiones:'Ver comisiones',gestionar_comisiones:'Gestionar comisiones',gestionar_roles:'Gestionar roles',ver_reportes:'Ver reportes'};
+const PERM_LBL={ver_socios:'Ver socios',editar_socios:'Editar socios',cerrar_contrato:'Cerrar contrato',ver_comisiones:'Ver comisiones',gestionar_comisiones:'Gestionar comisiones',gestionar_roles:'Gestionar roles',ver_reportes:'Ver reportes',crear_socios:'Crear socios',borrar_socios:'Borrar socios'};
 const SEV_LBL={alta:'Prioridad alta',media:'Prioridad media',baja:'Prioridad baja'};
 const tipoTxt=t=>TIPO_LBL[t]||t;
 const noAdminHTML=()=>`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-lock"/></svg></span><b>Sección solo para administración</b><p>Esta consola es exclusiva del rol Admin.</p></div>`;
@@ -1061,17 +1072,31 @@ function marcarRevisada(btn){
 async function cargarRoles(){
   cargandoRoles=true; $('lista').innerHTML='<div class="vacio"><span class="spin"></span> Cargando roles…</div>';
   try{
-    const [roles,permisos,agentes]=await Promise.all([
+    const [roles,permisos,agentes,descalces]=await Promise.all([
       sbGet('funnel_roles','select=*&order=nivel.desc'),
       sbGet('funnel_permisos','select=*'),
-      sbGet('funnel_agentes','select=*&order=nombre.asc')
+      sbGet('funnel_agentes','select=*&order=nombre.asc'),
+      rpcDescalces()
     ]);
-    ROLDATA={roles,permisos,agentes}; cargandoRoles=false; if(tab==='roles')render();
+    ROLDATA={roles,permisos,agentes,descalces}; cargandoRoles=false; if(tab==='roles')render();
   }catch(e){ cargandoRoles=false; if(tab==='roles')$('lista').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar los roles</b><p><b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`; }
+}
+// Bloque 1: lo que no calza entre cuentas y equipo se AVISA (no se corrige solo). null = no se pudo medir.
+async function rpcDescalces(){
+  try{ const r=await api("rpc/funnel_descalces",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+    if(!r.ok) return null; return await r.json(); }catch(e){ return null; }
+}
+function descalcesHTML(d){
+  if(d===null) return `<div class="cap" style="margin:0 0 12px;color:#b3261e">No pude revisar si el equipo calza con las cuentas de acceso. <b onclick="cargarRoles()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</div>`;
+  if(!d.length) return '';
+  const filas=d.map(x=>`<tr><td>${esc(x.problema)}</td><td>${esc(x.nombre||'—')}</td><td>${esc(x.rol_agente?rolNombre(x.rol_agente):'—')}</td><td>${esc(x.rol_cuenta?rolNombre(x.rol_cuenta):'—')}</td></tr>`).join('');
+  return `<div class="adminhead"><h3><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg> Avisos del equipo (${d.length})</h3></div>
+    <div class="tblwrap"><table class="dtbl"><thead><tr><th>Qué pasa</th><th>Persona</th><th>Rol en el equipo</th><th>Rol de su cuenta</th></tr></thead><tbody>${filas}</tbody></table></div>
+    <div class="cap" style="margin:8px 0 14px">Una persona del equipo sin cuenta no ve sus prospectos. Nada de esto se corrige solo: lo arregla una persona.</div>`;
 }
 const rolNombre=clave=>{const r=ROLDATA.roles.find(x=>x.clave===clave);return r?r.nombre:(clave||'—');};
 function rolesPanel(){
-  const {roles,permisos,agentes}=ROLDATA;
+  const {roles,permisos,agentes,descalces}=ROLDATA;
   // A · Tabla de roles + jerarquía
   const filasRol=roles.map(r=>`<tr>
     <td><b>${esc(r.nombre)}</b><div class="cla">${esc(r.clave)}</div></td>
@@ -1098,13 +1123,13 @@ function rolesPanel(){
   }).join('');
   const matriz=`<div class="adminhead"><h3><svg class="svic" aria-hidden="true"><use href="#ic-lock"/></svg> Matriz de permisos</h3></div>
     <div class="tblwrap"><table class="dtbl mtx"><thead><tr><th class="roln">Rol</th>${cabecera}</tr></thead><tbody>${filasMtx}</tbody></table></div>
-    <div class="cap" style="margin-top:8px">Tocá una celda para alternar: <b style="color:#1a8a54"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> permitido</b> · <b style="color:#b3261e"><svg class="svic" aria-hidden="true"><use href="#ic-x"/></svg> denegado</b> · <b>– sin definir</b>. La escritura la protege la base (solo admin).</div>`;
+    <div class="cap" style="margin-top:8px">Tocá una celda para alternar: <b style="color:#1a8a54"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> permitido</b> · <b style="color:#b3261e"><svg class="svic" aria-hidden="true"><use href="#ic-x"/></svg> denegado</b> · <b>– sin definir</b>. La base obedece esta matriz: lo que marcás acá es lo que cada rol puede hacer con los datos. Solo quien tiene «Gestionar roles» la cambia.</div>`;
   // C · Organigrama de personas — árbol visual editable (F5 Kaizen)
   const organi = agentes.length
     ? organigramaHTML(agentes)
     : `<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-sprout"/></svg></span><b>Organigrama listo para llenarse</b><p>Cuando agregues personas al equipo (pestaña Embudo ▸ Equipo), acá vas a ver el árbol de quién reporta a quién y vas a poder reorganizarlo.</p></div>`;
   const organiWrap=`<div class="adminhead"><h3><svg class="svic" aria-hidden="true"><use href="#ic-users"/></svg> Organigrama del equipo</h3></div>${organi}`;
-  return tablaRoles+matriz+organiWrap;
+  return descalcesHTML(descalces)+tablaRoles+matriz+organiWrap;
 }
 // ── F5 · Organigrama visual (árbol) ──
 // Nivel del rol de una persona (para ordenar la cima arriba); usa la tabla de roles.
@@ -1508,7 +1533,7 @@ function tarjeta(x,idx){
   const telInfo = x.tel?(ok?fmtTel(x.tel):`${esc(x.tel)} <span class="warn">revisar <svg class="svic" aria-hidden="true"><use href="#ic-phone"/></svg></span>`):`<span class="warn">sin teléfono</span>`;
   const wa = ok?`<a class="btn-c wa" target="_blank" rel="noopener" href="${waHref(x.tel)}?text=${encodeURIComponent(msgWA(x))}">WhatsApp</a>`:'';
   const tel = ok?`<a class="btn-c tel" href="${telHref(x.tel)}">Llamar</a>`:'';
-  const editar=puedeEditar()?`<button class="btn-c edit" onclick="abrirEdit(${x.id})"><svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Editar</button>`:'';
+  const editar=puedeEditarSocios()?`<button class="btn-c edit" onclick="abrirEdit(${x.id})"><svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Editar</button>`:'';
   const btns=['contactado','renovó','no responde','no renovó'].map(e=>`<button class="eb ${x.estado===e?'on':''}" onclick="marcar(${x.id},'${e}')">${e}</button>`).join('');
   return `<div class="card" ${d}><div class="top"><span class="dot ${s.c}"></span><div class="who"><div class="nombre" onclick="abrirFicha(${x.id})" style="cursor:pointer">${esc(x.n)}</div><div class="meta">${telInfo} <span class="chip ${chipTipo(x.tipo)}">${esc(x.tipo)}</span>${x.closer?' · '+esc(x.closer):''}${necesitaRevision(x)?' <span class="warn"><svg class="svic" aria-hidden="true"><use href="#ic-alert"/></svg> revisar</span>':''}</div></div><div class="der ${s.c}">${s.t}</div></div><div class="acciones">${wa}${tel}${editar}<div class="estados">${btns}</div></div></div>`;
 }
@@ -1605,7 +1630,7 @@ function render(){
 
 // ── Arranque ──
 // ── Ficha 360 + histórico (trazabilidad) ──
-function decodeUser(){ try{ const d=JSON.parse(atob(SES.access_token.split('.')[1])); USER=d.email||"equipo"; ROLE=(d.app_metadata&&d.app_metadata.role)||"invitado"; }catch(e){ USER="equipo"; ROLE="invitado"; }
+function decodeUser(){ try{ const d=JSON.parse(atob(SES.access_token.split('.')[1])); USER=d.email||"equipo"; UID=d.sub||null; ROLE=(d.app_metadata&&d.app_metadata.role)||"invitado"; }catch(e){ USER="equipo"; UID=null; ROLE="invitado"; }
   // F4: flags de rol del embudo (una sola fuente de verdad)
   esGerente=GERENTES.includes(ROLE); verTodo=esGerente||VENTAS.includes(ROLE); }
 const rolBonito=r=>({admin:'Admin general',gerente_general:'Gerente general',gerente_ventas:'Gerente de ventas',telemarketing:'Telemarketing',supervisor:'Supervisor',reservaciones:'Reservaciones'}[r]||'Invitado');
@@ -1630,7 +1655,7 @@ function abrirFicha(id){
   $('fichaBody').innerHTML=`
     <div class="fn">${esc(x.n)}</div>
     <div style="margin:5px 0 12px"><span class="chip ${chipTipo(x.tipo)}">${esc(x.tipo)}</span> <span class="der ${s.c}" style="font-size:12px">${s.t}</span>${necesitaRevision(x)?' <span class="warn"><svg class="svic" aria-hidden="true"><use href="#ic-alert"/></svg> revisar</span>':''} <span class="tt" style="color:var(--gris);font-size:11px">· Socio #${esc(x.no||'—')}</span></div>
-    <div class="acciones">${cont}<button class="btn-c" style="background:var(--amar)" onclick="cerrarFicha();abrirTarjeta(${x.id})"><svg class="svic" aria-hidden="true"><use href="#ic-ticket"/></svg> Beneficio</button>${puedeEditar()?`<button class="btn-c edit" onclick="cerrarFicha();abrirEdit(${x.id})"><svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Editar</button>`:''}</div>
+    <div class="acciones">${cont}<button class="btn-c" style="background:var(--amar)" onclick="cerrarFicha();abrirTarjeta(${x.id})"><svg class="svic" aria-hidden="true"><use href="#ic-ticket"/></svg> Beneficio</button>${puedeEditarSocios()?`<button class="btn-c edit" onclick="cerrarFicha();abrirEdit(${x.id})"><svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Editar</button>`:''}</div>
     <div class="fsec"><h4>Membresía</h4>
       <div class="frow"><span>Tipo</span><b>${esc(x.tipo)}</b></div>
       <div class="frow"><span>Ingreso</span><b>${x.ingreso?fechaTxt(x.ingreso):'—'}</b></div>
@@ -1909,7 +1934,7 @@ async function validarCodigo(codigo){
 async function arrancar(){
   $('gate').style.display='none'; $('app').style.display='none'; $('load').style.display='flex';
   try{
-    decodeUser();
+    decodeUser(); await cargarMisPermisos();
     gente=await traerSocios(); OFERTAS=await traerOfertas(); await probeOfertasExt(); calcularBI();
     // F2 Kaizen: prospectos al tablero — cargan en paralelo, nunca frenan el arranque
     if(ROLE!=='cliente'&&LEADS===null&&!cargandoLeads){ cargandoLeads=true;
@@ -2099,7 +2124,8 @@ async function funArrancar(){
     MEMBS=(await getJSON("funnel_membresias?select=*&activo=eq.true&order=orden.asc"))||[];
     PLANES=(await getJSON("funnel_planes_pago?select=*&activo=eq.true&order=orden.asc"))||[];
     if(verTodo) AGENTES=(await getJSON("funnel_agentes?select=*&order=nombre.asc"))||[];
-    const ag=await getJSON("funnel_agentes?select=id,nombre,rol,email&email=eq."+encodeURIComponent(USER.toLowerCase()));
+    // Bloque 1: la persona se ata a su CUENTA (user_id), no a su correo.
+    const ag=UID?await getJSON("funnel_agentes?select=id,nombre,rol,email&activo=eq.true&user_id=eq."+encodeURIComponent(UID)):null;
     miAgente=(ag&&ag[0])||null;
     $('funWho').textContent=USER+" · "+(esGerente?'Gerencia':(VENTAS.includes(ROLE)?'Ventas':(miAgente?'TMK':ROLE)));
     funTab = esGerente ? 'cargar' : (verTodo ? 'recepcion' : 'midia');
