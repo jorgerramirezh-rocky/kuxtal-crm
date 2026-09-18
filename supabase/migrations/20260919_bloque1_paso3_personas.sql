@@ -82,6 +82,7 @@ grant execute on function public.funnel_personas_listar() to authenticated, serv
 --   KXP02 la cuenta no tiene el rol que se dice · KXP03 el jefe no es un agente activo (o es ella misma)
 --   KXP04 la persona no existe · KXP05 hay más de un agente sin cuenta con su correo (no se adivina)
 --   KXP06 la cuenta está desactivada (no vuelve al reparto por un cambio de rol) · 55000 sobre uno mismo
+--   KXP07 alta de alguien que ya está en el equipo SIN cuenta pero con OTRO rol (no se duplica)
 -- p_cambiar_jefe: el jefe que llega (aunque sea null = «sin jefe») reemplaza al de antes.
 drop function if exists public.funnel_personas_registrar(uuid, uuid, text, text, text, bigint);
 create or replace function public.funnel_personas_registrar(
@@ -122,9 +123,13 @@ begin
      where user_id = p_persona and activo and rol is distinct from v_op;
     -- ALTA DE ALGUIEN QUE YA ESTABA EN EL EQUIPO (sin cuenta): se ADOPTA su agente, con sus
     -- prospectos y comisiones, en vez de crear otro. Si hay más de uno con su correo, no se adivina.
+    if p_accion = 'alta' and exists (select 1 from public.funnel_agentes a
+         where a.activo and a.user_id is null and lower(trim(a.email)) = lower(trim(v_correo)) and a.rol is distinct from v_op) then
+      raise exception 'ya está en el equipo con otro rol' using errcode = 'KXP07';
+    end if;
     if v_op is not null and not exists (select 1 from public.funnel_agentes where user_id = p_persona and activo) then
       select count(*), min(a.id) into v_huerfanos, v_huerfano from public.funnel_agentes a
-       where a.activo and a.user_id is null and lower(a.email) = lower(v_correo) and a.rol = v_op;
+       where a.activo and a.user_id is null and lower(trim(a.email)) = lower(trim(v_correo)) and a.rol = v_op;
       if v_huerfanos > 1 then
         raise exception 'hay % agentes sin cuenta con el correo %', v_huerfanos, v_correo using errcode = 'KXP05';
       end if;

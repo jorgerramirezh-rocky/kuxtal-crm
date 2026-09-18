@@ -25,7 +25,7 @@
 // `<CRM>/crear-clave.html#t=<token>`: la página pide TOCAR un botón antes de gastarlo (un
 // antivirus que abre enlaces no lo consume) y el token, detrás de `#`, no llega a ningún
 // servidor. El token viaja SOLO en la llamada a Resend, nunca en una respuesta. Si el correo
-// falla, se muestra UNA vez la clave temporal a quien administra y el mensaje lo dice.
+// falla, NO se muestra ninguna clave a nadie: el mensaje pide «Reenviar enlace». Sin correo configurado no hay alta.
 //
 // NADA FALLA EN SILENCIO: cada error contesta un código y un mensaje en humano que la
 // pantalla muestra tal cual; si algo quedó a medias, dice qué quedó hecho y qué no.
@@ -174,6 +174,7 @@ const FRENOS: Record<string, string> = {
   KXP03: 'Ese jefe no sirve: no es una persona activa del equipo, o es la misma persona.',
   KXP05: 'Hay más de una persona del equipo sin cuenta con ese correo: no adiviné cuál es. Revisalo en el organigrama.',
   KXP06: 'Esa persona está desactivada: primero se activa y después se le cambia el rol.',
+  KXP07: 'Esa persona ya está en el equipo con otro rol y sin cuenta. Revisalo en el organigrama antes de darle cuenta: no creé un duplicado.',
   KXP04: 'Esa persona no existe.',
   '55000': 'Desde el panel no se hace nada sobre tu propia cuenta.',
 }
@@ -333,13 +334,28 @@ export function crearAtender(cfg: Config): (peticion: Request) => Promise<Respon
       return { ok: true, rol }
     }
     const frenoDeLaBase = (codigo: string, siNo: string) => FRENOS[codigo] ?? siNo
+    /** Los agentes de MI equipo (yo + los que me reportan). null = no se pudo leer. */
+    let equipoCache: number[] | null | undefined
+    const miEquipo = async (): Promise<number[] | null> => {
+      if (equipoCache !== undefined) return equipoCache
+      const r = await rpc('funnel_ve_equipo', comoQuienLlama(token), {})
+      equipoCache = r.ok && Array.isArray(r.datos) ? (r.datos as unknown[]).map((x) => Number(x)) : null
+      return equipoCache
+    }
     /** Quien no es admin solo elige de jefe a alguien de SU equipo (si no, se colgaría gente ajena y vería sus prospectos). */
     const jefePermitido = async (jefe: number | null): Promise<Response | null> => {
       if (jefe === null || soyAdmin) return null
-      const r = await rpc('funnel_ve_equipo', comoQuienLlama(token), {})
-      if (!r.ok || !Array.isArray(r.datos)) return error(503, 'no_pude_leer', 'No pude revisar tu equipo. No hice nada.')
-      const ids = (r.datos as unknown[]).map((x) => Number(x))
+      const ids = await miEquipo()
+      if (ids === null) return error(503, 'no_pude_leer', 'No pude revisar tu equipo. No hice nada.')
       return ids.includes(jefe) ? null : error(403, 'jefe_ajeno', 'Solo podés elegir de jefe a alguien de tu equipo.')
+    }
+    /** Quien no es admin solo toca a gente de SU equipo (revisión adversaria ronda 2, S1). */
+    const personaDeMiEquipo = async (agenteId: number | null, nombre: string): Promise<Response | null> => {
+      if (soyAdmin) return null
+      const ids = await miEquipo()
+      if (ids === null) return error(503, 'no_pude_leer', 'No pude revisar tu equipo. No hice nada.')
+      return agenteId !== null && ids.includes(agenteId) ? null
+        : error(403, 'persona_ajena', `${nombre} no es de tu equipo: solo quien administra puede cambiarle algo.`)
     }
     /** ¿La base anotó el alta? (la bitácora lo dice aunque la persona no tenga agente, p. ej. hostess) */
     const altaAnotada = async (id: string): Promise<boolean | null> => {
@@ -351,10 +367,24 @@ export function crearAtender(cfg: Config): (peticion: Request) => Promise<Respon
     if (accion === 'alta') {
       const v = validarAlta(cuerpo)
       if (!v.ok) return error(400, 'datos_invalidos', v.mensaje)
+      // SIN CORREO NO HAY ALTA (ronda 2, S2): la única forma de entrar es el enlace a SU correo.
+      if (cfg.correo === undefined || cfg.correo === null || cfg.correo.llave === '') {
+        return error(503, 'sin_correo', 'La función no tiene correo de salida configurado: no puedo mandarle el enlace. No creé nada.')
+      }
       const permitido = await rolPermitido(v.rol)
       if (!permitido.ok) return permitido.resp
       const jefeMalo = await jefePermitido(v.jefe)
       if (jefeMalo !== null) return jefeMalo
+      if (!soyAdmin) {
+        // Si ya hay un agente sin cuenta con ese correo, el alta lo ADOPTA: tiene que ser de mi equipo.
+        const r = await pedir(`${base}/rest/v1/funnel_agentes?select=id,email&activo=eq.true&user_id=is.null`, { headers: comoQuienLlama(token) })
+        if (!r.ok || !Array.isArray(r.datos)) return error(503, 'no_pude_leer', 'No pude revisar el equipo. No creé nada.')
+        const ids = await miEquipo()
+        if (ids === null) return error(503, 'no_pude_leer', 'No pude revisar tu equipo. No creé nada.')
+        const ajeno = (r.datos as { id: number, email: string | null }[])
+          .some((a) => (a.email ?? '').trim().toLowerCase() === v.correo && !ids.includes(a.id))
+        if (ajeno) return error(403, 'persona_ajena', 'Esa persona ya está en otro equipo: solo quien administra puede darle cuenta.')
+      }
       const personas = await listar()
       if (personas === null) return error(503, 'no_pude_leer', 'No pude revisar si ese correo ya existe. No creé nada.')
       const repetida = personas.find((p) => (p.correo ?? '').toLowerCase() === v.correo)
@@ -415,9 +445,11 @@ export function crearAtender(cfg: Config): (peticion: Request) => Promise<Respon
           mensaje: `Listo: ${v.nombre} (${v.correo}) ya es ${permitido.rol.nombre}. Le mandé un correo con un enlace para crear su clave (vence en ${HORAS_DEL_ENLACE} horas).`,
         })
       }
+      // La clave temporal NO se muestra a nadie (ronda 2, S2): con la adopción abriría la cuenta de
+      // alguien que ya existía. La persona entra solo por el enlace a SU correo.
       return responder(200, {
-        ok: true, codigo: 'dada_de_alta', accion, user_id: nuevaId, correo_enviado: false, clave_temporal: clave,
-        mensaje: `${v.nombre} (${v.correo}) ya es ${permitido.rol.nombre}, pero NO pude mandarle el correo. Esta es su clave temporal y se muestra UNA sola vez: pasásela en persona o por teléfono.`,
+        ok: true, codigo: 'dada_de_alta', accion, user_id: nuevaId, correo_enviado: false,
+        mensaje: `${v.nombre} (${v.correo}) ya es ${permitido.rol.nombre}, pero NO pude mandarle el correo con su enlace. Tocá «Reenviar enlace» en un rato.`,
       })
     }
 
@@ -438,6 +470,8 @@ export function crearAtender(cfg: Config): (peticion: Request) => Promise<Respon
     if (!soyAdmin && (persona.nivel ?? 0) >= miNivel) {
       return error(403, 'nivel_alto', `${persona.nombre} es de tu nivel o más alto: solo quien administra puede cambiarle algo.`)
     }
+    const ajena = await personaDeMiEquipo(persona.agente_id, persona.nombre)
+    if (ajena !== null) return ajena
 
     // ── CAMBIAR EL ROL (y/o el jefe) ──────────────────────────────────────
     if (accion === 'cambiar_rol') {

@@ -17,6 +17,7 @@ const GERENTE = '00000000-0000-4000-8000-000000000004'
 const NUEVA = '00000000-0000-4000-8000-0000000000aa'
 const SINROL = '00000000-0000-4000-8000-0000000000bb'
 const BAJA = '00000000-0000-4000-8000-0000000000cc'
+const AJENA = '00000000-0000-4000-8000-0000000000dd'
 
 type Llamada = { url: string, metodo: string, headers: Record<string, string>, cuerpo: string }
 
@@ -38,6 +39,7 @@ function simulado(op: {
   listarTrasFalla?: 'en_equipo' | 'sin_equipo' | 'error'
   correoFalla?: boolean
   borrarFalla?: boolean
+  agenteSinCuentaAjeno?: boolean
 } = {}) {
   const llamadas: Llamada[] = []
   const tokens: Record<string, string> = { t_admin: ADMIN, t_super: SUPER, t_tmk: TMK }
@@ -52,6 +54,7 @@ function simulado(op: {
     { user_id: TMK, correo: 'tmk@kx.gt', nombre: 'Tele', rol: 'telemarketing', rol_nombre: 'Telemarketing', nivel: 50, activo: true, agente_id: 2, jefe_id: 1 },
     { user_id: GERENTE, correo: 'gerente@kx.gt', nombre: 'Gerente', rol: 'gerente_ventas', rol_nombre: 'Gerente de Ventas', nivel: 80, activo: false, agente_id: null, jefe_id: null },
     { user_id: SINROL, correo: 'sinrol@kx.gt', nombre: 'Sin rol', rol: null, rol_nombre: null, nivel: null, activo: true, agente_id: null, jefe_id: null },
+    { user_id: AJENA, correo: 'ajena@kx.gt', nombre: 'De otro equipo', rol: 'telemarketing', rol_nombre: 'Telemarketing', nivel: 50, activo: true, agente_id: 7, jefe_id: null },
     { user_id: BAJA, correo: 'baja@kx.gt', nombre: 'De baja', rol: 'telemarketing', rol_nombre: 'Telemarketing', nivel: 50, activo: false, agente_id: null, jefe_id: null },
   ]
   let fallóRegistrar = false
@@ -79,6 +82,7 @@ function simulado(op: {
       if (fallóRegistrar && op.listarTrasFalla === 'error') return json(500, { code: 'x' })
       return json(200, fallóRegistrar && op.listarTrasFalla === 'en_equipo' ? [{ id: 1 }] : [])
     }
+    if (ruta.startsWith('/rest/v1/funnel_agentes?')) return json(200, op.agenteSinCuentaAjeno ? [{ id: 9, email: ' Nueva@KX.gt ' }] : [])
     if (ruta === '/rest/v1/rpc/funnel_ve_equipo') return json(200, bearer === 't_super' ? [1, 2] : [])
     if (ruta.startsWith('/rest/v1/funnel_roles?')) {
       const clave = decodeURIComponent(ruta.split('clave=eq.')[1] ?? '')
@@ -159,11 +163,31 @@ Deno.test('alta con correo: cuenta con su rol, registro con la llave de servicio
   assert(!r.texto.includes(HASH)); assert(!r.texto.includes(SERV)); assert(!r.texto.includes(RESEND))
   assertEquals(r.r.headers.get('Cache-Control'), 'no-store'); assertEquals(r.r.headers.get('Access-Control-Allow-Origin'), APP)
 })
-Deno.test('alta cuando el correo no sale: muestra la clave temporal UNA vez y lo dice', async () => {
+Deno.test('alta cuando el correo no sale: NINGUNA clave para nadie, pide reenviar el enlace', async () => {
   const { cfg } = simulado({ correoFalla: true })
   const r = await pedir(cfg, 't_admin', ALTA)
-  assertEquals(r.estado, 200); assertEquals(r.d.correo_enviado, false); assertEquals(r.d.clave_temporal, 'Abcd-Efgh-2345')
-  assertMatch(r.d.mensaje, /NO pude mandarle el correo/)
+  assertEquals(r.estado, 200); assertEquals(r.d.correo_enviado, false); assertEquals(r.d.clave_temporal, undefined)
+  assert(!r.texto.includes('Abcd-Efgh-2345')); assertMatch(r.d.mensaje, /Reenviar enlace/)
+})
+Deno.test('sin correo configurado no hay alta (no se crea nada)', async () => {
+  const { cfg, llamadas } = simulado()
+  const r = await pedir({ ...cfg, correo: null }, 't_admin', ALTA)
+  assertEquals(r.estado, 503); assertEquals(r.d.codigo, 'sin_correo'); assertEquals(aAuth(llamadas).length, 0)
+})
+Deno.test('un supervisor no toca a alguien de OTRO equipo (aunque sea de menor nivel)', async () => {
+  const { cfg, llamadas } = simulado()
+  for (const cuerpo of [{ accion: 'cambiar_rol', user_id: AJENA, rol: 'vendedor', jefe_id: 1 }, { accion: 'desactivar', user_id: AJENA }, { accion: 'restablecer', user_id: AJENA }]) {
+    const r = await pedir(cfg, 't_super', cuerpo)
+    assertEquals(r.estado, 403); assertEquals(r.d.codigo, 'persona_ajena')
+  }
+  assertEquals(aAuth(llamadas).length, 0)
+  assertEquals((await pedir(cfg, 't_super', { accion: 'desactivar', user_id: TMK })).estado, 200)
+})
+Deno.test('un supervisor no se trae por alta a alguien de otro equipo que ya estaba sin cuenta', async () => {
+  const { cfg, llamadas } = simulado({ agenteSinCuentaAjeno: true })
+  const r = await pedir(cfg, 't_super', ALTA)
+  assertEquals(r.estado, 403); assertEquals(r.d.codigo, 'persona_ajena'); assertEquals(aAuth(llamadas).length, 0)
+  assertEquals((await pedir(cfg, 't_admin', ALTA)).estado, 200)
 })
 Deno.test('un supervisor no fabrica un gerente (rol de su nivel o más alto): 403 sin tocar Auth', async () => {
   const { cfg, llamadas } = simulado()
