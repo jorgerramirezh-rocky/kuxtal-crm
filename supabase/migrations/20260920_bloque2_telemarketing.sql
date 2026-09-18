@@ -120,11 +120,15 @@ declare
   v_max int; v_int int; v_nuevo bigint; v_ya bigint[]; v_estado text;
 begin
   select * into p from public.funnel_prospectos where id = p_id for update;
-  if not found then raise exception 'no existe el prospecto'; end if;
   -- Quién puede: el agente dueño; un supervisor sobre su equipo; o quien ve todo.
-  if not ((yo is not null and p.tmk_id = yo)
-          or public.funnel_ve_todo()
-          or (not public.funnel_es_tmk() and p.tmk_id in (select public.funnel_ve_equipo()))) then
+  -- coalesce(…, false): con tmk_id NULL la condición daba NULL y el IF no frenaba (revisión
+  -- adversaria, S1). Un prospecto sin dueño solo lo toca quien ve todo. Mismo mensaje exista o
+  -- no el prospecto: no se revela qué ids existen.
+  if not found or not coalesce(
+       (yo is not null and p.tmk_id is not null and p.tmk_id = yo)
+       or public.funnel_ve_todo()
+       or (p.tmk_id is not null and not public.funnel_es_tmk()
+           and p.tmk_id in (select public.funnel_ve_equipo())), false) then
     raise exception 'no autorizado';
   end if;
   if p.etapa <> 'telemarketing' then raise exception 'este prospecto ya no está en telemarketing'; end if;
@@ -139,7 +143,10 @@ begin
     v_estado := p_resultado; v_int := 0;
     update public.funnel_prospectos
        set estado = v_estado, es_socio = coalesce(p_es_socio, es_socio),
-           intentos_sin_respuesta = 0, recontacto_en = null, actualizado_en = now()
+           intentos_sin_respuesta = 0, recontacto_en = null,
+           presenta_en = case when v_estado = 'interesado' then presenta_en end,
+           restaurante_id = case when v_estado = 'interesado' then restaurante_id end,
+           actualizado_en = now()
      where id = p.id;
 
   elsif p_resultado = 'reprogramar' then
@@ -149,7 +156,7 @@ begin
     v_estado := 'recontactar'; v_int := 0;
     update public.funnel_prospectos
        set estado = v_estado, recontacto_en = p_cuando, es_socio = coalesce(p_es_socio, es_socio),
-           intentos_sin_respuesta = 0, actualizado_en = now()
+           intentos_sin_respuesta = 0, presenta_en = null, restaurante_id = null, actualizado_en = now()
      where id = p.id;
 
   elsif p_resultado = 'citar' then
@@ -158,7 +165,7 @@ begin
       raise exception 'elegí el restaurante';
     end if;
     if p_cuando is null then raise exception 'poné el día y la hora de la presentación'; end if;
-    if p_cuando < now() - interval '1 hour' then raise exception 'esa fecha y hora ya pasó'; end if;
+    if p_cuando < now() - interval '5 minutes' then raise exception 'esa fecha y hora ya pasó'; end if;
     if p_cuando > now() + interval '180 days' then raise exception 'la fecha queda muy lejos (máximo 6 meses)'; end if;
     v_estado := 'asistira'; v_int := 0;
     update public.funnel_prospectos
@@ -181,21 +188,22 @@ begin
         from public.funnel_eventos e
        where e.prospecto_id = p.id and e.tipo = 'no_contesta'
          and (e.payload->>'tmk_id') ~ '^[0-9]+$';
-      v_ya := v_ya || p.tmk_id;
+      if p.tmk_id is not null then v_ya := v_ya || p.tmk_id; end if;
+      -- Solo a quien tiene cuenta: un agente sin cuenta no puede abrir su lista y el lead se perdería.
       select a.id into v_nuevo from public.funnel_agentes a
-       where a.activo and a.rol = 'tmk' and a.id <> all(v_ya)
+       where a.activo and a.rol = 'tmk' and a.user_id is not null and a.id <> all(v_ya)
        order by random() limit 1;
       -- Si ya lo intentaron todos, a cualquiera que no sea el de ahora; si no hay otro, se queda.
       if v_nuevo is null then
         select a.id into v_nuevo from public.funnel_agentes a
-         where a.activo and a.rol = 'tmk' and a.id is distinct from p.tmk_id
+         where a.activo and a.rol = 'tmk' and a.user_id is not null and a.id is distinct from p.tmk_id
          order by random() limit 1;
       end if;
       v_nuevo := coalesce(v_nuevo, p.tmk_id);
     end if;
     update public.funnel_prospectos
        set estado = v_estado, intentos_sin_respuesta = v_int, tmk_id = v_nuevo,
-           recontacto_en = null, actualizado_en = now()
+           recontacto_en = null, presenta_en = null, restaurante_id = null, actualizado_en = now()
      where id = p.id;
 
   elsif p_resultado = 'nota' then
@@ -225,18 +233,31 @@ grant execute on function public.funnel_tmk_resultado(bigint, text, boolean, tim
 comment on function public.funnel_tmk_resultado(bigint, text, boolean, timestamptz, bigint, text) is
   'Bloque 2: resultado de la llamada (interesado, no_interesado, reprogramar, citar, no_contesta, nota) con las reglas de George.';
 
+-- ── 6b. la bitácora de resultados no se falsea ───────────────────────────
+-- A quién le toca un «no contestó» sale de funnel_eventos: esos tipos los escriben SOLO
+-- las funciones (security definer). Desde la pantalla quedan los de siempre (contacto, etc.).
+drop policy if exists fev_ins on public.funnel_eventos;
+create policy fev_ins on public.funnel_eventos for insert to authenticated with check (
+  public.funnel_es_staff()
+  and tipo not in ('no_contesta','interesado','no_interesado','reprogramar','citar','nota','asignado')
+  -- el telemarketer solo anota sobre SUS prospectos (y con su propio correo como actor)
+  and (not public.funnel_es_tmk() or (
+        prospecto_id in (select l.id from public.funnel_tmk_mi_lista() l)
+        and actor is not distinct from (auth.jwt()->>'email')))
+);
+
 -- ── 7. reparto parejo, pero al azar ────────────────────────────────────────
 create or replace function public.funnel_repartir(p_base bigint) returns integer
-  language plpgsql security definer set search_path to 'public' as $$
+  language plpgsql security definer set search_path to 'public', 'pg_temp' as $$
 declare ags bigint[]; n int; idx int := 0; cnt int := 0; r record;
 begin
   if not funnel_es_gerente() then raise exception 'solo un gerente puede repartir'; end if;
   -- agentes activos tmk expandidos por su PESO, en orden al azar
   select array_agg(a.id order by random()) into ags from (
     select ag.id, generate_series(1, greatest(ag.peso,1)) from funnel_agentes ag
-    where ag.activo and ag.rol='tmk'
+    where ag.activo and ag.rol='tmk' and ag.user_id is not null  -- sin cuenta no ve su lista
   ) a;
-  if ags is null then raise exception 'no hay TMK activos'; end if;
+  if ags is null then raise exception 'no hay TMK activos con cuenta'; end if;
   n := array_length(ags,1);
   perform 1 from funnel_reparto where id=1 for update;
   -- los prospectos también en orden al azar: parejo en cantidad, sin patrón en quién le toca a quién
@@ -249,5 +270,7 @@ begin
   if idx > 0 then update funnel_reparto set ultimo_agente_id = ags[idx] where id=1; end if;
   return cnt;
 end $$;
+revoke all on function public.funnel_repartir(bigint) from public, anon;
+grant execute on function public.funnel_repartir(bigint) to authenticated;
 
 commit;

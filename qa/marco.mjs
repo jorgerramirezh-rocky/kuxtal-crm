@@ -32,8 +32,8 @@ const ok=(cond,msg)=>{ console.log((cond?'  ✓ ':'  ✗ ')+msg); if(!cond) fail
 // ── (a) Reparto equitativo ──
 console.log('\n(a) repartoRoundRobin');
 {
-  const ag=[{id:1,nombre:'A',rol:'tmk',activo:true,peso:1},{id:2,nombre:'B',rol:'tmk',activo:true,peso:1},{id:3,nombre:'C',rol:'tmk',activo:true,peso:1},
-            {id:4,nombre:'V',rol:'vendedor',activo:true,peso:1},{id:5,nombre:'X',rol:'tmk',activo:false,peso:1}];
+  const ag=[{id:1,nombre:'A',rol:'tmk',activo:true,user_id:'u1',peso:1},{id:2,nombre:'B',rol:'tmk',activo:true,user_id:'u2',peso:1},{id:3,nombre:'C',rol:'tmk',activo:true,user_id:'u3',peso:1},
+            {id:4,nombre:'V',rol:'vendedor',activo:true,peso:1},{id:5,nombre:'X',rol:'tmk',activo:false,user_id:'u5',peso:1}];
   const pr=Array.from({length:10},(_,i)=>({id:i+1,nombre:'L'+(i+1),tmk_id:null}));
   const r=sandbox.repartoRoundRobin(pr,ag,0);
   const c=[r.plan[1].length,r.plan[2].length,r.plan[3].length];
@@ -46,7 +46,7 @@ console.log('\n(a) repartoRoundRobin');
   ok(sandbox.repartoRoundRobin(ya,ag,0).total===9, 'los que ya tienen tmk_id no se tocan');
   const sinT=sandbox.repartoRoundRobin(pr,[{id:4,rol:'vendedor',activo:true}],0);
   ok(sinT.sinAsignar.length===10, 'sin TMK activos → los 10 quedan visibles en sinAsignar');
-  const pes=sandbox.repartoRoundRobin(pr,[{id:1,rol:'tmk',activo:true,peso:2},{id:2,rol:'tmk',activo:true,peso:1}],0);
+  const pes=sandbox.repartoRoundRobin(pr,[{id:1,rol:'tmk',activo:true,user_id:'u1',peso:2},{id:2,rol:'tmk',activo:true,user_id:'u2',peso:1}],0);
   ok(pes.plan[1].length===7&&pes.plan[2].length===3, 'peso 2 vs 1 → 7/3 (mismo criterio que el RPC)');
 }
 
@@ -98,11 +98,16 @@ console.log('\n(a) aplicarReparto con falla a mitad de camino');
 // ── (b) Mi día ──
 console.log('\n(a2) reparto al azar con semilla');
 {
-  const ag=[{id:1,rol:'tmk',activo:true,peso:1},{id:2,rol:'tmk',activo:true,peso:1},{id:3,rol:'tmk',activo:true,peso:1}];
+  const ag=[{id:1,rol:'tmk',activo:true,user_id:'u1',peso:1},{id:2,rol:'tmk',activo:true,user_id:'u2',peso:1},{id:3,rol:'tmk',activo:true,user_id:'u3',peso:1}];
   const pr=Array.from({length:30},(_,i)=>({id:i+1,tmk_id:null}));
   const firma=r=>Object.keys(r.plan).map(k=>k+':'+r.plan[k].map(p=>p.id).join('.')).join('|');
   const a=sandbox.repartoRoundRobin(pr,ag,0,12345), b=sandbox.repartoRoundRobin(pr,ag,0,12345), c=sandbox.repartoRoundRobin(pr,ag,0,999);
   ok(firma(a)===firma(b), 'misma semilla → mismo reparto (la vista previa ES lo que se guarda)');
+  const conSin=sandbox.repartoRoundRobin(pr,[...ag,{id:9,rol:'tmk',activo:true,peso:1}],0,7);
+  ok(!conSin.plan[9], 'un agente SIN cuenta no recibe nada (no puede abrir su lista)');
+  const pr10=Array.from({length:10},(_,i)=>({id:i+1,tmk_id:null})); const cuenta={1:0,2:0,3:0};
+  for(let sem=1;sem<=60;sem++){ const r=sandbox.repartoRoundRobin(pr10,ag,0,sem); for(const k of [1,2,3]) if(r.plan[k].length===4) cuenta[k]++; }
+  ok(cuenta[1]>0&&cuenta[2]>0&&cuenta[3]>0, 'el que sobra no le toca siempre al mismo ('+JSON.stringify(cuenta)+')');
   ok(firma(a)!==firma(c), 'otra semilla → otro reparto (barajar de nuevo)');
   ok(firma(a)!==firma(sandbox.repartoRoundRobin(pr,ag,0)), 'con semilla no sale en orden de id');
   ok([1,2,3].every(k=>a.plan[k].length===10), 'sigue parejo: 30 entre 3 → 10/10/10');
