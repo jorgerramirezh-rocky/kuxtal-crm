@@ -1127,7 +1127,7 @@ function personasHTML(p){
   const nomJefe=id=>{ const a=(ROLDATA.agentes||[]).find(x=>x.id===id); return a?a.nombre:'—'; };
   const filas=p.map(x=>{
     const yo=x.user_id===UID;
-    const acc=yo?'<span class="cap">Vos</span>':`<div style="display:flex;gap:6px;flex-wrap:wrap">
+    const acc=yo?'<span class="cap">Vos</span>':`<div style="display:flex;gap:6px;flex-wrap:nowrap;white-space:nowrap">
       <button class="minibtn" style="background:var(--kux-l);color:var(--kux)" onclick="cambiarRolPersona('${esc(x.user_id)}')">Cambiar rol</button>
       ${x.activo?`<button class="minibtn" style="background:var(--kux-l);color:var(--kux)" onclick="accionPersona('restablecer','${esc(x.user_id)}')">Reenviar enlace</button>
       <button class="minibtn" style="background:#fbe9e9;color:#b3261e" onclick="accionPersona('desactivar','${esc(x.user_id)}')">Desactivar</button>`
