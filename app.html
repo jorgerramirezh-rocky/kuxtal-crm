@@ -368,9 +368,9 @@
   .res:active{transform:scale(.97)}
   .res:focus-visible{outline:3px solid rgba(27,54,93,.35);outline-offset:2px}
   @media (max-width:380px){.res{font-size:12.5px;padding:8px 4px}}
-  .chk{display:inline-flex;align-items:center;gap:7px;margin:4px 14px 4px 0;font-size:14px;min-height:36px;cursor:pointer}
-  .chk input{width:20px;height:20px}
-  .chk.off{color:var(--gris);cursor:not-allowed}
+  .fld label.chk,.chk{display:inline-flex;align-items:center;gap:8px;margin:4px 16px 4px 0;font-size:14px;font-weight:600;color:var(--tinta);min-height:44px;cursor:pointer}
+  .fld .chk input,.chk input{width:22px;height:22px;flex:none;padding:0;margin:0;accent-color:var(--kux)}
+  .fld label.chk.off,.chk.off{color:var(--gris);cursor:not-allowed}
   /* En el CRM ".estados" lleva margin-left:auto; dentro del embudo NO */
   #embudo .estados{margin-left:0;gap:6px}
   /* ".sub" del embudo (contenedor de campos) va SCOPEADO para no chocar con .panel .sub del CRM */
