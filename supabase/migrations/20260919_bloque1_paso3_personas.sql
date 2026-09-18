@@ -79,19 +79,24 @@ grant execute on function public.funnel_personas_listar() to authenticated, serv
 -- Antes de llamarla, la función ya dejó la cuenta como corresponde en Auth (rol,
 -- clave o bloqueo). Acá se ajusta el equipo, se cierran sesiones y se anota.
 -- Devuelve cuántas sesiones cerró. Frenos con código propio:
---   KXP02 la cuenta no tiene el rol que se dice · KXP03 el jefe no es un agente activo
---   KXP04 la persona no existe · 55000 sobre uno mismo
+--   KXP02 la cuenta no tiene el rol que se dice · KXP03 el jefe no es un agente activo (o es ella misma)
+--   KXP04 la persona no existe · KXP05 hay más de un agente sin cuenta con su correo (no se adivina)
+--   KXP06 la cuenta está desactivada (no vuelve al reparto por un cambio de rol) · 55000 sobre uno mismo
+-- p_cambiar_jefe: el jefe que llega (aunque sea null = «sin jefe») reemplaza al de antes.
+drop function if exists public.funnel_personas_registrar(uuid, uuid, text, text, text, bigint);
 create or replace function public.funnel_personas_registrar(
   p_actor uuid, p_persona uuid, p_accion text,
-  p_nombre text default null, p_rol text default null, p_jefe bigint default null)
+  p_nombre text default null, p_rol text default null, p_jefe bigint default null,
+  p_cambiar_jefe boolean default false)
   returns int
   language plpgsql security definer set search_path to 'public', 'pg_temp' as $$
 declare
   v_rol_cuenta text; v_correo text; v_op text; v_nombre text; v_jefe bigint; v_sesiones int := 0;
-  v_ag record;
+  v_ag record; v_bloqueada boolean; v_huerfanos int; v_huerfano bigint;
 begin
   if p_actor = p_persona then raise exception 'sobre uno mismo no' using errcode = '55000'; end if;
-  select u.raw_app_meta_data->>'role', u.email::text into v_rol_cuenta, v_correo
+  select u.raw_app_meta_data->>'role', u.email::text, coalesce(u.banned_until > now(), false)
+    into v_rol_cuenta, v_correo, v_bloqueada
     from auth.users u where u.id = p_persona;
   if not found then raise exception 'la persona no existe' using errcode = 'KXP04'; end if;
   if p_accion in ('alta','cambiar_rol') and v_rol_cuenta is distinct from p_rol then
@@ -100,15 +105,40 @@ begin
   if p_jefe is not null and not exists (select 1 from public.funnel_agentes where id = p_jefe and activo) then
     raise exception 'el jefe % no es un agente activo', p_jefe using errcode = 'KXP03';
   end if;
+  if p_jefe is not null and exists (select 1 from public.funnel_agentes where id = p_jefe and user_id = p_persona) then
+    raise exception 'nadie es su propio jefe' using errcode = 'KXP03';
+  end if;
+  if p_accion = 'cambiar_rol' and v_bloqueada then
+    raise exception 'la cuenta está desactivada: primero se activa' using errcode = 'KXP06';
+  end if;
   select r.rol_operativo into v_op from public.funnel_roles r where r.clave = v_rol_cuenta;
   select a.* into v_ag from public.funnel_agentes a where a.user_id = p_persona and a.activo order by a.id desc limit 1;
 
   if p_accion in ('alta','cambiar_rol') then
     v_nombre := coalesce(nullif(trim(p_nombre),''), v_ag.nombre, split_part(v_correo,'@',1));
-    v_jefe := coalesce(p_jefe, v_ag.supervisor_id);
+    v_jefe := case when p_cambiar_jefe or p_accion = 'alta' then p_jefe else v_ag.supervisor_id end;
     -- El agente que ya no corresponde se da de baja (nunca se borra).
     update public.funnel_agentes set activo = false
      where user_id = p_persona and activo and rol is distinct from v_op;
+    -- ALTA DE ALGUIEN QUE YA ESTABA EN EL EQUIPO (sin cuenta): se ADOPTA su agente, con sus
+    -- prospectos y comisiones, en vez de crear otro. Si hay más de uno con su correo, no se adivina.
+    if v_op is not null and not exists (select 1 from public.funnel_agentes where user_id = p_persona and activo) then
+      select count(*), min(a.id) into v_huerfanos, v_huerfano from public.funnel_agentes a
+       where a.activo and a.user_id is null and lower(a.email) = lower(v_correo) and a.rol = v_op;
+      if v_huerfanos > 1 then
+        raise exception 'hay % agentes sin cuenta con el correo %', v_huerfanos, v_correo using errcode = 'KXP05';
+      end if;
+      if v_huerfanos = 1 and v_huerfano = p_jefe then
+        raise exception 'nadie es su propio jefe' using errcode = 'KXP03';
+      end if;
+      if v_huerfanos = 1 then
+        update public.funnel_agentes set user_id = p_persona where id = v_huerfano;
+        -- Adoptado: si no se eligió jefe, conserva el que ya tenía.
+        if p_jefe is null and not p_cambiar_jefe then
+          select supervisor_id into v_jefe from public.funnel_agentes where id = v_huerfano;
+        end if;
+      end if;
+    end if;
     if v_op is not null then
       if exists (select 1 from public.funnel_agentes where user_id = p_persona and activo) then
         update public.funnel_agentes set nombre = v_nombre, supervisor_id = v_jefe
@@ -130,8 +160,9 @@ begin
     raise exception 'acción desconocida %', p_accion using errcode = '22023';
   end if;
 
-  -- Rol nuevo, baja o clave nueva: las sesiones abiertas se cierran (el token viejo muere al vencer, ≤1 h).
-  if p_accion in ('cambiar_rol','desactivar','restablecer') then
+  -- Rol nuevo o baja: las sesiones abiertas se cierran (el token viejo muere al vencer, ≤1 h).
+  -- «Reenviar enlace» no toca la clave, así que tampoco corta sesiones.
+  if p_accion in ('cambiar_rol','desactivar') then
     delete from auth.sessions where user_id = p_persona;
     get diagnostics v_sesiones = row_count;
   end if;
@@ -142,7 +173,7 @@ begin
       'jefe', v_jefe, 'sesiones_cerradas', nullif(v_sesiones, 0))));
   return v_sesiones;
 end $$;
-revoke all on function public.funnel_personas_registrar(uuid, uuid, text, text, text, bigint) from public, anon, authenticated;
-grant execute on function public.funnel_personas_registrar(uuid, uuid, text, text, text, bigint) to service_role;
+revoke all on function public.funnel_personas_registrar(uuid, uuid, text, text, text, bigint, boolean) from public, anon, authenticated;
+grant execute on function public.funnel_personas_registrar(uuid, uuid, text, text, text, bigint, boolean) to service_role;
 
 commit;

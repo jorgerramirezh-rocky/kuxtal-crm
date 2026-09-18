@@ -28,11 +28,12 @@ p.fijar('admin', datos)
 const malo = '<img src=x onerror=alert(1)>'
 const h = p.personasHTML([
   { user_id: 'u-admin', correo: 'a@k.gt', nombre: 'Admin', rol: 'admin', rol_nombre: 'Administrador', activo: true, jefe_id: null },
-  { user_id: "u2')+alert(1)+('", correo: malo, nombre: malo, rol: 'telemarketing', rol_nombre: 'Telemarketing', activo: false, jefe_id: 4 }])
+  { user_id: "u2')+alert(1)+('", correo: malo, nombre: malo, rol: 'telemarketing', rol_nombre: 'Telemarketing', activo: true, jefe_id: 4 },
+  { user_id: '00000000-0000-4000-8000-0000000000cc', correo: 'baja@k.gt', nombre: 'De baja', rol: 'telemarketing', rol_nombre: 'Telemarketing', activo: false, jefe_id: null }])
 ok(!h.includes('<img'), 'el nombre y el correo con <img> salen escapados')
-ok(!h.includes("u2')+alert(1)"), 'un id raro no rompe el onclick')
-ok(h.includes('Vos') && (h.match(/Cambiar rol/g) || []).length === 1, 'sobre uno mismo no hay botones')
-ok(h.includes('>Activar<') && !h.includes('Reenviar enlace'), 'desactivada: solo «Activar»')
+ok(!/onclick="[^"]*alert/.test(h.replace(/&#39;/g, "'")), 'un id raro nunca entra a un onclick (ni después de que el navegador lo decodifique)')
+ok(h.includes('Vos'), 'sobre uno mismo no hay botones')
+ok(h.includes('>Activar<') && !h.includes('Reenviar enlace') && !h.includes('Cambiar rol'), 'desactivada: solo «Activar» (ni cambiar rol ni reenviar); id raro: sin botones')
 ok(h.includes('Ana &lt;b&gt;jefa'), 'el jefe sale escapado')
 ok(p.personasHTML(undefined) === '', 'sin permiso: no se muestra nada')
 ok(p.personasHTML(null).includes('No pude leer'), 'si no se pudo leer: lo avisa')

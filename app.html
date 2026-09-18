@@ -1103,8 +1103,10 @@ async function rpcPersonas(){
     if(!r.ok) return null; return await r.json(); }catch(e){ return null; }
 }
 async function llamarPersonas(cuerpo,reint){
-  const r=await fetch(SB_URL+"/functions/v1/kuxtal-personas",{method:"POST",
-    headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json"},body:JSON.stringify(cuerpo)});
+  let r;
+  try{ r=await fetch(SB_URL+"/functions/v1/kuxtal-personas",{method:"POST",
+    headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json"},body:JSON.stringify(cuerpo)}); }
+  catch(e){ return {ok:false,mensaje:'No pude conectarme con el servidor. No sé si se hizo: revisá el internet y mirá la lista antes de repetir.'}; }
   if(r.status===401&&!reint&&await refrescar()) return llamarPersonas(cuerpo,true);
   let d=null; try{ d=await r.json(); }catch(e){}
   if(!d||typeof d.mensaje!=='string') return {ok:false,mensaje:r.status===404?'La función de personas todavía no está publicada.':'No pude hablar con el servidor ('+r.status+'). No sé si se hizo: mirá la lista antes de repetir.'};
@@ -1125,11 +1127,13 @@ function personasHTML(p){
   if(p===undefined) return '';
   if(p===null) return `<div class="cap" style="margin:0 0 12px;color:#b3261e">No pude leer la lista de personas del equipo. <b onclick="cargarRoles()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</div>`;
   const nomJefe=id=>{ const a=(ROLDATA.agentes||[]).find(x=>x.id===id); return a?a.nombre:'—'; };
+  const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const filas=p.map(x=>{
     const yo=x.user_id===UID;
-    const acc=yo?'<span class="cap">Vos</span>':`<div style="display:flex;gap:6px;flex-wrap:nowrap;white-space:nowrap">
-      <button class="minibtn" style="background:var(--kux-l);color:var(--kux)" onclick="cambiarRolPersona('${esc(x.user_id)}')">Cambiar rol</button>
-      ${x.activo?`<button class="minibtn" style="background:var(--kux-l);color:var(--kux)" onclick="accionPersona('restablecer','${esc(x.user_id)}')">Reenviar enlace</button>
+    // Solo un id con forma de uuid entra en un onclick (el escapado del HTML no protege el JS).
+    const acc=yo?'<span class="cap">Vos</span>':!UUID.test(String(x.user_id))?'<span class="cap">—</span>':`<div style="display:flex;gap:6px;flex-wrap:nowrap;white-space:nowrap">
+      ${x.activo?`<button class="minibtn" style="background:var(--kux-l);color:var(--kux)" onclick="cambiarRolPersona('${esc(x.user_id)}')">Cambiar rol</button>
+      <button class="minibtn" style="background:var(--kux-l);color:var(--kux)" onclick="accionPersona('restablecer','${esc(x.user_id)}')">Reenviar enlace</button>
       <button class="minibtn" style="background:#fbe9e9;color:#b3261e" onclick="accionPersona('desactivar','${esc(x.user_id)}')">Desactivar</button>`
       :`<button class="minibtn" onclick="accionPersona('activar','${esc(x.user_id)}')">Activar</button>`}</div>`;
     return `<tr><td><b>${esc(x.nombre||'—')}</b><div class="cap">${esc(x.correo||'')}</div></td><td>${esc(x.rol_nombre||x.rol||'sin rol')}</td>
@@ -1137,7 +1141,7 @@ function personasHTML(p){
   }).join('');
   return `<div class="adminhead"><h3><svg class="svic" aria-hidden="true"><use href="#ic-users"/></svg> Personas del equipo (${p.length})</h3><button class="minibtn" onclick="altaPersona()">＋ Dar de alta</button></div>
     <div class="tblwrap"><table class="dtbl"><thead><tr><th>Persona</th><th>Rol</th><th>Jefe</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>${filas||'<tr><td colspan="5">Todavía no hay nadie.</td></tr>'}</tbody></table></div>
-    <div class="cap" style="margin:8px 0 18px">Al dar de alta, la persona recibe un correo con un enlace para crear SU clave (nadie más la conoce). Cambiar el rol o desactivar cierra sus sesiones abiertas.</div>`;
+    <div class="cap" style="margin:8px 0 18px">Al dar de alta, la persona recibe un correo con un enlace para crear SU clave (nadie más la conoce). Si ya estaba en el equipo sin cuenta, se le conecta con sus prospectos de siempre. Cambiar el rol o desactivar cierra sus sesiones abiertas.</div>`;
 }
 function altaPersona(){
   const roles=rolesAsignables();
@@ -1164,7 +1168,7 @@ function cambiarRolPersona(uid){
   const x=(ROLDATA.personas||[]).find(p=>p.user_id===uid); if(!x) return;
   const roles=rolesAsignables();
   $('rolBody').innerHTML=`<h3>Cambiar el rol de ${esc(x.nombre)}</h3>
-    <label>Rol nuevo</label><select id="p_rol">${roles.map(r=>`<option value="${esc(r.clave)}" ${r.clave===x.rol?'selected':''}>${esc(r.nombre)}</option>`).join('')}</select>
+    <label>Rol nuevo</label><select id="p_rol">${roles.some(r=>r.clave===x.rol)?'':'<option value="" selected>— elegí un rol —</option>'}${roles.map(r=>`<option value="${esc(r.clave)}" ${r.clave===x.rol?'selected':''}>${esc(r.nombre)}</option>`).join('')}</select>
     <label>Jefe directo</label><select id="p_jefe">${opcionesJefe(x.jefe_id||'')}</select>
     <div class="cap" style="margin-top:10px">Se cierran sus sesiones: al volver a entrar ve lo de su rol nuevo.</div>
     <div class="ferr" id="p_err"></div>
@@ -1172,6 +1176,7 @@ function cambiarRolPersona(uid){
   $('rolModal').style.display='flex';
 }
 async function guardarRolPersona(uid){
+  if(!$('p_rol').value){ $('p_err').textContent='Elegí un rol.'; return; }
   const btn=$('p_save'); btn.disabled=true; btn.textContent='Cambiando…'; $('p_err').textContent='';
   const d=await llamarPersonas({accion:'cambiar_rol',user_id:uid,rol:$('p_rol').value,jefe_id:$('p_jefe').value||null});
   btn.disabled=false; btn.textContent='Cambiar';
@@ -1182,7 +1187,7 @@ async function accionPersona(accion,uid){
   const x=(ROLDATA.personas||[]).find(p=>p.user_id===uid); if(!x) return;
   const que={restablecer:'mandarle un enlace nuevo a',desactivar:'desactivar a',activar:'activar a'}[accion];
   $('rolBody').innerHTML=`<h3>¿Seguro que querés ${que} ${esc(x.nombre)}?</h3>
-    ${accion==='restablecer'?'<div class="cap">Su clave de ahora deja de servir y se cierran sus sesiones.</div>':''}
+    ${accion==='restablecer'?'<div class="cap">Le llega un correo con un enlace para crear una clave nueva. Hasta que la cree, la de ahora sigue sirviendo.</div>':''}
     ${accion==='desactivar'?'<div class="cap">No va a poder entrar y se cierran sus sesiones. Su historial se conserva.</div>':''}
     <div class="ferr" id="p_err"></div>
     <div class="macc"><button class="mcancel" onclick="cerrarRol()">Cancelar</button><button class="msave" id="p_save">Sí</button></div>`;

@@ -171,7 +171,9 @@ function codigoDeAuth(datos: Record<string, unknown>): string {
 /** Los frenos de la base (migración 20260919_bloque1_paso3_personas), en palabras. */
 const FRENOS: Record<string, string> = {
   KXP02: 'La cuenta no quedó con el rol que se pidió.',
-  KXP03: 'Ese jefe no es una persona activa del equipo.',
+  KXP03: 'Ese jefe no sirve: no es una persona activa del equipo, o es la misma persona.',
+  KXP05: 'Hay más de una persona del equipo sin cuenta con ese correo: no adiviné cuál es. Revisalo en el organigrama.',
+  KXP06: 'Esa persona está desactivada: primero se activa y después se le cambia el rol.',
   KXP04: 'Esa persona no existe.',
   '55000': 'Desde el panel no se hace nada sobre tu propia cuenta.',
 }
@@ -331,6 +333,19 @@ export function crearAtender(cfg: Config): (peticion: Request) => Promise<Respon
       return { ok: true, rol }
     }
     const frenoDeLaBase = (codigo: string, siNo: string) => FRENOS[codigo] ?? siNo
+    /** Quien no es admin solo elige de jefe a alguien de SU equipo (si no, se colgaría gente ajena y vería sus prospectos). */
+    const jefePermitido = async (jefe: number | null): Promise<Response | null> => {
+      if (jefe === null || soyAdmin) return null
+      const r = await rpc('funnel_ve_equipo', comoQuienLlama(token), {})
+      if (!r.ok || !Array.isArray(r.datos)) return error(503, 'no_pude_leer', 'No pude revisar tu equipo. No hice nada.')
+      const ids = (r.datos as unknown[]).map((x) => Number(x))
+      return ids.includes(jefe) ? null : error(403, 'jefe_ajeno', 'Solo podés elegir de jefe a alguien de tu equipo.')
+    }
+    /** ¿La base anotó el alta? (la bitácora lo dice aunque la persona no tenga agente, p. ej. hostess) */
+    const altaAnotada = async (id: string): Promise<boolean | null> => {
+      const r = await pedir(`${base}/rest/v1/funnel_personas_bitacora?select=id&accion=eq.alta&persona=eq.${id}`, { headers: comoQuienLlama(token) })
+      return r.ok && Array.isArray(r.datos) ? r.datos.length > 0 : null
+    }
 
     // ── ALTA ────────────────────────────────────────────────────────────
     if (accion === 'alta') {
@@ -338,6 +353,8 @@ export function crearAtender(cfg: Config): (peticion: Request) => Promise<Respon
       if (!v.ok) return error(400, 'datos_invalidos', v.mensaje)
       const permitido = await rolPermitido(v.rol)
       if (!permitido.ok) return permitido.resp
+      const jefeMalo = await jefePermitido(v.jefe)
+      if (jefeMalo !== null) return jefeMalo
       const personas = await listar()
       if (personas === null) return error(503, 'no_pude_leer', 'No pude revisar si ese correo ya existe. No creé nada.')
       const repetida = personas.find((p) => (p.correo ?? '').toLowerCase() === v.correo)
@@ -368,13 +385,14 @@ export function crearAtender(cfg: Config): (peticion: Request) => Promise<Respon
       }
       const alta = await rpc('funnel_personas_registrar', servicio, {
         p_actor: idQuien, p_persona: nuevaId, p_accion: 'alta', p_nombre: v.nombre, p_rol: v.rol, p_jefe: v.jefe,
+        p_cambiar_jefe: v.jefe !== null,
       })
       if (!alta.ok) {
-        // La base no la registró. ANTES DE BORRAR SE MIRA: si sí quedó y se perdió la respuesta, borrar rompería un alta buena.
-        const despues = await listar()
-        const quedoEnEquipo = despues?.some((p) => p.user_id === nuevaId && p.agente_id !== null) ?? false
-        if (despues === null || quedoEnEquipo) {
-          return error(500, 'confirmacion_perdida', despues === null
+        // La base no la registró. ANTES DE BORRAR SE MIRA (en la bitácora, que vale también para roles sin
+        // agente): si sí quedó y se perdió la respuesta, borrar rompería un alta buena.
+        const anotada = await altaAnotada(nuevaId)
+        if (anotada !== false) {
+          return error(500, 'confirmacion_perdida', anotada === null
             ? 'Creé la cuenta, pero no sé si quedó en el equipo y no pude revisarlo. No borré nada: mirá la lista.'
             : 'Creé la cuenta y quedó en el equipo, pero no me llegó la confirmación. Usá «Reenviar enlace» para mandarle su enlace.',
           { codigo_base: alta.codigo })
@@ -413,6 +431,10 @@ export function crearAtender(cfg: Config): (peticion: Request) => Promise<Respon
     if (personas === null) return error(503, 'no_pude_leer', 'No pude leer la lista de personas. No hice nada.')
     const persona = personas.find((p) => p.user_id === idPersona)
     if (persona === undefined) return error(404, 'no_existe', 'Esa persona no está en el equipo.')
+    // Una cuenta SIN rol (o con uno que ya no existe) solo la toca quien administra: no es de nadie todavía.
+    if (!soyAdmin && (persona.rol === null || persona.nivel === null)) {
+      return error(403, 'sin_rol', `${persona.nombre} no tiene rol en el equipo: solo quien administra decide qué es.`)
+    }
     if (!soyAdmin && (persona.nivel ?? 0) >= miNivel) {
       return error(403, 'nivel_alto', `${persona.nombre} es de tu nivel o más alto: solo quien administra puede cambiarle algo.`)
     }
@@ -422,15 +444,19 @@ export function crearAtender(cfg: Config): (peticion: Request) => Promise<Respon
       const rolNuevo = typeof cuerpo.rol === 'string' ? cuerpo.rol : ''
       const jefe = cuerpo.jefe_id === undefined || cuerpo.jefe_id === null || cuerpo.jefe_id === '' ? null : Number(cuerpo.jefe_id)
       if (jefe !== null && (!Number.isInteger(jefe) || jefe <= 0)) return error(400, 'datos_invalidos', 'Ese jefe no existe. Elegilo de la lista.')
+      if (!persona.activo) return error(409, 'de_baja', `${persona.nombre} está desactivada: primero se activa y después se le cambia el rol.`)
       const permitido = await rolPermitido(rolNuevo)
       if (!permitido.ok) return permitido.resp
+      const jefeMalo = await jefePermitido(jefe)
+      if (jefeMalo !== null) return jefeMalo
+      const cambiarJefe = Object.prototype.hasOwnProperty.call(cuerpo, 'jefe_id')
       const rolViejo = persona.rol
       if (rolNuevo !== rolViejo) {
         const cambio = await llamarAuth(`/admin/users/${idPersona}`, 'PUT', { app_metadata: { role: rolNuevo } })
         if (!cambio.ok) return error(502, 'auth_fallo', `No pude cambiarle el rol (Auth contestó ${cambio.estado}). No cambió nada.`)
       }
       const registro = await rpc('funnel_personas_registrar', servicio, {
-        p_actor: idQuien, p_persona: idPersona, p_accion: 'cambiar_rol', p_rol: rolNuevo, p_jefe: jefe,
+        p_actor: idQuien, p_persona: idPersona, p_accion: 'cambiar_rol', p_rol: rolNuevo, p_jefe: jefe, p_cambiar_jefe: cambiarJefe,
       })
       if (!registro.ok) {
         // Se le devuelve el rol de antes en Auth: si no, quedaría con un rol nuevo y el equipo viejo.
@@ -448,31 +474,24 @@ export function crearAtender(cfg: Config): (peticion: Request) => Promise<Respon
       })
     }
 
-    // ── REENVIAR ENLACE (restablecer) ────────────────────────────────────
+    // ── REENVIAR ENLACE ───────────────────────────────────────────────────
+    // NO TOCA LA CLAVE (revisión adversaria del 18-sep): antes se cambiaba primero y, si el correo
+    // fallaba, la clave temporal le quedaba a quien pidió la acción — alguien con el permiso podía
+    // quedarse con la cuenta de otro. Ahora solo sale el enlace; su clave de ahora sigue sirviendo
+    // hasta que cree la nueva. Para cortarle la entrada está «Desactivar».
     if (accion === 'restablecer') {
       if (!persona.activo) return error(409, 'de_baja', `${persona.nombre} está desactivada. Primero se activa; después se le manda el enlace.`)
-      const clave = nuevaClave()
-      const cambio = await llamarAuth(`/admin/users/${idPersona}`, 'PUT', { password: clave })
-      if (!cambio.ok) {
-        if (codigoDeAuth(cambio.datos) === 'weak_password') return error(502, 'clave_rechazada', 'Auth rechazó la clave temporal. No cambié nada. Avisá.')
-        if (cambio.estado === 429) return error(429, 'demasiados_pedidos', 'Demasiados pedidos seguidos. Esperá un momento.')
-        return error(502, 'auth_fallo', `No pude cambiarle la clave (Auth contestó ${cambio.estado}). No cambié nada: su clave de ahora sigue sirviendo.`)
+      if (cfg.correo === undefined || cfg.correo === null || cfg.correo.llave === '') {
+        return error(503, 'sin_correo', 'La función no tiene correo de salida configurado: no puedo mandar enlaces. No cambié nada.')
+      }
+      if (!await mandarEnlace({ nombre: persona.nombre, correo: persona.correo }, false)) {
+        return error(502, 'correo_no_salio', `No pude mandarle el enlace a ${persona.nombre}. No cambié nada: su clave de ahora sigue sirviendo. Probá otra vez en un rato.`)
       }
       const marca = await rpc('funnel_personas_registrar', servicio, { p_actor: idQuien, p_persona: idPersona, p_accion: 'restablecer' })
-      if (!marca.ok) {
-        return error(500, 'sin_bitacora',
-          'Le cambié la clave, pero no pude anotarlo ni cerrar sus sesiones: las que tenga abiertas SIGUEN ABIERTAS. No muestro la clave: volvé a intentar «Reenviar enlace» o desactivala.',
-          { codigo_base: marca.codigo })
-      }
-      if (await mandarEnlace({ nombre: persona.nombre, correo: persona.correo }, false)) {
-        return responder(200, {
-          ok: true, codigo: 'enlace_enviado', accion, user_id: idPersona, correo_enviado: true,
-          mensaje: `Listo: la clave de antes de ${persona.nombre} ya no sirve y se cerraron sus sesiones. Le mandé un enlace para crear una nueva (vence en ${HORAS_DEL_ENLACE} horas).`,
-        })
-      }
       return responder(200, {
-        ok: true, codigo: 'enlace_enviado', accion, user_id: idPersona, correo_enviado: false, clave_temporal: clave,
-        mensaje: `${persona.nombre} tiene una clave temporal nueva y se cerraron sus sesiones, pero NO pude mandarle el correo. Se muestra UNA sola vez: pasásela en persona o por teléfono.`,
+        ok: true, codigo: 'enlace_enviado', accion, user_id: idPersona, correo_enviado: true,
+        mensaje: `Listo: le mandé a ${persona.nombre} un enlace para crear una clave nueva (vence en ${HORAS_DEL_ENLACE} horas). Hasta que la cree, la de ahora sigue sirviendo.`
+          + (marca.ok ? '' : ' (No quedó anotado en la bitácora.)'),
       })
     }
 

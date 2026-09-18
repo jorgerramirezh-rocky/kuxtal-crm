@@ -15,6 +15,8 @@ const SUPER = '00000000-0000-4000-8000-000000000002'
 const TMK = '00000000-0000-4000-8000-000000000003'
 const GERENTE = '00000000-0000-4000-8000-000000000004'
 const NUEVA = '00000000-0000-4000-8000-0000000000aa'
+const SINROL = '00000000-0000-4000-8000-0000000000bb'
+const BAJA = '00000000-0000-4000-8000-0000000000cc'
 
 type Llamada = { url: string, metodo: string, headers: Record<string, string>, cuerpo: string }
 
@@ -49,6 +51,8 @@ function simulado(op: {
     { user_id: SUPER, correo: 'super@kx.gt', nombre: 'Super', rol: 'supervisor_tmk', rol_nombre: 'Supervisor de TMK', nivel: 70, activo: true, agente_id: 1, jefe_id: null },
     { user_id: TMK, correo: 'tmk@kx.gt', nombre: 'Tele', rol: 'telemarketing', rol_nombre: 'Telemarketing', nivel: 50, activo: true, agente_id: 2, jefe_id: 1 },
     { user_id: GERENTE, correo: 'gerente@kx.gt', nombre: 'Gerente', rol: 'gerente_ventas', rol_nombre: 'Gerente de Ventas', nivel: 80, activo: false, agente_id: null, jefe_id: null },
+    { user_id: SINROL, correo: 'sinrol@kx.gt', nombre: 'Sin rol', rol: null, rol_nombre: null, nivel: null, activo: true, agente_id: null, jefe_id: null },
+    { user_id: BAJA, correo: 'baja@kx.gt', nombre: 'De baja', rol: 'telemarketing', rol_nombre: 'Telemarketing', nivel: 50, activo: false, agente_id: null, jefe_id: null },
   ]
   let fallóRegistrar = false
   const json = (estado: number, d: unknown) => new Response(d === null ? '' : JSON.stringify(d), { status: estado })
@@ -71,6 +75,11 @@ function simulado(op: {
         : []
       return json(200, [...personas, ...extra])
     }
+    if (ruta.startsWith('/rest/v1/funnel_personas_bitacora?')) {
+      if (fallóRegistrar && op.listarTrasFalla === 'error') return json(500, { code: 'x' })
+      return json(200, fallóRegistrar && op.listarTrasFalla === 'en_equipo' ? [{ id: 1 }] : [])
+    }
+    if (ruta === '/rest/v1/rpc/funnel_ve_equipo') return json(200, bearer === 't_super' ? [1, 2] : [])
     if (ruta.startsWith('/rest/v1/funnel_roles?')) {
       const clave = decodeURIComponent(ruta.split('clave=eq.')[1] ?? '')
       return json(200, ROLES.filter((r) => r.clave === clave))
@@ -246,11 +255,46 @@ Deno.test('reenviar enlace a alguien desactivado: 409 sin tocar su clave', async
   const r = await pedir(cfg, 't_admin', { accion: 'restablecer', user_id: GERENTE })
   assertEquals(r.d.codigo, 'de_baja'); assertEquals(aAuth(llamadas).length, 0)
 })
-Deno.test('reenviar enlace: clave vieja muerta, sesiones cerradas, enlace solo en el correo', async () => {
+Deno.test('reenviar enlace: NO toca la clave; el enlace solo en el correo', async () => {
   const { cfg, llamadas } = simulado()
   const r = await pedir(cfg, 't_admin', { accion: 'restablecer', user_id: TMK })
   assertEquals(r.d.codigo, 'enlace_enviado'); assert(!r.texto.includes(HASH)); assertEquals(r.d.clave_temporal, undefined)
+  assertEquals(aAuth(llamadas).filter((l) => l.metodo === 'PUT').length, 0)
   assertEquals(llamadas.filter((l) => l.cuerpo.includes(HASH) || l.url.includes(HASH)).length, 1)
+})
+Deno.test('reenviar enlace con el correo caído: error, sin clave para nadie y sin tocar la cuenta', async () => {
+  const { cfg, llamadas } = simulado({ correoFalla: true })
+  const r = await pedir(cfg, 't_super', { accion: 'restablecer', user_id: TMK })
+  assertEquals(r.estado, 502); assertEquals(r.d.codigo, 'correo_no_salio'); assertEquals(r.d.clave_temporal, undefined)
+  assertEquals(aAuth(llamadas).filter((l) => l.metodo === 'PUT').length, 0); assertEquals(registros(llamadas).length, 0)
+})
+Deno.test('reenviar enlace sin correo configurado: 503, no hace nada', async () => {
+  const { cfg, llamadas } = simulado()
+  const r = await pedir({ ...cfg, correo: null }, 't_admin', { accion: 'restablecer', user_id: TMK })
+  assertEquals(r.d.codigo, 'sin_correo'); assertEquals(aAuth(llamadas).length, 0)
+})
+Deno.test('cambiar el rol a alguien desactivado: 409, no vuelve al reparto', async () => {
+  const { cfg, llamadas } = simulado()
+  const r = await pedir(cfg, 't_admin', { accion: 'cambiar_rol', user_id: BAJA, rol: 'vendedor' })
+  assertEquals(r.d.codigo, 'de_baja'); assertEquals(aAuth(llamadas).length, 0)
+})
+Deno.test('una cuenta sin rol solo la toca quien administra', async () => {
+  const { cfg } = simulado()
+  assertEquals((await pedir(cfg, 't_super', { accion: 'cambiar_rol', user_id: SINROL, rol: 'telemarketing' })).d.codigo, 'sin_rol')
+  assertEquals((await pedir(cfg, 't_admin', { accion: 'cambiar_rol', user_id: SINROL, rol: 'telemarketing' })).estado, 200)
+})
+Deno.test('quien no es admin solo elige jefe de SU equipo', async () => {
+  const { cfg, llamadas } = simulado()
+  const r = await pedir(cfg, 't_super', { ...ALTA, jefe_id: 99 })
+  assertEquals(r.estado, 403); assertEquals(r.d.codigo, 'jefe_ajeno'); assertEquals(aAuth(llamadas).length, 0)
+  assertEquals((await pedir(cfg, 't_super', { ...ALTA, jefe_id: 2 })).estado, 200)
+})
+Deno.test('cambiar el rol manda si hay que cambiar el jefe (quitarlo = jefe_id null)', async () => {
+  const { cfg, llamadas } = simulado()
+  await pedir(cfg, 't_admin', { accion: 'cambiar_rol', user_id: TMK, rol: 'vendedor', jefe_id: null })
+  await pedir(cfg, 't_admin', { accion: 'cambiar_rol', user_id: TMK, rol: 'vendedor' })
+  const a = registros(llamadas).map((l) => JSON.parse(l.cuerpo))
+  assertEquals([a[0].p_cambiar_jefe, a[0].p_jefe], [true, null]); assertEquals(a[1].p_cambiar_jefe, false)
 })
 Deno.test('persona que no está en el equipo: 404', async () => {
   const { cfg } = simulado()
