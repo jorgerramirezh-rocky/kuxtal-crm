@@ -125,7 +125,7 @@ console.log('\n(b) ordenarMiDia + cuerpoCita');
   ok(sandbox.cuerpoCita(2,'','19:00').error==='Poné el día de la presentación', 'sin día → error');
   const c=sandbox.cuerpoCita('2','2026-07-15','18:30');
   ok(c.params.p_cuando==='2026-07-15T18:30:00-06:00'&&c.params.p_restaurante===2, 'cita ok → restaurante + hora de Guatemala (−06:00)');
-  ok(sandbox.cuerpoCita(2,'2026-07-15','').params.p_cuando.endsWith('19:00:00-06:00'), 'hora default 19:00');
+  ok(sandbox.cuerpoCita(2,'2026-07-15','').error==='Elegí la hora (de los horarios del lugar)', 'sin hora → pide elegirla (bloque 3: no hay hora libre)');
 }
 
 // ── (b2) Bloque 2: hora de Guatemala y resultado de la llamada ──

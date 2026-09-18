@@ -29,9 +29,9 @@ vm.runInContext([
   "var WA='<svg></svg>', TEL='<svg></svg>';",
   "var ESTADOS=[{clave:'nuevo',etiqueta:'Nuevo',color:'#8a94a6'},{clave:'interesado',etiqueta:'Interesado',color:'#6f9e12'},{clave:'asistira',etiqueta:'Asistirá',color:'#1b365d'},{clave:'recontactar',etiqueta:'Recontactar',color:'#c28b00'},{clave:'no_contesta',etiqueta:'No contesta',color:'#999'}];",
   "var RESTAS=[{id:1,nombre:'Rest <script>'}], leads=[], todos=[], sub='pend';",
-  "var ABIERTO={}, SOCIO={}, ENVIANDO=new Set(), TOPE_INTENTOS=3, RECIEN=new Set(), BORRADOR={}, CONFIRMA={};",
+  "var ABIERTO={}, SOCIO={}, ENVIANDO=new Set(), TOPE_INTENTOS=3, RECIEN=new Set(), BORRADOR={}, CONFIRMA={}, HORARIOS=[{restaurante_id:1,dia_semana:1,hora:'19:00:00',activo:true}];",
   linea('const estDe='),
-  ...['partesGT', 'tsGT', 'hoyStr', 'fechaCorta', 'borrador', 'valB', 'btnRes', 'funCardHTML', 'pasa'].map(extraer),
+  ...['partesGT', 'tsGT', 'hoyStr', 'fechaCorta', 'borrador', 'valB', 'diaSemana', 'horasDe', 'hora12', 'btnRes', 'funCardHTML', 'pasa'].map(extraer),
 ].join('\n'), ctx)
 
 let fallas = 0
@@ -63,7 +63,7 @@ ok(h.includes('Citar a presentación'), 'interesado: aparece citar a presentaci�
 h = ctx.funCardHTML({ ...base, estado: 'no_contesta', intentos: 2 })
 ok(h.includes('sin contestar 2 de 3'), 'muestra cuántas veces no contestó')
 h = ctx.funCardHTML({ ...base, estado: 'asistira', restaurante_id: 1, presenta_en: '2026-09-21T01:00:00+00:00' })
-ok(h.includes('Citado · 20/09 19:00'), 'la cita se ve en hora de Guatemala (01:00 UTC = 19:00 del día anterior)')
+ok(h.includes('Citado · 20/09 7:00 p. m.'), 'la cita se ve en hora de Guatemala (01:00 UTC = 19:00 del día anterior)')
 ok(h.includes('Cambiar la cita'), 'ya citado: el botón dice «Cambiar la cita»')
 
 ctx.ENVIANDO.add(7)
@@ -75,6 +75,11 @@ ctx.ENVIANDO.delete(7)
 ctx.borrador(3, 'prd', '2026-10-01'); ctx.borrador(3, 'rst', '1')
 h = ctx.funCardHTML({ ...base, id: 3, estado: 'interesado' })
 ok(h.includes('value="2026-10-01"') && /<option value="1" selected>/.test(h), 'el día y el restaurante elegidos no se borran al repintar')
+ctx.borrador(3, 'prd', '2026-09-21')
+h = ctx.funCardHTML({ ...base, id: 3, estado: 'interesado' })
+ok(h.includes('<option value="19:00"') && !h.includes('type="time" id="prh3"'), 'la hora de la cita se elige de los horarios del lugar (lunes 19:00), no libre')
+ctx.borrador(3, 'prd', '2026-09-22')
+ok(ctx.funCardHTML({ ...base, id: 3, estado: 'interesado' }).includes('Sin horarios ese día'), 'día sin horarios: lo dice')
 ctx.borrador(3, 'prh', '"><img src=x>')
 ok(!ctx.funCardHTML({ ...base, id: 3, estado: 'interesado' }).includes('<img'), 'lo guardado en borrador sale escapado')
 vm.runInContext('RECIEN.add(9)', ctx)
