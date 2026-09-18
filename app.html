@@ -2205,7 +2205,7 @@ const TEL='<svg viewBox="0 0 24 24"><path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2
 const GERENTES=['admin','gerente_general','gerente_ventas','gerente_tmk','supervisor_tmk','supervisor'];
 const VENTAS=['recepcion','vendedor','cerrador','reservaciones','servicio','digitador','verificador'];
 let esGerente=false, verTodo=false, miAgente=null;
-let ESTADOS=[], RESTAS=[], AGENTES=[], MEMBS=[], PLANES=[], BASES=[], leads=[], todos=[], cierreLeads=[];
+let ESTADOS=[], RESTAS=[], LUGARES_TODOS=[], AGENTES=[], MEMBS=[], PLANES=[], BASES=[], leads=[], todos=[], cierreLeads=[];
 let funTab='', sub='pend', funCargado=false;
 const puedeEmbudo=()=> verTodo || ['tmk','telemarketing'].includes(ROLE);
 // Hora de Guatemala (UTC−6, sin horario de verano). Antes «hoy» salía de toISOString(),
@@ -2261,7 +2261,8 @@ async function funArrancar(){
   try{
     ESTADOS=(await getJSON("funnel_estados?select=*&activo=eq.true&order=orden.asc"))||[];
     ESTADOS.forEach(e=>{ if(!/^#[0-9a-fA-F]{3,8}$/.test(String(e.color||''))) e.color='#8a94a6'; e.clave=String(e.clave||'').replace(/[^a-z0-9_]/gi,''); });
-    RESTAS=(await getJSON("funnel_restaurantes?select=*&activo=eq.true&order=nombre.asc"))||[];
+    // Bloque 3: todos los lugares (también apagados) para NOMBRAR citas viejas; RESTAS = solo los que se pueden elegir.
+    LUGARES_TODOS=(await getJSON("funnel_restaurantes?select=*&order=nombre.asc"))||[]; RESTAS=LUGARES_TODOS.filter(r=>r.activo);
     // Bloque 3: el telemarketer cita solo en estos horarios (y el supervisor confirma en ellos).
     try{ HORARIOS=(await getJSON("funnel_horarios?select=*&activo=eq.true"))||[]; }catch(_e){ HORARIOS=[]; toast('No pude leer los horarios de los lugares: por ahora no se puede citar. Recargá la página.'); }
     MEMBS=(await getJSON("funnel_membresias?select=*&activo=eq.true&order=orden.asc"))||[];
@@ -2328,7 +2329,7 @@ function pintarRecepcion(){
     <button class="st ${recepSub==='todos'?'on':''}" onclick="recepSub='todos';pintarRecepcion()">Todos los citados (${todos.length})</button>
   </div>`;
   $('funCont').innerHTML=tabs+(list.length?list.map(recepCard).join('')
-    :`<div class="vacio"><b>${recepSub==='hoy'?'Nadie citado para hoy':'Nadie en recepción'}</b><p>Acá aparecen los prospectos que un TMK citó a presentación (<b>Asistirá</b>). Cuando lleguen, marcá la llegada, validá y calificá.</p></div>`);
+    :`<div class="vacio"><b>${recepSub==='hoy'?'Nadie citado para hoy':'Nadie en recepción'}</b><p>Acá aparecen las citas que el supervisor ya CONFIRMÓ para presentación (<b>Asistirá</b>). Cuando lleguen, marcá la llegada, validá y calificá.</p></div>`);
 }
 async function marcarLlegada(id,btn){
   if(btn) btn.disabled=true;
@@ -2340,7 +2341,7 @@ async function marcarLlegada(id,btn){
   } else { if(btn) btn.disabled=false; toast('No se pudo'); }
 }
 function recepCard(l){
-  const rest=(RESTAS.find(r=>r.id==l.restaurante_id)||{}).nombre||'';
+  const rest=(LUGARES_TODOS.find(r=>r.id==l.restaurante_id)||{}).nombre||'';
   const cita=l.presenta_en?(partesGT(l.presenta_en).d+' '+partesGT(l.presenta_en).h):'sin fecha de cita';
   const llegada=l.recepcion_en
     ? `<span class="tag" style="background:#e9f7ef;color:#1a8a54">Llegó · ${esc(new Date(l.recepcion_en).toLocaleTimeString('es-GT',{hour:'2-digit',minute:'2-digit'}))}</span>`
@@ -2999,7 +3000,7 @@ function citaPendHTML(c){
   </div>`;
 }
 function citaConfHTML(c){
-  const p=partesGT(c.presenta_en), lugar=RESTAS.find(r=>String(r.id)===String(c.restaurante_id))||{};
+  const p=partesGT(c.presenta_en), lugar=LUGARES_TODOS.find(r=>String(r.id)===String(c.restaurante_id))||{};
   const tel=telDig(c.telefono);
   return `<div class="lead" style="border-left-color:var(--lima-d)">
     <div class="ltop"><div><div class="lname">${esc(c.nombre)}</div>
@@ -3042,7 +3043,7 @@ async function regresarCita(id,btn){
 }
 function verCarta(id){
   const c=CITAS.find(x=>x.id===id); if(!c) return;
-  const lugar=RESTAS.find(r=>String(r.id)===String(c.restaurante_id))||{};
+  const lugar=LUGARES_TODOS.find(r=>String(r.id)===String(c.restaurante_id))||{};
   const cuerpo=cartaTexto(c,lugar).split('\n').map(l=>l?`<p>${esc(l)}</p>`:'<p>&nbsp;</p>').join('');
   const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Invitación Kuxtal · ${esc(c.nombre||'')}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=League+Gothic&display=swap" rel="stylesheet">
@@ -3066,7 +3067,7 @@ function enlaceCarta(c,lugar,canal){
 }
 function mandarCarta(id,canal){
   const c=CITAS.find(x=>x.id===id); if(!c) return;
-  const lugar=RESTAS.find(r=>String(r.id)===String(c.restaurante_id))||{};
+  const lugar=LUGARES_TODOS.find(r=>String(r.id)===String(c.restaurante_id))||{};
   const u=enlaceCarta(c,lugar,canal); if(!u){ toast('El cliente no aceptó ese canal'); return; }
   ev(id,'carta',canal);
   if(canal==='whatsapp') window.open(u,'_blank','noopener'); else location.href=u;
@@ -3104,7 +3105,7 @@ async function escribirLugares(metodo,tabla,qs,body,btn,msg){
   try{
     const r=await api(tabla+(qs||''),{method:metodo,headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(body)});
     if(!r.ok){ toast(r.status===409?'Ese horario ya existe':'No se pudo guardar'); if(btn) btn.disabled=false; return false; }
-    toast(msg); RESTAS=(await getJSON("funnel_restaurantes?select=*&activo=eq.true&order=nombre.asc"))||[];
+    toast(msg); LUGARES_TODOS=(await getJSON("funnel_restaurantes?select=*&order=nombre.asc"))||[]; RESTAS=LUGARES_TODOS.filter(r=>r.activo);
     HORARIOS=(await getJSON("funnel_horarios?select=*&activo=eq.true"))||[];
     await vistaLugares(); return true;
   }catch(e){ toast('Se cortó la conexión, probá de nuevo'); if(btn) btn.disabled=false; return false; }

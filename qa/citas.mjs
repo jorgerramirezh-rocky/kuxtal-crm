@@ -26,7 +26,7 @@ vm.runInContext([
   linea('const esc='), linea('const telDig='), linea('const DIAS='),
   "var RESTAS=[{id:1,nombre:'Hotel <b>Real</b>',direccion:'6a av 12-00 z10',mapa_url:'https://maps.app/x'},{id:2,nombre:'Sin mapa',mapa_url:'javascript:alert(1)'}];",
   "var HORARIOS=[{restaurante_id:1,dia_semana:1,hora:'19:00:00',activo:true},{restaurante_id:1,dia_semana:1,hora:'10:30:00',activo:true},{restaurante_id:1,dia_semana:1,hora:'15:00:00',activo:false},{restaurante_id:2,dia_semana:1,hora:'09:00:00',activo:true}];",
-  "var CITAS=[], CITA_B={}; function hoyStr(){return '2026-09-18';}",
+  "var CITAS=[], CITA_B={}, LUGARES_TODOS=RESTAS.concat([{id:7,nombre:'Lugar apagado',activo:false}]); function hoyStr(){return '2026-09-18';}",
   ...['partesGT', 'fechaCorta', 'diaSemana', 'horasDe', 'fechaLarga', 'hora12', 'cartaTexto', 'correoValido', 'enlaceCarta', 'valC', 'resumenHorarios', 'citaPendHTML', 'citaConfHTML'].map(extraer),
 ].join('\n'), ctx)
 
@@ -71,6 +71,7 @@ ok(h.includes('no tiene correo válido') && /type="checkbox" disabled/.test(h), 
 h = ctx.citaConfHTML({ ...cita, cita_confirmada_en: '2026-09-18T20:00:00Z', cita_confirmada_por: '<b>sup</b>' })
 ok(!h.includes('<b>sup</b>'), 'quién confirmó sale escapado')
 ok(h.includes('Mandar por WhatsApp') && !h.includes('Mandar por correo'), 'confirmada: solo el botón del canal aceptado')
+ok(ctx.citaConfHTML({ ...cita, restaurante_id: 7, cita_confirmada_en: 'x' }).includes('Lugar apagado'), 'confirmada en un lugar que después se apagó: igual se nombra el lugar')
 
 console.log(fallas ? `🔴 ${fallas} falla(s)` : '✅ Citas y carta OK')
 process.exit(fallas ? 1 : 0)

@@ -39,6 +39,7 @@ drop policy if exists funnel_restaurantes_sel on public.funnel_restaurantes;
 create policy funnel_restaurantes_sel on public.funnel_restaurantes for select to authenticated
   using (public.funnel_es_staff());
 revoke delete, truncate on public.funnel_restaurantes from anon, authenticated;
+revoke all on public.funnel_restaurantes from anon;
 
 -- ── 3. horarios ───────────────────────────────────────────────────────────
 create table if not exists public.funnel_horarios (
@@ -81,7 +82,9 @@ comment on column public.funnel_prospectos.carta_correo is
 create or replace function public.funnel_cita_guardia() returns trigger
   language plpgsql set search_path to 'public', 'pg_temp' as $$
 begin
-  if current_setting('kux.confirmando', true) is distinct from 'si' then
+  -- Solo la función de confirmar (corre como su dueño, no como la cuenta del equipo) puede
+  -- poner la confirmación: la marca de sesión sola no alcanza (revisión ciber, S3).
+  if current_setting('kux.confirmando', true) is distinct from 'si' or current_user in ('authenticated','anon') then
     if new.cita_confirmada_en is distinct from old.cita_confirmada_en
        or new.cita_confirmada_por is distinct from old.cita_confirmada_por
        or new.carta_whatsapp is distinct from old.carta_whatsapp
@@ -97,6 +100,9 @@ begin
       new.carta_whatsapp := false; new.carta_correo := false;
     end if;
   end if;
+  -- El consentimiento es de ESE teléfono y ESE correo: si cambian, se pierde (siempre).
+  if new.telefono is distinct from old.telefono then new.carta_whatsapp := false; end if;
+  if new.email is distinct from old.email then new.carta_correo := false; end if;
   return new;
 end $$;
 drop trigger if exists trg_funnel_cita_guardia on public.funnel_prospectos;
@@ -117,7 +123,7 @@ create trigger trg_funnel_cita_guardia_alta before insert on public.funnel_prosp
 
 -- ¿Se puede citar ahí a esa hora? null = sí; si no, el motivo en español.
 create or replace function public.funnel_horario_problema(p_rest bigint, p_cuando timestamptz, p_excluir bigint default null)
-  returns text language plpgsql stable security definer set search_path to 'public', 'pg_temp' as $$
+  returns text language plpgsql volatile security definer set search_path to 'public', 'pg_temp' as $$
 declare v_local timestamp := p_cuando at time zone 'America/Guatemala'; v_cupo int; v_ocup int;
 begin
   if p_rest is null or not exists (select 1 from public.funnel_restaurantes where id = p_rest and activo) then
@@ -126,9 +132,11 @@ begin
   if not exists (select 1 from public.funnel_horarios where restaurante_id = p_rest and activo) then
     return 'ese lugar todavía no tiene horarios: pedile al supervisor que los cargue';
   end if;
+  -- FOR UPDATE: dos citas al mismo tiempo al último cupo esperan su turno (revisión ciber, S2).
   select cupo into v_cupo from public.funnel_horarios
    where restaurante_id = p_rest and activo
-     and dia_semana = extract(dow from v_local)::int and hora = v_local::time;
+     and dia_semana = extract(dow from v_local)::int and hora = v_local::time
+   for update;
   if v_cupo is null then return 'ese día y hora no es un horario del lugar'; end if;
   select count(*) into v_ocup from public.funnel_prospectos
    where restaurante_id = p_rest and presenta_en = p_cuando and estado = 'asistira'
@@ -164,6 +172,7 @@ begin
     raise exception 'no autorizado';
   end if;
   if p.etapa <> 'telemarketing' then raise exception 'este prospecto ya no está en telemarketing'; end if;
+  if p.recepcion_en is not null then raise exception 'este cliente ya llegó a la sala: lo ve Recepción'; end if;
   if p.estado = 'no_contactable' and not public.funnel_ve_todo() then
     raise exception 'este prospecto ya quedó como no contactable';
   end if;
@@ -285,6 +294,8 @@ begin
     from public.funnel_prospectos p left join public.funnel_agentes a on a.id = p.tmk_id
    where p.estado = 'asistira' and p.etapa = 'telemarketing'
      and p.presenta_en >= now() - interval '1 day'
+     and p.recepcion_en is null
+     and (public.funnel_ve_todo() or (p.tmk_id is not null and p.tmk_id in (select public.funnel_ve_equipo())))
    order by (p.cita_confirmada_en is not null), p.presenta_en, p.id
    limit 500;
 end $$;
@@ -299,11 +310,14 @@ declare p public.funnel_prospectos%rowtype; v_err text;
 begin
   if not public.funnel_puede('confirmar_citas') then raise exception 'no autorizado'; end if;
   select * into p from public.funnel_prospectos where id = p_id for update;
-  if not found or p.estado <> 'asistira' or p.etapa <> 'telemarketing' then
+  if not found or not coalesce((public.funnel_ve_todo() or (p.tmk_id is not null and p.tmk_id in (select public.funnel_ve_equipo()))), false) then raise exception 'no autorizado'; end if;
+  if p.estado <> 'asistira' or p.etapa <> 'telemarketing' then
     raise exception 'esta cita ya no está pendiente';
   end if;
+  if p.recepcion_en is not null then raise exception 'este cliente ya llegó a la sala: lo ve Recepción'; end if;
   if p_cuando is null then raise exception 'poné el día y la hora'; end if;
   if p_cuando < now() - interval '5 minutes' then raise exception 'esa fecha y hora ya pasó'; end if;
+  if p_cuando > now() + interval '180 days' then raise exception 'la fecha queda muy lejos (máximo 6 meses)'; end if;
   v_err := public.funnel_horario_problema(p_restaurante, p_cuando, p.id);
   if v_err is not null then raise exception '%', v_err; end if;
   if coalesce(p_correo, false) and coalesce(btrim(p.email), '') !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then
@@ -334,9 +348,11 @@ begin
   p_motivo := nullif(left(btrim(coalesce(p_motivo, '')), 300), '');
   if p_motivo is null then raise exception 'escribí el motivo para el telemarketer'; end if;
   select * into p from public.funnel_prospectos where id = p_id for update;
-  if not found or p.estado <> 'asistira' or p.etapa <> 'telemarketing' then
+  if not found or not coalesce((public.funnel_ve_todo() or (p.tmk_id is not null and p.tmk_id in (select public.funnel_ve_equipo()))), false) then raise exception 'no autorizado'; end if;
+  if p.estado <> 'asistira' or p.etapa <> 'telemarketing' then
     raise exception 'esta cita ya no está pendiente';
   end if;
+  if p.recepcion_en is not null then raise exception 'este cliente ya llegó a la sala: lo ve Recepción'; end if;
   update public.funnel_prospectos
      set estado = 'interesado', presenta_en = null, restaurante_id = null,
          comentario = left('Cita regresada: ' || p_motivo, 500), actualizado_en = now()
