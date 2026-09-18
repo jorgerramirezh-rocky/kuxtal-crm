@@ -357,6 +357,17 @@
   .est{border:1px solid var(--linea);background:#fafbfc;border-radius:9px;padding:8px 11px;font-size:12px;font-weight:600;color:var(--tinta);cursor:pointer;min-height:38px}
   .est.on{color:#fff;border-color:transparent}
   .est:active{transform:scale(.96)}
+  /* bloque 2: resultado de la llamada — botones grandes, pensados para el pulgar */
+  .resrow{display:flex;gap:7px;flex-wrap:wrap}
+  .res{flex:1 1 0;min-width:0;min-height:44px;border:1px solid var(--linea);background:#fafbfc;border-radius:11px;padding:9px 6px;font-size:13.5px;line-height:1.2;overflow-wrap:anywhere;font-weight:700;color:var(--tinta);cursor:pointer;font-family:inherit}
+  .res.on{background:var(--kux);border-color:var(--kux);color:#fff}
+  .res.ok{border-color:#4b6b0b;color:#4b6b0b}
+  .res.conf{background:#b3261e;border-color:#b3261e;color:#fff}
+  .res.no{border-color:#b3261e;color:#b3261e}
+  .res:disabled{opacity:.5;cursor:wait}
+  .res:active{transform:scale(.97)}
+  .res:focus-visible{outline:3px solid rgba(27,54,93,.35);outline-offset:2px}
+  @media (max-width:380px){.res{font-size:12.5px;padding:8px 4px}}
   /* En el CRM ".estados" lleva margin-left:auto; dentro del embudo NO */
   #embudo .estados{margin-left:0;gap:6px}
   /* ".sub" del embudo (contenedor de campos) va SCOPEADO para no chocar con .panel .sub del CRM */
@@ -569,7 +580,7 @@
 <!-- F4: Expediente de la reserva (fólder del viaje) — traído del embudo -->
 <div id="expOv" role="dialog" aria-modal="true" aria-label="Expediente de la reserva"><div class="expcard" id="expCard"></div></div>
 
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <!-- MODAL editar socio -->
 <div id="modal" class="modal" style="display:none">
@@ -1853,9 +1864,9 @@ async function expedienteHTML(x){
     const ps=await getJSON('funnel_prospectos?select=id,creado_en,presenta_en,recepcion_en,baja_en,motivo_baja&socio_id=eq.'+x.id);
     ps.forEach(p=>{
       if(p.creado_en) ev.push({f:String(p.creado_en).slice(0,10), ic:'ic-target', t:'Entró al embudo como prospecto (lead)', s:''});
-      if(p.presenta_en) ev.push({f:String(p.presenta_en).slice(0,10), ic:'ic-bell', t:'Citado a presentación', s:''});
-      if(p.recepcion_en) ev.push({f:String(p.recepcion_en).slice(0,10), ic:'ic-users', t:'Asistió a la presentación', s:''});
-      if(p.baja_en) ev.push({f:String(p.baja_en).slice(0,10), ic:'ic-ban', t:'Baja del club', s:p.motivo_baja||''});
+      if(p.presenta_en) ev.push({f:partesGT(p.presenta_en).d, ic:'ic-bell', t:'Citado a presentación', s:''});
+      if(p.recepcion_en) ev.push({f:partesGT(p.recepcion_en).d, ic:'ic-users', t:'Asistió a la presentación', s:''});
+      if(p.baja_en) ev.push({f:partesGT(p.baja_en).d, ic:'ic-ban', t:'Baja del club', s:p.motivo_baja||''});
     });
   }catch(e){}
   // Contratos firmados (funnel_contratos.socio_id apunta directo al socio — confirmado en la base)
@@ -2192,7 +2203,18 @@ let esGerente=false, verTodo=false, miAgente=null;
 let ESTADOS=[], RESTAS=[], AGENTES=[], MEMBS=[], PLANES=[], BASES=[], leads=[], todos=[], cierreLeads=[];
 let funTab='', sub='pend', funCargado=false;
 const puedeEmbudo=()=> verTodo || ['tmk','telemarketing'].includes(ROLE);
-const hoyStr=()=>new Date().toISOString().slice(0,10);
+// Hora de Guatemala (UTC−6, sin horario de verano). Antes «hoy» salía de toISOString(),
+// que es hora de Londres: después de las 6 de la tarde el CRM creía que ya era mañana.
+const TZ_GT='America/Guatemala';
+function partesGT(ts){
+  if(!ts) return {d:'',h:''};
+  const dt=new Date(ts); if(isNaN(dt.getTime())) return {d:'',h:''};
+  const f=new Intl.DateTimeFormat('en-CA',{timeZone:TZ_GT,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(dt);
+  const g=t=>(f.find(x=>x.type===t)||{}).value||'';
+  return {d:g('year')+'-'+g('month')+'-'+g('day'), h:g('hour')+':'+g('minute')};
+}
+function tsGT(d,h){ return d?(d+'T'+(h||'09:00')+':00-06:00'):null; }
+function hoyStr(){ return partesGT(new Date().toISOString()).d; }
 const estDe=c=>ESTADOS.find(e=>e.clave===c)||{clave:c,etiqueta:c,color:'#8a94a6'};
 
 // ── REST helpers (con refresh en 401) — usan la sesión del CRM ──
@@ -2237,6 +2259,8 @@ async function funArrancar(){
     RESTAS=(await getJSON("funnel_restaurantes?select=*&activo=eq.true&order=nombre.asc"))||[];
     MEMBS=(await getJSON("funnel_membresias?select=*&activo=eq.true&order=orden.asc"))||[];
     PLANES=(await getJSON("funnel_planes_pago?select=*&activo=eq.true&order=orden.asc"))||[];
+    // Bloque 2: el tope de intentos lo pone gerencia (funnel_parametros). Si no se puede leer, 3.
+    try{ const pr=await getJSON("funnel_parametros?select=valor&clave=eq.tmk_intentos_max"); if(pr&&pr[0]&&Number(pr[0].valor)>=2) TOPE_INTENTOS=Number(pr[0].valor); }catch(_e){}
     if(verTodo) AGENTES=(await getJSON("funnel_agentes?select=*&order=nombre.asc"))||[];
     // Bloque 1: la persona se ata a su CUENTA (user_id), no a su correo.
     const ag=UID?await getJSON("funnel_agentes?select=id,nombre,rol,email&activo=eq.true&user_id=eq."+encodeURIComponent(UID)):null;
@@ -2275,7 +2299,7 @@ function opAgentes(rol,sel){ return AGENTES.filter(a=>a.activo&&a.rol===rol).map
 
 // ── RECEPCIÓN (sala de ventas: los citados de HOY llegan, se valida, califica y asigna) ──
 // (M1c) citadosDeHoy() es pura → qa/marco.mjs.
-function citadosDeHoy(list,hoy){ return (list||[]).filter(l=>l.presenta_en&&String(l.presenta_en).slice(0,10)===hoy); }
+function citadosDeHoy(list,hoy){ return (list||[]).filter(l=>l.presenta_en&&partesGT(l.presenta_en).d===hoy); }
 let recepSub='hoy';
 async function vistaRecepcion(){
   $('funCap').textContent='Recepción de sala: marcá la llegada del citado, calificá y asigná vendedor/cerrador.';
@@ -2305,7 +2329,7 @@ async function marcarLlegada(id,btn){
 }
 function recepCard(l){
   const rest=(RESTAS.find(r=>r.id==l.restaurante_id)||{}).nombre||'';
-  const cita=l.presenta_en?(String(l.presenta_en).slice(0,10)+' '+String(l.presenta_en).slice(11,16)):'sin fecha de cita';
+  const cita=l.presenta_en?(partesGT(l.presenta_en).d+' '+partesGT(l.presenta_en).h):'sin fecha de cita';
   const llegada=l.recepcion_en
     ? `<span class="tag" style="background:#e9f7ef;color:#1a8a54">Llegó · ${esc(new Date(l.recepcion_en).toLocaleTimeString('es-GT',{hour:'2-digit',minute:'2-digit'}))}</span>`
     : `<button class="est" style="background:var(--kux);color:#fff;border-color:var(--kux)" onclick="marcarLlegada(${l.id},this)">Marcar llegada</button>`;
@@ -2665,7 +2689,7 @@ async function guardarExp(){
 
 // ── MI DÍA ──
 async function cargarMiDia(){
-  $('funCap').textContent = miAgente ? ('Tu lista de hoy · '+esc(miAgente.nombre)) : 'Tu lista del día.';
+  $('funCap').textContent = miAgente ? ('Tu lista de hoy · '+miAgente.nombre) : 'Tu lista del día.';
   $('funCont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
   if(!miAgente){
     $('funCont').innerHTML = esGerente
@@ -2673,42 +2697,46 @@ async function cargarMiDia(){
       : `<div class="vacio"><b>Todavía no estás en el equipo de TMK</b><p>Pedile a gerencia que te agregue en la pestaña Equipo con este correo: <b>${esc(USER)}</b>.</p></div>`;
     return;
   }
-  // Distinguí ERROR real (HTTP/permiso) de vacío legítimo: getJSON se traga los errores
-  // y devuelve [] → "no tenés nada" MENTIROSO. Acá miramos r.ok de verdad.
+  // Bloque 2: la lista sale de funnel_tmk_mi_lista() — solo nombre, teléfono y lo de la gestión.
+  // Distinguí ERROR real (HTTP/permiso) de vacío legítimo: nada de «no tenés nada» MENTIROSO.
   let rows;
   try{
-    const r=await api("funnel_prospectos?select=*&tmk_id=eq."+miAgente.id+"&order=recontacto_en.asc.nullslast,id.asc");
+    const r=await api("rpc/funnel_tmk_mi_lista",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
     if(!r.ok) throw new Error('HTTP '+r.status);
     rows=await r.json();
   }catch(e){
     $('funCont').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar tu día</b><p>Puede ser la conexión. <b onclick="funIrTab('midia')" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`;
     return;
   }
-  leads=ordenarMiDia(rows||[],hoyStr());
+  leads=ordenarMiDia(rows||[],hoyStr()); RECIEN.clear(); BORRADOR={}; CONFIRMA={};
   renderWork();
 }
 // (M1b) Orden del día: recontactos VENCIDOS primero (más viejo arriba), después los
-// agendados a futuro, y al final los que no tienen fecha (por id). Pura → qa/marco.mjs.
+// agendados a futuro, y al final los que no tienen fecha (por id). El día se mide en
+// hora de Guatemala (partesGT). Pura → qa/marco.mjs.
 function ordenarMiDia(arr,hoy){
   const key=l=>{
-    const f=l.recontacto_en?String(l.recontacto_en):'';
-    if(f&&f.slice(0,10)<=hoy) return [0,f];
-    if(f) return [1,f];
-    return [2,String(l.id==null?'':l.id).padStart(14,'0')];
+    const f=l.recontacto_en?new Date(l.recontacto_en).getTime():NaN;
+    if(!isNaN(f)&&partesGT(l.recontacto_en).d<=hoy) return [0,f];
+    if(!isNaN(f)) return [1,f];
+    return [2,Number(l.id)||0];
   };
-  return (arr||[]).slice().sort((a,b)=>{const ka=key(a),kb=key(b);return ka[0]-kb[0]||(ka[1]<kb[1]?-1:ka[1]>kb[1]?1:0);});
+  return (arr||[]).slice().sort((a,b)=>{const ka=key(a),kb=key(b);return ka[0]-kb[0]||ka[1]-kb[1];});
 }
-function pasa(l){ const e=estDe(l.estado);
+// Bloque 2: las pestañas de Mi día, por resultado de la llamada.
+function pasa(l){
+  if(RECIEN.has(l.id)) return true; // lo recién anotado se queda a la vista (p. ej. para citarlo) hasta cambiar de pestaña
   if(sub==='pend') return l.estado==='nuevo'||l.estado==='no_contesta';
-  if(sub==='hoy') return e.dispara_recontacto && l.recontacto_en && String(l.recontacto_en).slice(0,10)<=hoyStr();
-  if(sub==='cont') return !!e.cuenta_como;
-  if(sub==='asi') return e.sig_etapa==='presentacion'||l.estado==='asistira';
+  if(sub==='hoy') return l.estado==='recontactar' && !!l.recontacto_en && partesGT(l.recontacto_en).d<=hoyStr();
+  if(sub==='prog') return l.estado==='recontactar' && !!l.recontacto_en && partesGT(l.recontacto_en).d>hoyStr();
+  if(sub==='cont') return l.estado==='interesado'||l.estado==='no_interesado';
+  if(sub==='asi') return l.estado==='asistira';
   return true;
 }
 function subbar(){
   const cnt=f=>{const p=sub;sub=f;const n=leads.filter(pasa).length;sub=p;return n;};
   return `<div class="subtabs">
-    ${[['pend','Pendientes'],['hoy','Recontactar hoy'],['cont','Contactados'],['asi','Asistirán']].map(([k,t])=>`<button class="st ${sub===k?'on':''}" onclick="sub='${k}';renderWork()">${t} (${cnt(k)})</button>`).join('')}
+    ${[['pend','Por llamar'],['hoy','Volver a llamar hoy'],['prog','Reprogramados'],['cont','Contestaron'],['asi','Citados']].map(([k,t])=>`<button class="st ${sub===k?'on':''}" onclick="sub='${k}';RECIEN.clear();renderWork()">${t} (${cnt(k)})</button>`).join('')}
   </div>`;
 }
 function renderWork(){
@@ -2716,43 +2744,73 @@ function renderWork(){
   $('funCont').innerHTML = subbar() + (list.length? list.map(funCardHTML).join('')
     : `<div class="vacio"><b>Nada por acá</b><p>${sub==='pend'?'Terminaste tus pendientes. ¡Bien!':'Sin registros en esta vista.'}</p></div>`);
 }
-function chipsEstado(l){
-  return ESTADOS.map(e=>{
-    const on=l.estado===e.clave;
-    return `<button class="est ${on?'on':''}" style="${on?('background:'+e.color+';'):''}" onclick="setEstado(${l.id},'${e.clave}')">${esc(e.etiqueta)}</button>`;
-  }).join('');
+// Qué panel tiene abierto cada tarjeta ('contesto' | 'reprog') y lo que ya marcó de socio.
+let ABIERTO={}, SOCIO={}, ENVIANDO=new Set(), TOPE_INTENTOS=3, RECIEN=new Set(), BORRADOR={}, CONFIRMA={};
+// Lo que el telemarketer ya escribió en fecha/hora/restaurante sobrevive a cada repintado.
+function borrador(id,k,v){ (BORRADOR[id]=BORRADOR[id]||{})[k]=v; }
+function valB(id,k,def){ const b=BORRADOR[id]; return (b&&b[k]!==undefined)?b[k]:def; }
+function abrirPanel(id,k){ ABIERTO[id]=ABIERTO[id]===k?null:k; renderWork(); }
+function marcarSocio(id,v){ SOCIO[id]=v; renderWork(); }
+function btnRes(id,k,t,clase,extra){
+  const on=ABIERTO[id]===k, conf=(k==='no_contesta'&&CONFIRMA[id]&&Date.now()-CONFIRMA[id]<5000);
+  return `<button class="res ${clase||''} ${on?'on':''} ${conf?'conf':''}" aria-pressed="${on?'true':'false'}" ${ENVIANDO.has(id)?'disabled':''} ${extra||''} onclick="${k==='no_contesta'?`noContesto(${id})`:`abrirPanel(${id},'${k}')`}">${conf?'¿Seguro? Tocá otra vez':t}</button>`;
+}
+// «No contestó» manda el prospecto a un compañero y no se deshace: pide un segundo toque (5 s).
+function noContesto(id){
+  if(CONFIRMA[id]&&Date.now()-CONFIRMA[id]<5000){ delete CONFIRMA[id]; anotar(id,'no_contesta'); return; }
+  CONFIRMA[id]=Date.now(); renderWork();
+  setTimeout(()=>{ if(CONFIRMA[id]&&Date.now()-CONFIRMA[id]>=5000){ delete CONFIRMA[id]; renderWork(); } },5100);
 }
 function funCardHTML(l){
   const e=estDe(l.estado);
-  const src=l.tipo_lead||(l.base_nombre||'');
-  const showRec=!!e.dispara_recontacto, showAsi=(e.sig_etapa==='presentacion'||l.estado==='asistira');
-  const rec=l.recontacto_en?String(l.recontacto_en):'';
-  const recD=rec.slice(0,10), recH=rec.slice(11,16);
-  const pres=l.presenta_en?String(l.presenta_en):''; const presD=pres.slice(0,10), presH=pres.slice(11,16);
+  const rec=partesGT(l.recontacto_en), pres=partesGT(l.presenta_en);
   const tel=telDig(l.telefono);
-  const call=tel.length>=8?`<a class="ic wa" href="${waHref(l.telefono)}" target="_blank" rel="noopener" onclick="ev(${l.id},'contacto','WhatsApp')">${WA}</a><a class="ic tel" href="${telHref(l.telefono)}" onclick="ev(${l.id},'contacto','Llamada')">${TEL}</a>`:'';
-  const rest=RESTAS.map(r=>`<option value="${r.id}" ${l.restaurante_id==r.id?'selected':''}>${esc(r.nombre)}</option>`).join('');
-  const vencida=recD&&recD<=hoyStr()&&!['asistira','no_interesado'].includes(l.estado);
+  const call=tel.length>=8?`<a class="ic wa" href="${waHref(l.telefono)}" target="_blank" rel="noopener" aria-label="WhatsApp" onclick="ev(${l.id},'contacto','WhatsApp')">${WA}</a><a class="ic tel" href="${telHref(l.telefono)}" aria-label="Llamar" onclick="ev(${l.id},'contacto','Llamada')">${TEL}</a>`:'';
+  const rsel=valB(l.id,'rst',l.restaurante_id);
+  const rest=RESTAS.map(r=>`<option value="${r.id}" ${rsel==r.id?'selected':''}>${esc(r.nombre)}</option>`).join('');
+  const vencida=l.estado==='recontactar'&&!!l.recontacto_en&&new Date(l.recontacto_en).getTime()<=Date.now();
+  const socio=(SOCIO[l.id]!==undefined)?SOCIO[l.id]:l.es_socio;
+  const intentos=Number(l.intentos)||0;
+  const dis=ENVIANDO.has(l.id)?'disabled':'';
+  const panel=ABIERTO[l.id];
+  const verCita=(l.estado==='interesado'||l.estado==='asistira');
   return `<div class="lead" style="border-left-color:${e.color}">
     <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div>
-      <div class="lmeta">${src?`<span class="src">${esc(src)}</span> · `:''}${esc(l.telefono||'sin teléfono')}${vencida?' <span class="warn">recontacto vencido '+esc(recD)+'</span>':''}</div></div>
+      <div class="lmeta">${esc(l.telefono||'sin teléfono')}
+        <span class="tag" style="background:${e.color}22;color:${e.color}">${esc(e.etiqueta)}</span>
+        ${intentos?`<span class="src">sin contestar ${intentos} de ${TOPE_INTENTOS}</span>`:''}
+        ${l.es_socio===true?'<span class="src">socio</span>':''}
+        ${l.estado==='recontactar'&&rec.d?`<span class="${vencida?'warn':'src'}">${vencida?'toca llamar':'volver a llamar'} ${esc(fechaCorta(rec.d))} ${esc(rec.h)}</span>`:''}
+      </div></div>
       <div class="lcall">${call}</div></div>
-    <div class="lbl">Estado · editable</div>
-    <div class="estados">${chipsEstado(l)}</div>
-    <div class="sub ${showRec?'show':''}">
-      <div class="fld"><label>Recontactar — día</label><input type="date" value="${recD}" onchange="setRec(${l.id},this.value,null)"></div>
-      <div class="fld"><label>Hora</label><input type="time" value="${recH}" onchange="setRec(${l.id},null,this.value)"></div>
+    <div class="lbl">Resultado de la llamada</div>
+    <div class="resrow">
+      ${btnRes(l.id,'contesto','Contestó','')}
+      ${btnRes(l.id,'no_contesta','No contestó','')}
+      ${btnRes(l.id,'reprog','Reprogramar','')}
     </div>
-    <div class="sub ${showAsi?'show':''}">
-      <div class="fld"><label>Restaurante</label><select id="rst${l.id}" onchange="setAsi(${l.id},'rest',this.value)"><option value="">Elegir…</option>${rest}</select></div>
-      <div class="fld"><label>Día</label><input type="date" id="prd${l.id}" value="${presD}" onchange="setAsi(${l.id},'presD',this.value)"></div>
-      <div class="fld"><label>Hora</label><input type="time" id="prh${l.id}" value="${presH}" onchange="setAsi(${l.id},'presH',this.value)"></div>
-      <button class="btn" style="margin:0;flex:1 1 100%;background:var(--lima-d)" onclick="citarPresentacion(${l.id})"><svg class="svic" aria-hidden="true"><use href="#ic-bell"/></svg> Citar a presentación</button>
+    <div class="sub ${panel==='contesto'?'show':''}">
+      <div class="fld" style="flex:1 1 100%"><label>¿Ya es socio de Kuxtal?</label>
+        <div class="resrow"><button class="res ${socio===true?'on':''}" aria-pressed="${socio===true}" onclick="marcarSocio(${l.id},true)">Sí, es socio</button><button class="res ${socio===false?'on':''}" aria-pressed="${socio===false}" onclick="marcarSocio(${l.id},false)">No es socio</button></div></div>
+      <div class="fld" style="flex:1 1 100%"><label>¿Le interesa?</label>
+        <div class="resrow"><button class="res ok" ${dis} onclick="anotar(${l.id},'interesado')">Interesado</button><button class="res no" ${dis} onclick="anotar(${l.id},'no_interesado')">No interesado</button></div></div>
     </div>
-    <div class="note"><textarea placeholder="Comentario de la gestión (queda en la bitácora)…" onchange="setCom(${l.id},this.value)">${esc(l.comentario||'')}</textarea></div>
-    <div class="pin ${(showAsi&&l.restaurante_id&&l.presenta_en)?'show':''}"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> Presentación asignada${l.presenta_en?(' · '+esc(String(l.presenta_en).slice(0,10)+' '+String(l.presenta_en).slice(11,16))):''}</div>
+    <div class="sub ${panel==='reprog'?'show':''}">
+      <div class="fld"><label>Volver a llamar — día</label><input type="date" id="rcd${l.id}" min="${hoyStr()}" value="${esc(valB(l.id,'rcd',rec.d))}" onchange="borrador(${l.id},'rcd',this.value)"></div>
+      <div class="fld"><label>Hora</label><input type="time" id="rch${l.id}" value="${esc(valB(l.id,'rch',rec.h))}" onchange="borrador(${l.id},'rch',this.value)"></div>
+      <button class="btn" style="margin:0;flex:1 1 100%" ${dis} onclick="anotar(${l.id},'reprogramar')">Guardar y volver a llamar</button>
+    </div>
+    <div class="sub ${verCita?'show':''}">
+      <div class="fld"><label>Restaurante</label><select id="rst${l.id}" onchange="borrador(${l.id},'rst',this.value)"><option value="">Elegir…</option>${rest}</select></div>
+      <div class="fld"><label>Día</label><input type="date" id="prd${l.id}" min="${hoyStr()}" value="${esc(valB(l.id,'prd',pres.d))}" onchange="borrador(${l.id},'prd',this.value)"></div>
+      <div class="fld"><label>Hora</label><input type="time" id="prh${l.id}" value="${esc(valB(l.id,'prh',pres.h))}" onchange="borrador(${l.id},'prh',this.value)"></div>
+      <button class="btn" style="margin:0;flex:1 1 100%;background:var(--lima-d)" ${dis} onclick="anotar(${l.id},'citar')"><svg class="svic" aria-hidden="true"><use href="#ic-bell"/></svg> ${l.estado==='asistira'?'Cambiar la cita':'Citar a presentación'}</button>
+    </div>
+    <div class="note"><textarea aria-label="Nota de la llamada" placeholder="Nota de la llamada (queda en la bitácora)…" onchange="anotarNota(${l.id},this.value)">${esc(l.comentario||'')}</textarea></div>
+    <div class="pin ${(l.estado==='asistira'&&l.restaurante_id&&pres.d)?'show':''}"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> Citado${pres.d?(' · '+esc(fechaCorta(pres.d)+' '+pres.h)):''}</div>
   </div>`;
 }
+function fechaCorta(d){ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(d||''); return m?(m[3]+'/'+m[2]):(d||''); }
 function localL(id){ return leads.find(x=>x.id===id)||todos.find(x=>x.id===id); }
 // Optimista en el llamador (pinta ya); acá reintenta ante 5xx/corte de red y devuelve
 // un booleano HONESTO: false = de verdad no se guardó → el llamador revierte (no miente).
@@ -2772,35 +2830,68 @@ async function funPatchLead(id,body,intento){
   }
 }
 async function ev(id,tipo,nota){ try{ await api("funnel_eventos",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({prospecto_id:id,tipo,actor:USER,payload:{nota}})}); }catch(e){} }
-async function setEstado(id,clave){ const l=localL(id); if(!l)return; const prev=l.estado; l.estado=clave;
-  const e=estDe(clave); if(e.dispara_recontacto&&!l.recontacto_en){ l.recontacto_en=hoyStr()+'T09:00:00'; }
+// Bloque 2: el resultado lo guarda la BASE (funnel_tmk_resultado) con sus reglas: el
+// telemarketer ya no edita la fila. Devuelve {ok,data} o {ok:false,msg} con el motivo
+// que dio el servidor (en español). Recibe apiFn para stubearse en QA.
+async function rpcResultado(params,apiFn){
+  try{
+    const r=await apiFn("rpc/funnel_tmk_resultado",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(params)});
+    if(r.ok) return {ok:true,data:await r.json()};
+    let msg='No se pudo guardar';
+    try{ const e=await r.json(); if(e&&e.message&&r.status<500) msg=String(e.message); }catch(_e){}
+    return {ok:false,msg:msg.charAt(0).toUpperCase()+msg.slice(1)};
+  }catch(e){ return {ok:false,msg:'Se cortó la conexión, probá de nuevo'}; }
+}
+// Arma los parámetros de cada resultado y valida lo que se puede validar antes de mandar. Pura → qa/marco.mjs.
+function paramsResultado(id,res,f){
+  f=f||{};
+  const p={p_id:id,p_resultado:res};
+  if(res==='interesado'||res==='no_interesado'){
+    if(f.socio!==true&&f.socio!==false) return {error:'Marcá primero si ya es socio'};
+    p.p_es_socio=f.socio;
+  }else if(res==='reprogramar'){
+    if(!f.dia) return {error:'Poné el día para volver a llamar'};
+    if(!f.hora) return {error:'Poné la hora para volver a llamar'};
+    p.p_cuando=tsGT(f.dia,f.hora);
+  }else if(res==='citar'){
+    const c=cuerpoCita(f.rest,f.dia,f.hora); if(c.error) return c;
+    Object.assign(p,c.params);
+    if(f.socio===true||f.socio===false) p.p_es_socio=f.socio;
+  }else if(res!=='no_contesta'){ return {error:'Resultado desconocido'}; }
+  return {params:p};
+}
+async function anotar(id,res){
+  const l=localL(id); if(!l||ENVIANDO.has(id)) return;
+  const g=k=>{const e=$(k+id);return e?e.value:'';};
+  const socio=(SOCIO[id]!==undefined)?SOCIO[id]:l.es_socio;
+  const pr=paramsResultado(id,res,{socio, dia:g(res==='citar'?'prd':'rcd'), hora:g(res==='citar'?'prh':'rch'), rest:g('rst')});
+  if(pr.error){ toast(pr.error); return; }
+  ENVIANDO.add(id); renderWork();
+  const r=await rpcResultado(pr.params,api);
+  ENVIANDO.delete(id);
+  if(!r.ok){ renderWork(); toast(r.msg); return; }
+  const d=r.data||{};
+  ABIERTO[id]=null; delete SOCIO[id]; delete BORRADOR[id]; RECIEN.add(id);
+  if(d.estado==='no_contactable'){ leads=leads.filter(x=>x.id!==id); toast('Quedó como no contactable ('+d.intentos+' intentos)'); }
+  else if(d.sigue_conmigo===false){ leads=leads.filter(x=>x.id!==id); toast('No contestó: pasa a un compañero (intento '+d.intentos+' de '+TOPE_INTENTOS+')'); }
+  else{
+    Object.assign(l,{estado:d.estado,intentos:d.intentos});
+    if(pr.params.p_es_socio!==undefined) l.es_socio=pr.params.p_es_socio;
+    if(res==='reprogramar') l.recontacto_en=pr.params.p_cuando;
+    if(res==='citar'){ l.restaurante_id=pr.params.p_restaurante; l.presenta_en=pr.params.p_cuando; }
+    if(res==='interesado'||res==='no_interesado'||res==='citar') l.recontacto_en=null;
+    if(res==='no_interesado'||res==='reprogramar'){ l.presenta_en=null; l.restaurante_id=null; }
+    toast({interesado:'Anotado: interesado. Ya podés citarlo aquí abajo',no_interesado:'Anotado: no interesado',reprogramar:'Listo: te vuelve a vos a esa hora',citar:'Citado a presentación',no_contesta:'Anotado: no contestó'}[res]||'Anotado');
+  }
   renderWork();
-  if(await funPatchLead(id,{estado:clave,recontacto_en:l.recontacto_en})){ ev(id,'estado',estDe(clave).etiqueta); toast('Estado: '+estDe(clave).etiqueta); }
-  else{ l.estado=prev; renderWork(); toast('No se pudo guardar'); }
 }
-async function setRec(id,d,h){ const l=localL(id); if(!l)return; const cur=(l.recontacto_en||(hoyStr()+'T09:00:00')); const D=d||cur.slice(0,10), H=h||cur.slice(11,16)||'09:00'; l.recontacto_en=D+'T'+H+':00';
-  if(await funPatchLead(id,{recontacto_en:l.recontacto_en})){ ev(id,'recontacto',l.recontacto_en); toast('Recontacto agendado'); } }
-async function setAsi(id,k,v){ const l=localL(id); if(!l)return;
-  if(k==='rest'){ l.restaurante_id=v?Number(v):null; if(await funPatchLead(id,{restaurante_id:l.restaurante_id})){ ev(id,'presentacion',{restaurante_id:l.restaurante_id}); toast('Restaurante asignado'); renderWork(); } }
-  else{ const cur=(l.presenta_en||(hoyStr()+'T19:00:00')); const D=k==='presD'?v:cur.slice(0,10), H=k==='presH'?v:cur.slice(11,16)||'19:00'; l.presenta_en=D+'T'+H+':00'; if(await funPatchLead(id,{presenta_en:l.presenta_en})) toast('Presentación agendada'); }
-}
-// (M1b) El comentario de la gestión queda en la fila Y en la bitácora (funnel_eventos tipo 'gestion').
-let comT; function setCom(id,v){ const l=localL(id); if(l)l.comentario=v; clearTimeout(comT);
-  comT=setTimeout(async()=>{ if(await funPatchLead(id,{comentario:v}) && String(v||'').trim()) ev(id,'gestion',String(v).trim()); },400); }
-// (M1b) Citar a presentación: valida restaurante + día y guarda presenta_en + restaurante_id
-// + estado 'asistira' en UN solo PATCH. cuerpoCita() es pura → qa/marco.mjs.
+let notaT={}; function anotarNota(id,v){ const t=String(v||'').trim(); if(!t) return; clearTimeout(notaT[id]);
+  notaT[id]=setTimeout(async()=>{ const r=await rpcResultado({p_id:id,p_resultado:'nota',p_comentario:t},api); if(r.ok){ const l=localL(id); if(l) l.comentario=t; toast('Nota guardada'); } else toast(r.msg); },400); }
+// (M1b) Citar a presentación: valida restaurante + día. La hora es de Guatemala. Pura → qa/marco.mjs.
 function cuerpoCita(rid,D,H){
   if(!rid) return {error:'Elegí el restaurante'};
   if(!D) return {error:'Poné el día de la presentación'};
-  return {body:{presenta_en:D+'T'+(H||'19:00')+':00',restaurante_id:Number(rid),estado:'asistira'}};
-}
-async function citarPresentacion(id){
-  const l=localL(id); if(!l) return;
-  const g=k=>{const e=$(k+id);return e?e.value:'';};
-  const c=cuerpoCita(g('rst')||l.restaurante_id, g('prd')||String(l.presenta_en||'').slice(0,10), g('prh')||String(l.presenta_en||'').slice(11,16));
-  if(c.error){ toast(c.error); return; }
-  if(await funPatchLead(id,c.body)){ Object.assign(l,c.body); ev(id,'citado','Presentación '+c.body.presenta_en.slice(0,10)+' '+c.body.presenta_en.slice(11,16)); toast('Citado a presentación'); renderWork(); }
-  else toast('No se pudo citar');
+  return {params:{p_restaurante:Number(rid),p_cuando:tsGT(D,H||'19:00')}};
 }
 
 // ── TODOS (gerencia) ──
@@ -2832,9 +2923,9 @@ async function cargarTodos(){
 
 // ── CARGAR BASE (gerencia) ──
 async function vistaCargar(){
-  $('funCap').textContent='Subí una base de prospectos y repartila equitativamente entre los TMK.';
+  $('funCap').textContent='Subí una base de prospectos y repartila pareja y al azar entre los TMK.';
   BASES=await getJSON("funnel_bases?select=*&order=id.desc&limit=20");
-  const activos=AGENTES.filter(a=>a.rol==='tmk'&&a.activo).length;
+  const activos=AGENTES.filter(a=>a.rol==='tmk'&&a.activo&&a.user_id).length;
   $('funCont').innerHTML=`
     <div class="panel">
       <h3>Nueva base</h3>
@@ -2848,7 +2939,7 @@ async function vistaCargar(){
     <div id="repPrev"></div>
     <div class="panel">
       <h3>Bases cargadas</h3>
-      <div class="h">Repartí los prospectos SIN asignar entre los ${activos} TMK activos (equitativo, round-robin). ${activos?'':'<svg class="svic" aria-hidden="true"><use href="#ic-alert"/></svg> No hay TMK activos — agregá en Equipo.'}</div>
+      <div class="h">Repartí los prospectos SIN asignar entre los ${activos} TMK activos con cuenta: a cada uno le toca la misma cantidad, y quién recibe a quién va al azar. ${activos?'':'<svg class="svic" aria-hidden="true"><use href="#ic-alert"/></svg> No hay TMK activos — agregá en Equipo.'}</div>
       <div id="baseList"></div>
     </div>`;
   pintarBases();
@@ -2877,12 +2968,16 @@ async function crearBase(){
 // ── (M1a) REPARTO EQUITATIVO round-robin, con PREVIEW antes de escribir ──
 // Mismo criterio que el RPC funnel_repartir: los TMK activos se expanden por su PESO
 // (peso 2 = recibe doble turno) y los prospectos SIN tmk_id se reparten en ronda por id.
-// El offset rota quién arranca (botón "Re-repartir"). Función PURA → probada en qa/marco.mjs.
-function repartoRoundRobin(prospectos,agentes,offset){
-  const tmk=(agentes||[]).filter(a=>a.activo&&a.rol==='tmk').slice().sort((x,y)=>x.id-y.id);
+// El offset rota quién arranca. Bloque 2: con «semilla» el orden de los prospectos se
+// baraja (parejo en cantidad, al azar en quién le toca a quién). La semilla fija hace que
+// la vista previa y lo que se guarda sean EL MISMO reparto. Función PURA → qa/marco.mjs.
+function azarConSemilla(semilla){ let a=(Number(semilla)>>>0)||1; return function(){ a=(a+0x6D2B79F5)>>>0; let t=a; t=Math.imul(t^(t>>>15),t|1); t^=t+Math.imul(t^(t>>>7),t|61); return ((t^(t>>>14))>>>0)/4294967296; }; }
+function repartoRoundRobin(prospectos,agentes,offset,semilla){
+  const tmk=(agentes||[]).filter(a=>a.activo&&a.rol==='tmk'&&a.user_id).slice().sort((x,y)=>x.id-y.id); // sin cuenta no ve su lista
   const slots=[]; tmk.forEach(a=>{ const w=Math.max(1,Number(a.peso)||1); for(let i=0;i<w;i++) slots.push(a.id); });
   const plan={}; tmk.forEach(a=>{plan[a.id]=[];});
   const libres=(prospectos||[]).filter(p=>!p.tmk_id).slice().sort((x,y)=>x.id-y.id);
+  if(semilla!=null){ const rnd=azarConSemilla(semilla); const barajar=a=>{ for(let i=a.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); const t=a[i]; a[i]=a[j]; a[j]=t; } }; barajar(slots); barajar(libres); } // también los turnos: el sobrante no le cae siempre al mismo
   if(!slots.length) return {plan,sinAsignar:libres,total:libres.length};
   libres.forEach((p,i)=>{ plan[slots[(i+(Number(offset)||0))%slots.length]].push(p); });
   return {plan,sinAsignar:[],total:libres.length};
@@ -2902,18 +2997,21 @@ async function aplicarReparto(plan,apiFn,actor){
       filas.forEach(p=>evs.push({prospecto_id:p.id,tipo:'asignado',actor:actor||'crm',payload:{agente_id:Number(aid)}}));
     }
   }catch(e){ err=e; } // (revisión adversaria) si un PATCH intermedio falla, los ya asignados NO se quedan sin bitácora
-  if(evs.length){ try{ await apiFn("funnel_eventos",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(evs)}); }catch(e){/* el reparto ya quedó; el evento es bitácora */} }
+  // El reparto ya quedó; la bitácora se intenta y, si falla, SE AVISA (antes se callaba).
+  if(evs.length){ let bitOk=false; try{ const rb=await apiFn("funnel_eventos",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify(evs)}); bitOk=!!(rb&&rb.ok); }catch(e){}
+    if(!bitOk&&typeof toast==='function') toast('Repartido, pero no se pudo anotar en la bitácora'); }
   if(err) throw err;
   return n;
 }
-let REP={base:null,nombre:'',offset:0,prosp:[],asignados:0};
+let REP={base:null,nombre:'',offset:0,semilla:null,prosp:[],asignados:0};
+function semillaNueva(){ try{ return crypto.getRandomValues(new Uint32Array(1))[0]; }catch(e){ return Math.floor(Math.random()*4294967296); } }
 async function repartir(baseId,btn){
   if(btn){ btn.disabled=true; btn.textContent='Calculando…'; }
   try{
     if(!AGENTES.length) AGENTES=(await getJSON("funnel_agentes?select=*"))||[];
     const rows=await getAllRows("funnel_prospectos?select=id,nombre,tmk_id&base_id=eq."+baseId+"&order=id.asc");
     const b=BASES.find(x=>x.id===baseId)||{};
-    REP={base:baseId,nombre:b.nombre||('base '+baseId),offset:0,prosp:rows,asignados:rows.filter(p=>p.tmk_id).length};
+    REP={base:baseId,nombre:b.nombre||('base '+baseId),offset:0,semilla:semillaNueva(),prosp:rows,asignados:rows.filter(p=>p.tmk_id).length};
     pintarPreviewReparto();
     const pv=$('repPrev'); if(pv) pv.scrollIntoView({behavior:'smooth',block:'start'});
   }catch(e){ toast('No pude leer la base'); }
@@ -2921,7 +3019,7 @@ async function repartir(baseId,btn){
 }
 function pintarPreviewReparto(){
   const box=$('repPrev'); if(!box||REP.base==null) return;
-  const r=repartoRoundRobin(REP.prosp,AGENTES,REP.offset);
+  const r=repartoRoundRobin(REP.prosp,AGENTES,REP.offset,REP.semilla);
   const agN=id=>{const a=AGENTES.find(x=>x.id==id);return a?a.nombre:('agente '+id);};
   const filas=Object.entries(r.plan).map(([aid,arr])=>{
     const nombres=arr.slice(0,3).map(p=>esc(p.nombre)).join(', ')+(arr.length>3?'…':'');
@@ -2934,17 +3032,17 @@ function pintarPreviewReparto(){
     ${filas||'<div class="cap">No hay TMK activos — agregá en la pestaña Equipo.</div>'}${sin}
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
       <button class="btn" style="margin:0;flex:1;background:var(--lima-d)" id="repOk" onclick="confirmarReparto(this)" ${r.total&&Object.keys(r.plan).length?'':'disabled'}>Confirmar reparto (${r.total})</button>
-      <button class="btn" style="margin:0;flex:none" onclick="REP.offset++;pintarPreviewReparto()">Re-repartir</button>
-      <button class="btn" style="margin:0;flex:none;background:var(--gris)" onclick="REP={base:null,nombre:'',offset:0,prosp:[],asignados:0};$('repPrev').innerHTML=''">Cancelar</button>
+      <button class="btn" style="margin:0;flex:none" onclick="REP.semilla=semillaNueva();pintarPreviewReparto()">Barajar de nuevo</button>
+      <button class="btn" style="margin:0;flex:none;background:var(--gris)" onclick="REP={base:null,nombre:'',offset:0,semilla:null,prosp:[],asignados:0};$('repPrev').innerHTML=''">Cancelar</button>
     </div></div>`;
 }
 async function confirmarReparto(btn){
   btn.disabled=true; btn.textContent='Repartiendo…';
   try{
-    const r=repartoRoundRobin(REP.prosp,AGENTES,REP.offset);
+    const r=repartoRoundRobin(REP.prosp,AGENTES,REP.offset,REP.semilla);
     const n=await aplicarReparto(r.plan,api,USER);
     toast(n>0?('Repartidos '+n+' entre los TMK'):'Nada por repartir (ya estaban asignados)');
-    REP={base:null,nombre:'',offset:0,prosp:[],asignados:0};
+    REP={base:null,nombre:'',offset:0,semilla:null,prosp:[],asignados:0};
     await vistaCargar();
   }catch(e){ toast('No se pudo repartir'); btn.disabled=false; btn.textContent='Confirmar reparto'; }
 }

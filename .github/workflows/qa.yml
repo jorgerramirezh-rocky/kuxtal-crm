@@ -26,6 +26,10 @@ jobs:
         run: node qa/check.mjs
       - name: Panel de personas (escapado y reglas de la pantalla)
         run: node qa/panel-personas.mjs
+      - name: Embudo (reparto, hora de Guatemala, resultado de la llamada)
+        run: node qa/marco.mjs
+      - name: Mi día del telemarketer (escapado y lo mínimo a la vista)
+        run: node qa/mi-dia.mjs
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed   # v2.0.5 (pin por SHA)
         with:
           deno-version: v2.x
