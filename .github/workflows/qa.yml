@@ -30,6 +30,8 @@ jobs:
         run: node qa/marco.mjs
       - name: Mi día del telemarketer (escapado y lo mínimo a la vista)
         run: node qa/mi-dia.mjs
+      - name: Citas y carta (horarios, consentimiento, escapado)
+        run: node qa/citas.mjs
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed   # v2.0.5 (pin por SHA)
         with:
           deno-version: v2.x
