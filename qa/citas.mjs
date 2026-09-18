@@ -27,7 +27,7 @@ vm.runInContext([
   "var RESTAS=[{id:1,nombre:'Hotel <b>Real</b>',direccion:'6a av 12-00 z10',mapa_url:'https://maps.app/x'},{id:2,nombre:'Sin mapa',mapa_url:'javascript:alert(1)'}];",
   "var HORARIOS=[{restaurante_id:1,dia_semana:1,hora:'19:00:00',activo:true},{restaurante_id:1,dia_semana:1,hora:'10:30:00',activo:true},{restaurante_id:1,dia_semana:1,hora:'15:00:00',activo:false},{restaurante_id:2,dia_semana:1,hora:'09:00:00',activo:true}];",
   "var CITAS=[], CITA_B={}; function hoyStr(){return '2026-09-18';}",
-  ...['partesGT', 'fechaCorta', 'diaSemana', 'horasDe', 'fechaLarga', 'hora12', 'cartaTexto', 'correoValido', 'enlaceCarta', 'valC', 'citaPendHTML', 'citaConfHTML'].map(extraer),
+  ...['partesGT', 'fechaCorta', 'diaSemana', 'horasDe', 'fechaLarga', 'hora12', 'cartaTexto', 'correoValido', 'enlaceCarta', 'valC', 'resumenHorarios', 'citaPendHTML', 'citaConfHTML'].map(extraer),
 ].join('\n'), ctx)
 
 let fallas = 0
@@ -56,7 +56,14 @@ ok(ml && ml.startsWith('mailto:ana%40correo.gt?subject='), 'correo aceptado: mai
 ok(ctx.enlaceCarta({ ...cita, carta_correo: true, email: 'x@y.z?bcc=otro@mal.com' }, ctx.RESTAS[0], 'correo') === null
    || !ctx.enlaceCarta({ ...cita, carta_correo: true, email: 'x@y.z?bcc=otro@mal.com' }, ctx.RESTAS[0], 'correo').includes('?bcc='), 'un correo con «?bcc=» no agrega destinatarios')
 
+ok(ctx.resumenHorarios(ctx.HORARIOS, 1) === 'Atiende: lun 10:30 a. m. · lun 7:00 p. m.', 'dice qué días y horas atiende el lugar (sin los apagados)')
+ok(ctx.resumenHorarios(ctx.HORARIOS, 9) === 'Este lugar todavía no tiene horarios', 'lugar sin horarios: lo dice')
 let h = ctx.citaPendHTML(cita)
+ok(h.includes('<option value="">Elegir…</option>'), 'la hora trae «Elegir…»: nunca se confirma una hora que nadie eligió')
+ok(/<label for="crs5">Lugar<\/label><select id="crs5"/.test(h), 'los campos tienen nombre accesible (label for)')
+ok(ctx.citaPendHTML({ ...cita, restaurante_id: 7 }).includes('Ese lugar se apagó: elegí otro'), 'cita en un lugar apagado: lo dice')
+const edit = ctx.citaPendHTML({ ...cita, cita_confirmada_en: 'x', carta_whatsapp: true })
+ok(edit.includes('Guardar corrección') && /checked onchange="cb\(5,'wa'/.test(edit), 'corregir una confirmada: arranca con el consentimiento que tenía')
 ok(!h.includes('<img') && !h.includes('<i>x</i>') && !h.includes('<b>Real</b>'), 'tarjeta por confirmar: nombre, telemarketer y lugar escapados')
 ok(h.includes('<option value="19:00" selected>'), 'sin tocar nada: vienen elegidos el día y la hora que puso el telemarketer (lunes 7 p. m.)')
 h = ctx.citaPendHTML({ ...cita, email: 'no-es-correo' })

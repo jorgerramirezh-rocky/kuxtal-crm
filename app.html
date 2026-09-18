@@ -369,6 +369,8 @@
   .res:focus-visible{outline:3px solid rgba(27,54,93,.35);outline-offset:2px}
   @media (max-width:380px){.res{font-size:12.5px;padding:8px 4px}}
   .fld label.chk,.chk{display:inline-flex;align-items:center;gap:8px;margin:4px 16px 4px 0;font-size:14px;font-weight:600;color:var(--tinta);min-height:44px;cursor:pointer}
+  .consent{border:0;padding:0;margin:0;min-width:0}
+  .consent legend{font-size:11px;font-weight:700;color:var(--tinta);margin-bottom:2px;padding:0}
   .fld .chk input,.chk input{width:22px;height:22px;flex:none;padding:0;margin:0;accent-color:var(--kux)}
   .fld label.chk.off,.chk.off{color:var(--gris);cursor:not-allowed}
   /* En el CRM ".estados" lleva margin-left:auto; dentro del embudo NO */
@@ -2261,7 +2263,7 @@ async function funArrancar(){
     ESTADOS.forEach(e=>{ if(!/^#[0-9a-fA-F]{3,8}$/.test(String(e.color||''))) e.color='#8a94a6'; e.clave=String(e.clave||'').replace(/[^a-z0-9_]/gi,''); });
     RESTAS=(await getJSON("funnel_restaurantes?select=*&activo=eq.true&order=nombre.asc"))||[];
     // Bloque 3: el telemarketer cita solo en estos horarios (y el supervisor confirma en ellos).
-    try{ HORARIOS=(await getJSON("funnel_horarios?select=*&activo=eq.true"))||[]; }catch(_e){ HORARIOS=[]; }
+    try{ HORARIOS=(await getJSON("funnel_horarios?select=*&activo=eq.true"))||[]; }catch(_e){ HORARIOS=[]; toast('No pude leer los horarios de los lugares: por ahora no se puede citar. Recargá la página.'); }
     MEMBS=(await getJSON("funnel_membresias?select=*&activo=eq.true&order=orden.asc"))||[];
     PLANES=(await getJSON("funnel_planes_pago?select=*&activo=eq.true&order=orden.asc"))||[];
     // Bloque 2: el tope de intentos lo pone gerencia (funnel_parametros). Si no se puede leer, 3.
@@ -2918,6 +2920,12 @@ function horasDe(horarios,restId,dia){
     .map(h=>String(h.hora||'').slice(0,5)).filter(h=>/^\d{2}:\d{2}$/.test(h)).sort();
 }
 const DIAS=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+// «Atiende: lun 7:00 p. m. · jue 10:30 a. m.» para no probar fecha por fecha. Pura → qa/citas.mjs.
+function resumenHorarios(horarios,restId){
+  const hs=(horarios||[]).filter(h=>h.activo!==false&&String(h.restaurante_id)===String(restId))
+    .sort((a,b)=>(a.dia_semana-b.dia_semana)||String(a.hora).localeCompare(String(b.hora)));
+  return hs.length?('Atiende: '+hs.map(h=>DIAS[h.dia_semana].slice(0,3)+' '+hora12(String(h.hora).slice(0,5))).join(' · ')):'Este lugar todavía no tiene horarios';
+}
 function fechaLarga(ts){
   const p=partesGT(ts); if(!p.d) return '';
   const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(p.d);
@@ -2939,7 +2947,7 @@ function cartaTexto(c,lugar){
     'Hora: '+hora12(partesGT(c&&c.presenta_en).h),
   ];
   if(l.mapa_url&&/^https:\/\/[^\s<>\x22]+$/.test(l.mapa_url)) lineas.push('Cómo llegar: '+l.mapa_url);
-  lineas.push('','Por favor presente esta invitación al llegar. Si necesita cambiar su cita, responda a este mensaje.','','Le esperamos,','Kuxtal Travels · Cada destino, una historia');
+  lineas.push('','Por favor presente esta invitación al llegar. Si necesita cambiar su cita, comuníquese con Kuxtal Travels.','','Le esperamos,','Kuxtal Travels · Cada destino, una historia');
   return lineas.join('\n');
 }
 function correoValido(e){ return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(e||'').trim()); }
@@ -2957,27 +2965,33 @@ async function vistaCitas(){
 }
 function pintarCitas(){
   const pend=CITAS.filter(c=>!c.cita_confirmada_en), conf=CITAS.filter(c=>c.cita_confirmada_en);
+  const confHTML=c=>valC(c.id,'editar',false)?citaPendHTML(c):citaConfHTML(c);
   const sec=(t,arr,fn)=>`<div class="lbl" style="margin-top:6px">${t} (${arr.length})</div>`+(arr.length?arr.map(fn).join(''):`<div class="cap" style="margin-bottom:12px">Nada por acá.</div>`);
-  $('funCont').innerHTML=sec('Por confirmar',pend,citaPendHTML)+sec('Confirmadas',conf,citaConfHTML);
+  $('funCont').innerHTML=sec('Por confirmar',pend,citaPendHTML)+sec('Confirmadas',conf,confHTML);
 }
 function citaPendHTML(c){
   const p=partesGT(c.presenta_en);
   const rid=valC(c.id,'rst',c.restaurante_id), dia=valC(c.id,'dia',p.d), hs=horasDe(HORARIOS,rid,dia);
   const hsel=valC(c.id,'hora',p.h);
-  const rest=RESTAS.map(r=>`<option value="${r.id}" ${String(rid)===String(r.id)?'selected':''}>${esc(r.nombre)}</option>`).join('');
-  const horas=hs.length?hs.map(h=>`<option value="${h}" ${h===hsel?'selected':''}>${esc(hora12(h))}</option>`).join(''):'<option value="">Sin horarios ese día</option>';
+  const apagado=rid&&!RESTAS.some(r=>String(r.id)===String(rid));
+  const rest=(apagado?'<option value="" selected>Ese lugar se apagó: elegí otro</option>':'')+RESTAS.map(r=>`<option value="${r.id}" ${String(rid)===String(r.id)?'selected':''}>${esc(r.nombre)}</option>`).join('');
+  const horas=hs.length?('<option value="">Elegir…</option>'+hs.map(h=>`<option value="${h}" ${h===hsel?'selected':''}>${esc(hora12(h))}</option>`).join('')):'<option value="">Sin horarios ese día</option>';
   const okMail=correoValido(c.email);
+  const edit=!!c.cita_confirmada_en; // corrigiendo una ya confirmada: arranca con lo que tenía
+  const wa=valC(c.id,'wa',edit?!!c.carta_whatsapp:false), mail=valC(c.id,'mail',edit?!!c.carta_correo:false);
   return `<div class="lead" style="border-left-color:#c28b00">
     <div class="ltop"><div><div class="lname">${esc(c.nombre)}</div>
       <div class="lmeta">${esc(c.telefono||'sin teléfono')}${c.es_socio===true?' <span class="src">socio</span>':''} <span class="src">TMK: ${esc(c.tmk_nombre||'—')}</span></div></div></div>
     <div class="sub show">
-      <div class="fld"><label>Lugar</label><select onchange="cb(${c.id},'rst',this.value,true)"><option value="">Elegir…</option>${rest}</select></div>
-      <div class="fld"><label>Día</label><input type="date" min="${hoyStr()}" value="${esc(dia)}" onchange="cb(${c.id},'dia',this.value,true)"></div>
-      <div class="fld"><label>Hora</label><select onchange="cb(${c.id},'hora',this.value)">${horas}</select></div>
-      <div class="fld" style="flex:1 1 100%"><label>¿El cliente aceptó recibir la carta por…?</label>
-        <label class="chk"><input type="checkbox" ${valC(c.id,'wa',false)?'checked':''} onchange="cb(${c.id},'wa',this.checked)"> WhatsApp</label>
-        <label class="chk ${okMail?'':'off'}"><input type="checkbox" ${okMail?'':'disabled'} ${valC(c.id,'mail',false)?'checked':''} onchange="cb(${c.id},'mail',this.checked)"> Correo${okMail?'':' (no tiene correo válido)'}</label></div>
-      <button class="btn" style="margin:0;flex:1 1 100%;background:var(--lima-d)" id="cc${c.id}" onclick="confirmarCita(${c.id},this)"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> Confirmar cita</button>
+      <div class="fld"><label for="crs${c.id}">Lugar</label><select id="crs${c.id}" onchange="cb(${c.id},'rst',this.value,true)">${apagado?'':'<option value="">Elegir…</option>'}${rest}</select></div>
+      <div class="fld"><label for="cdi${c.id}">Día</label><input id="cdi${c.id}" type="date" min="${hoyStr()}" value="${esc(dia)}" onchange="cb(${c.id},'dia',this.value,true)"></div>
+      <div class="fld"><label for="cho${c.id}">Hora</label><select id="cho${c.id}" onchange="cb(${c.id},'hora',this.value)">${horas}</select></div>
+      ${rid&&!apagado?`<div class="cap" style="flex:1 1 100%;margin:0">${esc(resumenHorarios(HORARIOS,rid))}</div>`:''}
+      <fieldset class="consent" style="flex:1 1 100%"><legend>¿El cliente aceptó recibir la carta por…? (preguntale)</legend>
+        <label class="chk"><input type="checkbox" ${wa?'checked':''} onchange="cb(${c.id},'wa',this.checked)"> WhatsApp</label>
+        <label class="chk ${okMail?'':'off'}"><input type="checkbox" ${okMail?'':'disabled'} ${mail&&okMail?'checked':''} onchange="cb(${c.id},'mail',this.checked)"> Correo${okMail?'':' (no tiene correo válido)'}</label></fieldset>
+      <button class="btn" style="margin:0;flex:1 1 100%;background:var(--lima-d)" id="cc${c.id}" onclick="confirmarCita(${c.id},this)"><svg class="svic" aria-hidden="true"><use href="#ic-check"/></svg> ${edit?'Guardar corrección':'Confirmar cita'}</button>
+      ${edit?`<button class="res" style="flex:1 1 100%" onclick="cb(${c.id},'editar',false,true)">Cancelar</button>`:''}
     </div>
     ${c.comentario?`<div class="cap" style="margin-top:8px">Nota del telemarketer: ${esc(c.comentario)}</div>`:''}
     <div class="note"><textarea aria-label="Motivo para regresar la cita" placeholder="Si no se puede, escribí el motivo para el telemarketer…" onchange="cb(${c.id},'motivo',this.value)">${esc(valC(c.id,'motivo',''))}</textarea></div>
@@ -2989,9 +3003,10 @@ function citaConfHTML(c){
   const tel=telDig(c.telefono);
   return `<div class="lead" style="border-left-color:var(--lima-d)">
     <div class="ltop"><div><div class="lname">${esc(c.nombre)}</div>
-      <div class="lmeta">${esc(lugar.nombre||'—')} · ${esc(fechaCorta(p.d))} ${esc(hora12(p.h))} <span class="src">confirmó ${esc(c.cita_confirmada_por||'')}</span></div></div></div>
+      <div class="lmeta">${esc(lugar.nombre||'—')} · ${esc(fechaCorta(p.d))} ${esc(hora12(p.h))} <span class="src" style="overflow-wrap:anywhere">confirmó ${esc(c.cita_confirmada_por||'')}</span></div></div></div>
     <div class="resrow" style="margin-top:10px">
       <button class="res" onclick="verCarta(${c.id})">Ver / imprimir carta</button>
+      <button class="res" onclick="cb(${c.id},'editar',true,true)">Corregir</button>
       ${c.carta_whatsapp&&tel.length>=8?`<button class="res" onclick="mandarCarta(${c.id},'whatsapp')">Mandar por WhatsApp</button>`:''}
       ${c.carta_correo&&correoValido(c.email)?`<button class="res" onclick="mandarCarta(${c.id},'correo')">Mandar por correo</button>`:''}
     </div>
@@ -3002,14 +3017,18 @@ async function confirmarCita(id,btn){
   const c=CITAS.find(x=>x.id===id); if(!c) return;
   const p=partesGT(c.presenta_en);
   const rid=valC(id,'rst',c.restaurante_id), dia=valC(id,'dia',p.d);
-  const hs=horasDe(HORARIOS,rid,dia); let h=valC(id,'hora',p.h); if(!hs.includes(h)) h=hs[0]||'';
-  if(!rid){ toast('Elegí el lugar'); return; } if(!dia){ toast('Poné el día'); return; } if(!h){ toast('Ese día el lugar no tiene horarios'); return; }
+  const hs=horasDe(HORARIOS,rid,dia), h=valC(id,'hora',p.h);
+  if(!rid){ toast('Elegí el lugar'); return; } if(!dia){ toast('Poné el día'); return; }
+  if(!hs.length){ toast('Ese día el lugar no atiende. '+resumenHorarios(HORARIOS,rid)); return; }
+  if(!hs.includes(h)){ toast('Elegí la hora'); return; }
   btn.disabled=true;
   const body={p_id:id,p_restaurante:Number(rid),p_cuando:tsGT(dia,h),p_whatsapp:!!valC(id,'wa',false),p_correo:!!valC(id,'mail',false)};
   try{
     const r=await api("rpc/funnel_cita_confirmar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     if(!r.ok){ let m='No se pudo confirmar'; try{ const e=await r.json(); if(e&&e.message&&r.status<500) m=String(e.message); }catch(_e){} toast(m.charAt(0).toUpperCase()+m.slice(1)); btn.disabled=false; return; }
-    toast('Cita confirmada: ya le llega a Recepción'); await vistaCitas();
+    // Sin recargar la lista (no salta arriba): se actualiza la tarjeta y baja a «Confirmadas».
+    Object.assign(c,{restaurante_id:body.p_restaurante,presenta_en:body.p_cuando,cita_confirmada_en:new Date().toISOString(),cita_confirmada_por:USER,carta_whatsapp:body.p_whatsapp,carta_correo:body.p_correo});
+    delete CITA_B[id]; pintarCitas(); toast('Cita confirmada: ya le llega a Recepción');
   }catch(e){ toast('Se cortó la conexión, probá de nuevo'); btn.disabled=false; }
 }
 async function regresarCita(id,btn){
@@ -3018,7 +3037,7 @@ async function regresarCita(id,btn){
   try{
     const r=await api("rpc/funnel_cita_regresar",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({p_id:id,p_motivo:m})});
     if(!r.ok){ let t='No se pudo regresar'; try{ const e=await r.json(); if(e&&e.message&&r.status<500) t=String(e.message); }catch(_e){} toast(t.charAt(0).toUpperCase()+t.slice(1)); btn.disabled=false; return; }
-    toast('Regresada al telemarketer'); await vistaCitas();
+    CITAS=CITAS.filter(x=>x.id!==id); delete CITA_B[id]; pintarCitas(); toast('Regresada al telemarketer');
   }catch(e){ toast('Se cortó la conexión, probá de nuevo'); btn.disabled=false; }
 }
 function verCarta(id){
@@ -3033,7 +3052,9 @@ function verCarta(id){
 @media print{body{padding:0}@page{margin:18mm}}</style></head><body>
 <div class="hdr"><div><div class="lg">KUXTAL</div><div class="tag">CADA DESTINO, UNA HISTORIA</div></div><div class="t">INVITACIÓN</div></div>${cuerpo}</body></html>`;
   const w=window.open('','_blank'); if(!w){ toast('Permití las ventanas emergentes para ver la carta'); return; }
-  w.document.write(html); w.document.close(); w.focus(); setTimeout(()=>{ try{ w.print(); }catch(e){} }, 400);
+  w.document.write(html); w.document.close(); w.focus();
+  // Imprime cuando ya cargó la letra (antes salía con la de sistema).
+  try{ (w.document.fonts?w.document.fonts.ready:Promise.resolve()).then(()=>setTimeout(()=>{ try{ w.print(); }catch(e){} },150)); }catch(e){}
   ev(id,'carta','impresa');
 }
 // Solo por el canal que el cliente aceptó (lo vuelve a revisar acá, no solo en el botón).
@@ -3068,9 +3089,9 @@ function pintarLugares(){
       <h3>${esc(r.nombre)}${r.activo?'':' · apagado'}</h3>
       <div class="row"><div class="fld"><label>Dirección</label><input id="ldir${r.id}" maxlength="300" value="${esc(r.direccion||'')}"></div>
         <div class="fld"><label>Link del mapa (https)</label><input id="lmap${r.id}" maxlength="500" inputmode="url" value="${esc(r.mapa_url||'')}"></div></div>
-      <div class="resrow" style="margin-top:8px"><button class="res" onclick="guardarLugar(${r.id},this)">Guardar</button><button class="res ${r.activo?'no':'ok'}" onclick="activarLugar(${r.id},${!r.activo},this)">${r.activo?'Apagar lugar':'Encender lugar'}</button></div>
+      <div class="resrow" style="margin-top:8px"><button class="res" onclick="guardarLugar(${r.id},this)">Guardar</button><button class="res ${r.activo?'no':'ok'} ${LUG_CONF===r.id?'conf':''}" onclick="activarLugar(${r.id},${!r.activo},this)">${LUG_CONF===r.id?'¿Seguro? Las citas de aquí quedan sin lugar':(r.activo?'Apagar lugar':'Encender lugar')}</button></div>
       <div class="lbl">Horarios</div>
-      ${hs.length?hs.map(h=>`<div class="basecard" style="${h.activo?'':'opacity:.55'}"><div><b>${esc(DIAS[h.dia_semana]||'')} · ${esc(hora12(String(h.hora).slice(0,5)))}</b><div class="m">cupo ${Number(h.cupo)||0}${h.activo?'':' · apagado'}</div></div><button class="res" style="flex:none;width:auto" onclick="activarHorario(${h.id},${!h.activo},this)">${h.activo?'Apagar':'Encender'}</button></div>`).join(''):'<div class="cap">Sin horarios: el telemarketer no puede citar aquí.</div>'}
+      ${hs.length?hs.map(h=>`<div class="basecard" style="${h.activo?'':'opacity:.55'}"><div><b>${esc(DIAS[h.dia_semana]||'')} · ${esc(hora12(String(h.hora).slice(0,5)))}</b><div class="m">cupo ${Number(h.cupo)||0}${h.activo?'':' · apagado'}</div></div><button class="res" style="flex:none;width:auto" aria-label="${h.activo?'Apagar':'Encender'} ${esc(DIAS[h.dia_semana]||'')} ${esc(hora12(String(h.hora).slice(0,5)))}" onclick="activarHorario(${h.id},${!h.activo},this)">${h.activo?'Apagar':'Encender'}</button></div>`).join(''):'<div class="cap">Sin horarios: el telemarketer no puede citar aquí.</div>'}
       <div class="row" style="margin-top:8px"><div class="fld"><label>Día</label><select id="hdia${r.id}">${diasOpt}</select></div>
         <div class="fld"><label>Hora</label><input type="time" id="hhor${r.id}" value="19:00"></div>
         <div class="fld"><label>Cupo</label><input type="number" id="hcup${r.id}" min="1" max="500" value="20"></div></div>
@@ -3091,7 +3112,10 @@ async function escribirLugares(metodo,tabla,qs,body,btn,msg){
 function guardarLugar(id,btn){ const dir=$('ldir'+id).value.trim(), map=$('lmap'+id).value.trim();
   if(!urlMapaOk(map)){ toast('El link del mapa tiene que empezar con https://'); return; }
   escribirLugares('PATCH','funnel_restaurantes','?id=eq.'+id,{direccion:dir||null,mapa_url:map||null},btn,'Lugar guardado'); }
-function activarLugar(id,v,btn){ escribirLugares('PATCH','funnel_restaurantes','?id=eq.'+id,{activo:v},btn,v?'Lugar encendido':'Lugar apagado'); }
+let LUG_CONF=null;
+function activarLugar(id,v,btn){
+  if(!v&&LUG_CONF!==id){ LUG_CONF=id; pintarLugares(); setTimeout(()=>{ if(LUG_CONF===id){ LUG_CONF=null; pintarLugares(); } },5000); return; }
+  LUG_CONF=null; escribirLugares('PATCH','funnel_restaurantes','?id=eq.'+id,{activo:v},btn,v?'Lugar encendido':'Lugar apagado'); }
 function nuevoLugar(btn){ const n=$('lnuevo').value.trim(); if(!n){ toast('Poné el nombre del lugar'); return; }
   escribirLugares('POST','funnel_restaurantes','',{nombre:n,activo:true},btn,'Lugar creado'); }
 function agregarHorario(rid,btn){ const d=Number($('hdia'+rid).value), h=$('hhor'+rid).value, c=Number($('hcup'+rid).value);
