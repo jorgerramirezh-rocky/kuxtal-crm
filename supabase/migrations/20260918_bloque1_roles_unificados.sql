@@ -28,16 +28,6 @@ alter table public.funnel_agentes drop constraint if exists funnel_agentes_user_
 alter table public.funnel_agentes add constraint funnel_agentes_user_id_fkey
   foreign key (user_id) references auth.users(id) on delete set null;
 
--- Relleno: solo cuando el correo apunta a UNA cuenta y a UN agente sin cuenta.
--- Lo ambiguo NO se adivina: queda sin cuenta y aparece en funnel_equipo_descalces.
-update public.funnel_agentes a
-   set user_id = u.id
-  from auth.users u
- where a.user_id is null
-   and lower(a.email) = lower(u.email)
-   and (select count(*) from auth.users u2 where lower(u2.email) = lower(a.email)) = 1
-   and (select count(*) from public.funnel_agentes a2 where lower(a2.email) = lower(a.email)) = 1;
-
 create or replace function public.funnel_mi_agente() returns bigint
   language sql stable security definer set search_path to 'public', 'pg_temp' as $$
   select a.id from public.funnel_agentes a where a.user_id = auth.uid() and a.activo limit 1
@@ -86,6 +76,45 @@ update public.funnel_roles set nombre = v.nom
                ('cerrador','Closer (cerrador)'), ('verificador','Verificador de contratos')) as v(clave, nom)
  where funnel_roles.clave = v.clave;
 
+-- Atar solo: al dar de alta (o corregir el correo de) un agente SIN cuenta desde la pantalla,
+-- la base busca la cuenta por correo y lo ata si no hay duda: UNA cuenta con ese correo, cuyo
+-- rol calza con el del agente, y que no tenga ya otro agente activo. Si hay duda, queda sin
+-- cuenta y aparece en los avisos (funnel_descalces): no se adivina.
+create or replace function public.funnel_agente_atar() returns trigger
+  language plpgsql security definer set search_path to 'public', 'pg_temp' as $$
+declare v_uid uuid; v_n int;
+begin
+  if new.user_id is not null or not new.activo or coalesce(new.email,'') = '' then return new; end if;
+  select count(*), min(u.id::text)::uuid into v_n, v_uid
+    from auth.users u where lower(u.email) = lower(new.email);
+  if v_n <> 1 then return new; end if;
+  if not exists (select 1 from auth.users u join public.funnel_roles r on r.clave = u.raw_app_meta_data->>'role'
+                  where u.id = v_uid and r.rol_operativo = new.rol) then return new; end if;
+  if exists (select 1 from public.funnel_agentes a where a.user_id = v_uid and a.activo and a.id is distinct from new.id) then
+    return new;
+  end if;
+  new.user_id := v_uid;
+  return new;
+end $$;
+revoke all on function public.funnel_agente_atar() from public, anon, authenticated;
+drop trigger if exists trg_funnel_agente_atar on public.funnel_agentes;
+-- «atar» corre antes que «calza» (los triggers BEFORE van en orden alfabético).
+create trigger trg_funnel_agente_atar before insert or update of email, rol, activo on public.funnel_agentes
+  for each row execute function public.funnel_agente_atar();
+
+-- Relleno de los agentes que ya existen: las mismas reglas del trigger «atar» (un correo →
+-- una cuenta, rol que calza, un solo agente ACTIVO con ese correo). Lo ambiguo queda sin cuenta.
+update public.funnel_agentes a
+   set user_id = u.id
+  from auth.users u
+  join public.funnel_roles r on r.clave = u.raw_app_meta_data->>'role'
+ where a.user_id is null and a.activo
+   and lower(a.email) = lower(u.email)
+   and r.rol_operativo = a.rol
+   and (select count(*) from auth.users u2 where lower(u2.email) = lower(a.email)) = 1
+   and (select count(*) from public.funnel_agentes a2 where a2.activo and lower(a2.email) = lower(a.email)) = 1
+   and not exists (select 1 from public.funnel_agentes a3 where a3.user_id = u.id and a3.activo);
+
 -- Un agente atado a una cuenta tiene que tener el rol operativo de esa cuenta.
 create or replace function public.funnel_agente_calza() returns trigger
   language plpgsql security definer set search_path to 'public', 'pg_temp' as $$
@@ -100,6 +129,7 @@ begin
   end if;
   return new;
 end $$;
+revoke all on function public.funnel_agente_calza() from public, anon, authenticated;
 drop trigger if exists trg_funnel_agente_calza on public.funnel_agentes;
 create trigger trg_funnel_agente_calza before insert or update of user_id, rol on public.funnel_agentes
   for each row execute function public.funnel_agente_calza();
@@ -120,11 +150,11 @@ create or replace view public.funnel_equipo_descalces with (security_invoker = t
     from auth.users u join public.funnel_roles r on r.clave = u.raw_app_meta_data->>'role'
    where r.rol_operativo is not null
      and not exists (select 1 from public.funnel_agentes a where a.user_id = u.id and a.activo);
--- security_invoker + solo gerentes: la vista lee auth.users, así que no se abre a nadie más.
+-- security_invoker + solo quien gestiona roles: la vista lee auth.users (correos de login), así que no se abre a nadie más.
 revoke all on public.funnel_equipo_descalces from public, anon, authenticated;
 create or replace function public.funnel_descalces() returns setof public.funnel_equipo_descalces
   language sql stable security definer set search_path to 'public', 'pg_temp' as $$
-  select * from public.funnel_equipo_descalces where public.funnel_es_gerente()
+  select * from public.funnel_equipo_descalces where public.funnel_puede('gestionar_roles')
 $$;
 revoke all on function public.funnel_descalces() from public, anon;
 grant execute on function public.funnel_descalces() to authenticated;
@@ -139,6 +169,34 @@ create or replace function public.funnel_puede(p text) returns boolean
       where pm.rol_clave = public.funnel_rol() and pm.permiso = p),
     false)
 $$;
+
+-- Nadie se encierra afuera: el rol admin no se apaga ni se borra, y no pierde «gestionar_roles».
+-- (Con funnel_puede exigiendo rol activo, un toque en la píldora «Activo» del admin lo dejaba
+--  sin forma de volver desde la pantalla. Hallazgo de la revisión adversaria.)
+create or replace function public.funnel_admin_blindado() returns trigger
+  language plpgsql security definer set search_path to 'public', 'pg_temp' as $$
+begin
+  if tg_table_name = 'funnel_roles' then
+    if old.clave = 'admin' and (tg_op = 'DELETE' or not new.activo or new.clave <> 'admin') then
+      raise exception 'el rol admin no se puede apagar ni borrar';
+    end if;
+  elsif old.rol_clave = 'admin' and old.permiso = 'gestionar_roles'
+        and (tg_op = 'DELETE' or not new.permitido or new.rol_clave <> 'admin' or new.permiso <> 'gestionar_roles') then
+    raise exception 'el admin no puede perder «gestionar roles»';
+  end if;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end $$;
+revoke all on function public.funnel_admin_blindado() from public, anon, authenticated;
+drop trigger if exists trg_funnel_roles_admin on public.funnel_roles;
+create trigger trg_funnel_roles_admin before update or delete on public.funnel_roles
+  for each row execute function public.funnel_admin_blindado();
+drop trigger if exists trg_funnel_permisos_admin on public.funnel_permisos;
+create trigger trg_funnel_permisos_admin before update or delete on public.funnel_permisos
+  for each row execute function public.funnel_admin_blindado();
+update public.funnel_roles set activo = true where clave = 'admin';
+insert into public.funnel_permisos(rol_clave, permiso, permitido) values ('admin','gestionar_roles',true)
+  on conflict (rol_clave, permiso) do update set permitido = true;
 
 -- 3a. Alinear la matriz a lo que la base YA dejaba hacer (nadie gana ni pierde hoy).
 create temp table _alineo(permiso text, rol text, permitido boolean) on commit drop;
@@ -204,7 +262,7 @@ create or replace function public.funnel_cerrar_contrato(p_prospecto bigint, p_m
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
- SET search_path TO 'public'
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 declare
   cid bigint; pr record; rg record; benef bigint; base numeric;

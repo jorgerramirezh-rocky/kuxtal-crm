@@ -47,6 +47,11 @@ caso "sí se ata cuando el rol calza (vendedor→vendedor)" "1" admin "update fu
 caso "una cuenta no se ata a dos agentes" "ERROR" admin "$ATAR" "update funnel_agentes set user_id=md5('kx-telemarketing')::uuid where id=900005;"
 caso "etiqueta de George: liner" "Liner (vendedor)" admin "" "select nombre from funnel_roles where clave='vendedor';"
 
+caso "alta desde la pantalla ata la cuenta sola (correo + rol que calza)" "t" gerente_tmk "" "with i as (insert into funnel_agentes(nombre,rol,email,peso) values ('Nuevo','tmk','Telemarketing@prueba.kx',1) returning user_id) select coalesce(user_id = md5('kx-telemarketing')::uuid,false) from i;"
+caso "alta con rol que no calza queda sin cuenta (y en avisos)" "t" gerente_tmk "" "with i as (insert into funnel_agentes(nombre,rol,email,peso) values ('Nuevo','vendedor','otrob@prueba.kx',1) returning user_id) select user_id is null from i;"
+caso "alta de una cuenta que ya tiene agente activo no la roba" "t" gerente_tmk "$ATAR" "with i as (insert into funnel_agentes(nombre,rol,email,peso) values ('Dup','tmk','otrob@prueba.kx',1) returning user_id) select user_id is null from i;"
+caso "el recién atado ve su prospecto (y no pX, que comparte su correo)" "pNuevo" telemarketing "insert into funnel_agentes(id,nombre,rol,email,peso) overriding system value values (900009,'Nuevo','tmk','telemarketing@prueba.kx',1); insert into funnel_prospectos(id,nombre,tmk_id) overriding system value values (900109,'pNuevo',900009);" "$PROS"
+
 echo "· la matriz de la pestaña Roles manda"
 caso "quitar ver_socios a telemarketing lo deja en 0" "0" telemarketing "update funnel_permisos set permitido=false where rol_clave='telemarketing' and permiso='ver_socios';" "select count(*) from socios;"
 caso "dar editar_socios a telemarketing lo deja editar" "1" telemarketing "update funnel_permisos set permitido=true where rol_clave='telemarketing' and permiso='editar_socios';" "with u as (update socios set estado=estado where id=(select min(id) from public.socios) returning 1) select count(*) from u;"
@@ -57,7 +62,12 @@ caso "quitar cerrar_contrato a vendedor: no cierra" "ERROR: no autorizado" vende
 caso "rol apagado no puede nada" "f" gerente_ventas "update funnel_roles set activo=false where clave='gerente_ventas';" "select funnel_puede('editar_socios');"
 caso "cambio de rol: baja del agente viejo + agente nuevo con la misma cuenta" "1" admin "$ATAR update funnel_agentes set activo=false where id=900002; update auth.users set raw_app_meta_data='{\"role\":\"vendedor\"}' where id=md5('kx-telemarketing')::uuid;" "with i as (insert into funnel_agentes(nombre,rol,email,activo,peso,user_id) values ('A liner','vendedor','telemarketing@prueba.kx',true,1,md5('kx-telemarketing')::uuid) returning 1) select count(*) from i;"
 caso "telemarketing no se da permisos solo" "0" telemarketing "" "with u as (update funnel_permisos set permitido=true where rol_clave='telemarketing' and permiso='editar_socios' returning 1) select count(*) from u;"
-caso "solo gerentes ven los descalces" "0" telemarketing "" "select count(*) from funnel_descalces();"
+caso "telemarketing no ve los avisos" "0" telemarketing "" "select count(*) from funnel_descalces();"
+caso "un gerente sin «gestionar roles» no ve correos de login en avisos" "0" gerente_tmk "" "select count(*) from funnel_descalces();"
+caso "el admin sí ve los avisos" "t" admin "" "select count(*)>0 from funnel_descalces();"
+caso "el admin no se puede apagar (no se encierra)" "ERROR" admin "" "update funnel_roles set activo=false where clave='admin';"
+caso "el admin no pierde «gestionar roles»" "ERROR" admin "" "update funnel_permisos set permitido=false where rol_clave='admin' and permiso='gestionar_roles';"
+caso "otros roles sí se apagan" "1" admin "" "with u as (update funnel_roles set activo=false where clave='servicio' returning 1) select count(*) from u;"
 caso "la vista de descalces no se lee directo" "ERROR" gerente_tmk "" "select count(*) from funnel_equipo_descalces;"
 
 echo "── $((N-FALLAS))/$N verdes"
