@@ -44,10 +44,28 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5   # v4.3.1 (pin por SHA)
       - name: Configurar Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b   # v5.0.0 (pin por SHA)
-      - name: Empaquetar el sitio (raíz del repo)
+      # LISTA BLANCA (bloque 1, 18-sep): antes se publicaba la raíz del repo entera y quedaban
+      # a la vista las migraciones, el código de las funciones y los scripts de QA. Ahora solo
+      # sale lo que es del sitio, y la puerta de abajo ABORTA si se cuela cualquier otra cosa.
+      - name: Armar el sitio (solo lo público)
+        run: |
+          set -euo pipefail
+          mkdir _site
+          for f in index.html app.html embudo.html validar.html crear-clave.html sw.js manifest.webmanifest \
+                   logo.png logo-slogan.png hero.jpg icon-192.png icon-512.png apple-touch-icon.png; do
+            cp "$f" _site/
+          done
+      - name: Puerta — nada que no sea del sitio
+        run: |
+          set -euo pipefail
+          malos=$(find _site -type f ! \( -name '*.html' -o -name '*.png' -o -name '*.jpg' -o -name '*.webmanifest' -o -name 'sw.js' \) -print)
+          if [ -n "$malos" ]; then echo "::error::se iba a publicar algo que no es del sitio: $malos"; exit 1; fi
+          if grep -rlE 'sb_secret_|service_role|re_[A-Za-z0-9]{20,}|sbp_[a-f0-9]{20,}' _site; then echo "::error::hay algo con forma de llave en el sitio"; exit 1; fi
+          echo "sitio: $(ls _site | tr '\n' ' ')"
+      - name: Empaquetar el sitio
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa   # v3.0.1 (pin por SHA)
         with:
-          path: .
+          path: _site
       - name: Publicar a GitHub Pages
         id: deployment
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e   # v4.0.5 (pin por SHA)

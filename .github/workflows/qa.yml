@@ -24,3 +24,5 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Correr QA (responsive + errores + piezas)
         run: node qa/check.mjs
+      - name: Panel de personas (escapado y reglas de la pantalla)
+        run: node qa/panel-personas.mjs
