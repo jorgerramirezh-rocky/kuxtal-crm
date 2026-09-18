@@ -24,3 +24,10 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Correr QA (responsive + errores + piezas)
         run: node qa/check.mjs
+      - name: Panel de personas (escapado y reglas de la pantalla)
+        run: node qa/panel-personas.mjs
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed   # v2.0.5 (pin por SHA)
+        with:
+          deno-version: v2.x
+      - name: Función kuxtal-personas (Supabase simulado)
+        run: deno test supabase/functions/kuxtal-personas/

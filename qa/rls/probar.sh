@@ -6,6 +6,8 @@ set -uo pipefail
 L="postgresql://$(whoami)@localhost:5432/${1:?base}"
 FALLAS=0; N=0
 claims() { [ "$1" = sinrol ] && { echo '{"role":"authenticated"}'; return; }
+  [ "$1" = _servicio ] && { echo '{"role":"service_role"}'; return; }
+  [ "$1" = _dueno ] && { echo '{}'; return; }
   echo "{\"role\":\"authenticated\",\"sub\":\"$(psql -X -At "$L" -c "select md5('kx-$1')::uuid")\",\"email\":\"$1@prueba.kx\",\"app_metadata\":{\"role\":\"$1\"}}"; }
 # caso <nombre> <esperado> <rol> <preparación-como-dueño> <consulta-como-rol>
 caso() {
@@ -14,7 +16,7 @@ caso() {
 begin;
 $prep
 select set_config('request.jwt.claims', '$(claims "$rol")', true) \gset
-set local role authenticated;
+$( [ "$rol" = _dueno ] && echo "-- dueño: sin cambiar de rol" || { [ "$rol" = _servicio ] && echo "set local role service_role;" || echo "set local role authenticated;"; } )
 $q
 rollback;
 SQL
@@ -69,6 +71,44 @@ caso "el admin no se puede apagar (no se encierra)" "ERROR" admin "" "update fun
 caso "el admin no pierde «gestionar roles»" "ERROR" admin "" "update funnel_permisos set permitido=false where rol_clave='admin' and permiso='gestionar_roles';"
 caso "otros roles sí se apagan" "1" admin "" "with u as (update funnel_roles set activo=false where clave='servicio' returning 1) select count(*) from u;"
 caso "la vista de descalces no se lee directo" "ERROR" gerente_tmk "" "select count(*) from funnel_equipo_descalces;"
+
+echo "· paso 3: personas (alta desde el panel)"
+NUEVA="insert into auth.users(id,email,raw_app_meta_data) values (md5('kx-nueva')::uuid,'nueva@prueba.kx','{\"role\":\"telemarketing\"}');"
+ALTA="$NUEVA select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'alta', 'Nueva Persona', 'telemarketing', 900001);"
+caso "telemarketing no lista personas" "ERROR" telemarketing "" "select count(*) from funnel_personas_listar();"
+caso "admin lista personas" "t" admin "" "select count(*)>0 from funnel_personas_listar();"
+caso "la lista no trae cuentas de socios" "0" admin "" "select count(*) from funnel_personas_listar() where rol='cliente';"
+caso "el panel sabe si puedo (telemarketing: no)" "false" telemarketing "" "select funnel_personas_puedo()->>'puede';"
+caso "el panel sabe si puedo (admin: sí)" "true" admin "" "select funnel_personas_puedo()->>'puede';"
+caso "una cuenta del equipo NO puede registrar (solo el servidor)" "ERROR" admin "$NUEVA" "select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'alta', 'X', 'telemarketing', null);"
+caso "alta: nace su agente tmk, atado y con su jefe" "tmk|t|900001|Nueva Persona" _dueno "$ALTA" "select rol, user_id is not null, supervisor_id, nombre from funnel_agentes where email='nueva@prueba.kx' and activo;"
+caso "alta: queda en la bitácora" "1" _dueno "$ALTA" "select count(*) from funnel_personas_bitacora where persona=md5('kx-nueva')::uuid and accion='alta';"
+caso "el servidor SÍ puede registrar (y un alta no cierra sesiones)" "0" _servicio "$NUEVA" "select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'alta', 'X', 'telemarketing', null);"
+caso "alta con un rol que la cuenta no tiene: frena" "ERROR" _servicio "$NUEVA" "select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'alta', 'X', 'vendedor', null);"
+caso "alta con un jefe que no existe: frena" "ERROR" _servicio "$NUEVA" "select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'alta', 'X', 'telemarketing', 424242);"
+caso "nada sobre uno mismo" "ERROR" _servicio "" "select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-admin')::uuid, 'desactivar');"
+caso "cambiar a liner: el tmk se da de baja y nace un vendedor" "vendedor" _dueno "$ALTA update auth.users set raw_app_meta_data='{\"role\":\"vendedor\"}' where id=md5('kx-nueva')::uuid; select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'cambiar_rol', null, 'vendedor', null);" "select string_agg(rol,',') from funnel_agentes where user_id=md5('kx-nueva')::uuid and activo;"
+caso "cambiar el rol cierra sus sesiones" "2" _servicio "$ALTA insert into auth.sessions(user_id) values (md5('kx-nueva')::uuid),(md5('kx-nueva')::uuid); update auth.users set raw_app_meta_data='{\"role\":\"vendedor\"}' where id=md5('kx-nueva')::uuid;" "select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'cambiar_rol', null, 'vendedor', null);"
+caso "pasar a hostess (sin rol de agente): queda sin agente activo" "0" _dueno "$ALTA update auth.users set raw_app_meta_data='{\"role\":\"recepcion\"}' where id=md5('kx-nueva')::uuid; select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'cambiar_rol', null, 'recepcion', null);" "select count(*) from funnel_agentes where user_id=md5('kx-nueva')::uuid and activo;"
+caso "desactivar cierra sus sesiones" "1" _dueno "$ALTA insert into auth.sessions(user_id) values (md5('kx-nueva')::uuid);" "select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'desactivar');"
+caso "desactivar da de baja su agente" "0" _dueno "$ALTA select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'desactivar');" "select count(*) from funnel_agentes where user_id=md5('kx-nueva')::uuid and activo;"
+caso "activar: vuelve su agente" "1" _dueno "$ALTA select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'desactivar'); select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'activar');" "select count(*) from funnel_agentes where user_id=md5('kx-nueva')::uuid and activo;"
+LEGADO="insert into funnel_agentes(id,nombre,rol,email,activo,peso,supervisor_id) overriding system value values (900050,'Legado','tmk','nueva@prueba.kx',true,1,900001); insert into funnel_prospectos(id,nombre,tmk_id) overriding system value values (900150,'pLegado',900050);"
+caso "alta de alguien que YA estaba en el equipo: adopta su agente (no crea otro)" "900050|1" _dueno "$LEGADO $NUEVA select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'alta', 'Nueva', 'telemarketing', null);" "select min(id)||'|'||count(*) from funnel_agentes where lower(email)='nueva@prueba.kx' and activo;"
+caso "el adoptado conserva su jefe si no se eligió otro" "900001" _dueno "$LEGADO $NUEVA select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'alta', 'Nueva', 'telemarketing', null);" "select supervisor_id from funnel_agentes where id=900050;"
+caso "sus prospectos de antes quedan con su cuenta nueva" "t" _dueno "$LEGADO $NUEVA select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'alta', 'Nueva', 'telemarketing', null);" "select (select user_id from funnel_agentes a join funnel_prospectos p on p.tmk_id=a.id where p.id=900150) = md5('kx-nueva')::uuid;"
+caso "dos agentes sin cuenta con el mismo correo: no adivina (frena)" "ERROR" _dueno "$LEGADO insert into funnel_agentes(nombre,rol,email,activo,peso) values ('Legado2','tmk','NUEVA@prueba.kx',true,1); $NUEVA" "select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'alta', 'Nueva', 'telemarketing', null);"
+caso "adoptarlo poniéndolo de su propio jefe: frena" "ERROR" _dueno "$LEGADO $NUEVA" "select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'alta', 'Nueva', 'telemarketing', 900050);"
+caso "cambiar el rol de una cuenta desactivada: frena (no vuelve al reparto)" "ERROR" _dueno "$ALTA update auth.users set banned_until=now()+interval '100 years', raw_app_meta_data='{\"role\":\"vendedor\"}' where id=md5('kx-nueva')::uuid;" "select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'cambiar_rol', null, 'vendedor', null);"
+caso "se le puede QUITAR el jefe" "sin jefe" _dueno "$ALTA select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'cambiar_rol', null, 'telemarketing', null, true);" "select coalesce(supervisor_id::text,'sin jefe') from funnel_agentes where user_id=md5('kx-nueva')::uuid and activo;"
+caso "sin pedir cambio de jefe, lo conserva" "900001" _dueno "$ALTA select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'cambiar_rol', null, 'telemarketing', null);" "select supervisor_id from funnel_agentes where user_id=md5('kx-nueva')::uuid and activo;"
+caso "nadie es su propio jefe" "ERROR" _dueno "$ALTA" "select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'cambiar_rol', null, 'telemarketing', (select id from funnel_agentes where user_id=md5('kx-nueva')::uuid and activo), true);"
+caso "reenviar enlace no corta sesiones (la clave no cambió)" "0" _dueno "$ALTA insert into auth.sessions(user_id) values (md5('kx-nueva')::uuid);" "select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'restablecer');"
+caso "alta de alguien que ya está con OTRO rol y sin cuenta: frena (no duplica)" "ERROR" _dueno "$LEGADO insert into auth.users(id,email,raw_app_meta_data) values (md5('kx-otro')::uuid,'nueva@prueba.kx','{\"role\":\"vendedor\"}');" "select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-otro')::uuid, 'alta', 'X', 'vendedor', null);"
+caso "adopta aunque el correo del agente tenga espacios o mayúsculas" "900050" _dueno "$LEGADO update funnel_agentes set email='  NUEVA@prueba.kx ' where id=900050; $NUEVA select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'alta', 'Nueva', 'telemarketing', null);" "select id from funnel_agentes where user_id=md5('kx-nueva')::uuid and activo;"
+caso "telemarketing no lee la bitácora" "0" telemarketing "" "select count(*) from funnel_personas_bitacora;"
+caso "nadie del equipo escribe la bitácora" "ERROR" admin "" "insert into funnel_personas_bitacora(actor,persona,accion) values (md5('kx-admin')::uuid, md5('kx-admin')::uuid, 'alta');"
+caso "permiso nuevo: solo admin gestiona personas" "admin" admin "" "select string_agg(rol_clave,',') from funnel_permisos where permiso='gestionar_personas' and permitido;"
 
 echo "── $((N-FALLAS))/$N verdes"
 [ "$FALLAS" -eq 0 ]

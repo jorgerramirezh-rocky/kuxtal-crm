@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self'; connect-src https://tevzfdiumfekvapamovw.supabase.co; base-uri 'none'; form-action 'none'">
+<title>Crear mi clave · Kuxtal</title>
+<link rel="icon" href="icon-192.png">
+<style>
+  :root{--kux:#1b365d;--kux-d:#0f2438;--kux-l:#e9eef5;--lima-d:#6f9e12;--rojo-t:#b0121c;--gris:#55524d;--fondo:#f4f1ea}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--fondo);color:var(--kux-d);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;display:flex;align-items:center;justify-content:center;padding:16px}
+  .card{width:100%;max-width:420px;background:#fff;border-radius:18px;padding:28px 22px;box-shadow:0 6px 24px rgba(15,36,56,.08)}
+  .logo{display:block;height:44px;margin:0 0 18px}
+  h1{font-size:22px;margin:0 0 10px}
+  p{font-size:16px;line-height:1.45;margin:0 0 14px;color:var(--gris)}
+  label{display:block;font-size:14px;font-weight:600;margin:14px 0 6px;color:var(--kux-d)}
+  input{width:100%;font-size:16px;padding:13px 14px;border:1.5px solid #cfd6df;border-radius:12px;min-height:48px}
+  input:focus{outline:3px solid var(--kux-l);border-color:var(--kux)}
+  button{width:100%;margin-top:18px;border:none;border-radius:999px;background:var(--kux);color:#fff;font-size:16px;font-weight:700;padding:14px;min-height:50px;cursor:pointer}
+  button:disabled{opacity:.6;cursor:default}
+  .err{color:var(--rojo-t);font-size:15px;margin-top:12px;min-height:1em}
+  .ok{color:var(--lima-d);font-weight:700}
+  .ayuda{font-size:14px}
+  a.volver{display:inline-block;margin-top:16px;color:var(--kux);font-weight:700}
+</style>
+</head>
+<body>
+<main class="card" id="caja">
+  <img class="logo" src="logo.png" alt="Kuxtal Travels">
+  <noscript><p>Para crear tu clave hace falta tener JavaScript encendido.</p></noscript>
+</main>
+<script>
+// Kuxtal · crear tu clave con el enlace del correo (bloque 1, paso 3).
+// El correo trae crear-clave.html#t=<token>. El token es de UN solo uso y va después de «#»:
+// no viaja a ningún servidor al abrir la página. Se lee UNA vez y se BORRA de la dirección
+// enseguida (historial, capturas). No se gasta hasta que la persona toca el botón: un antivirus
+// de correo que abre el enlace no lo consume.
+(function(){
+  "use strict";
+  var SB_URL = "https://tevzfdiumfekvapamovw.supabase.co";
+  var SB_PUB = "sb_publishable_MMVJjzrA1rHdnMWxl0zeMA_DTDTTGTJ";
+  var CRM = "app.html";
+  var MINIMO = 10;
+  var caja = document.getElementById("caja");
+  var token = null;
+  try {
+    var t = new URLSearchParams((location.hash || "").slice(1)).get("t");
+    if (t && /^[A-Za-z0-9_-]{16,256}$/.test(t)) token = t;
+  } catch (e) { token = null; }
+  if (location.hash) history.replaceState(null, "", location.pathname);
+  var sesion = null;
+
+  function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  function pintar(html){ caja.innerHTML = '<img class="logo" src="logo.png" alt="Kuxtal Travels">' + html; }
+  function sinEnlace(motivo){
+    pintar('<h1>Este enlace ya no sirve</h1><p>' + esc(motivo) + '</p>' +
+      '<p class="ayuda">Pedile a quien administra el CRM que te mande un enlace nuevo («Reenviar enlace»).</p>' +
+      '<a class="volver" href="' + CRM + '">Ir al CRM</a>');
+  }
+
+  if (!token) { sinEnlace("Le falta el código o está incompleto. Abrilo tocando el botón del correo, sin copiarlo a mano."); return; }
+
+  pintar('<h1>Creá tu clave</h1><p>Vas a elegir la clave con la que entrás al CRM de Kuxtal.</p>' +
+    '<button id="empezar" type="button">Empezar</button><div class="err" id="err" role="alert"></div>');
+  document.getElementById("empezar").onclick = verificar;
+
+  function verificar(){
+    var b = document.getElementById("empezar"), err = document.getElementById("err");
+    b.disabled = true; b.textContent = "Comprobando…"; err.textContent = "";
+    fetch(SB_URL + "/auth/v1/verify", {
+      method: "POST",
+      headers: { apikey: SB_PUB, "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "recovery", token_hash: token })
+    }).then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok: r.ok, d: d }; }); })
+      .then(function(x){
+        token = null; // de un solo uso: pase lo que pase, no se vuelve a intentar con este
+        if (!x.ok || !x.d || !x.d.access_token) {
+          sinEnlace("Ya se usó o venció (dura 24 horas y sirve una sola vez).");
+          return;
+        }
+        sesion = x.d.access_token;
+        formulario((x.d.user && x.d.user.email) || "");
+      })
+      .catch(function(){ b.disabled = false; b.textContent = "Empezar"; err.textContent = "No pude conectarme. Revisá el internet y tocá «Empezar» otra vez."; });
+  }
+
+  function formulario(correo){
+    pintar('<h1>Creá tu clave</h1>' +
+      (correo ? '<p>Tu usuario: <strong>' + esc(correo) + '</strong></p>' : '') +
+      '<label for="c1">Clave nueva (mínimo ' + MINIMO + ' letras o números)</label>' +
+      '<input id="c1" type="password" autocomplete="new-password" minlength="' + MINIMO + '">' +
+      '<label for="c2">Repetila</label>' +
+      '<input id="c2" type="password" autocomplete="new-password" minlength="' + MINIMO + '">' +
+      '<button id="guardar" type="button">Guardar mi clave</button><div class="err" id="err" role="alert"></div>');
+    document.getElementById("guardar").onclick = guardar;
+    document.getElementById("c1").focus();
+  }
+
+  function guardar(){
+    var c1 = document.getElementById("c1").value, c2 = document.getElementById("c2").value;
+    var b = document.getElementById("guardar"), err = document.getElementById("err");
+    err.textContent = "";
+    if (c1.length < MINIMO) { err.textContent = "La clave tiene que tener al menos " + MINIMO + " letras o números."; return; }
+    if (c1 !== c2) { err.textContent = "Las dos claves no son iguales."; return; }
+    b.disabled = true; b.textContent = "Guardando…";
+    fetch(SB_URL + "/auth/v1/user", {
+      method: "PUT",
+      headers: { apikey: SB_PUB, Authorization: "Bearer " + sesion, "Content-Type": "application/json" },
+      body: JSON.stringify({ password: c1 })
+    }).then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok: r.ok, d: d }; }); })
+      .then(function(x){
+        if (!x.ok) {
+          b.disabled = false; b.textContent = "Guardar mi clave";
+          var code = (x.d && (x.d.error_code || x.d.code)) || "";
+          err.textContent = code === "same_password" ? "Esa es la clave de antes: elegí otra."
+            : code === "weak_password" ? "Esa clave es muy fácil de adivinar: probá con una más larga."
+            : "No pude guardarla. Probá otra vez; si sigue, pedí un enlace nuevo.";
+          return;
+        }
+        sesion = null;
+        pintar('<h1 class="ok">Listo, tu clave quedó guardada</h1><p>Ya podés entrar al CRM con tu correo y tu clave nueva.</p>' +
+          '<a class="volver" href="' + CRM + '">Entrar al CRM</a>');
+      })
+      .catch(function(){ b.disabled = false; b.textContent = "Guardar mi clave"; err.textContent = "No pude conectarme. Revisá el internet y probá otra vez."; });
+  }
+})();
+</script>
+</body>
+</html>

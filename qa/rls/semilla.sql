@@ -23,6 +23,9 @@ begin
   on conflict (id) do nothing;
 end $s$;
 
+-- Los agentes entran como FILAS VIEJAS (sin cuenta), sin disparar triggers: así la semilla deja el
+-- mismo punto de partida en una base migrada o sin migrar (en una migrada, «atar» ataría a A al insertarlo).
+set local session_replication_role = replica;
 insert into funnel_agentes(id,nombre,rol,email,activo,peso,supervisor_id,user_id) overriding system value values
  (900001,'S prueba','supervisor_tmk','supervisor_tmk@prueba.kx',true,1,null,null),
  (900002,'A prueba','tmk','telemarketing@prueba.kx',true,1,900001,null),
@@ -30,6 +33,7 @@ insert into funnel_agentes(id,nombre,rol,email,activo,peso,supervisor_id,user_id
  (900004,'C prueba','tmk','otroc@prueba.kx',true,1,null,null),
  (900005,'X prueba','tmk','TELEMARKETING@prueba.kx',true,1,null,null);
 
+set local session_replication_role = origin;
 insert into funnel_prospectos(id,nombre,tmk_id) overriding system value values
  (900101,'pA',900002),(900102,'pB',900003),(900103,'pC',900004),(900104,'pX',900005),(900105,'pSin',null);
 

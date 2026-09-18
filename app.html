@@ -1000,7 +1000,7 @@ let ALERTAS=null, cargandoCal=false, caF='';
 let ROLDATA=null, cargandoRoles=false;
 const esAdmin=()=>ROLE==='admin';
 const TIPO_LBL={dpi_duplicado:'DPI duplicado',dpi_invalido:'DPI inválido',telefono_invalido:'Teléfono inválido',vencimiento_vacio:'Sin vencimiento',no_socio_duplicado:'No. socio duplicado',no_socio_invalido:'No. socio inválido'};
-const PERM_LBL={ver_socios:'Ver socios',editar_socios:'Editar socios',cerrar_contrato:'Cerrar contrato',ver_comisiones:'Ver comisiones',gestionar_comisiones:'Gestionar comisiones',gestionar_roles:'Gestionar roles',ver_reportes:'Ver reportes',crear_socios:'Crear socios',borrar_socios:'Borrar socios'};
+const PERM_LBL={ver_socios:'Ver socios',editar_socios:'Editar socios',cerrar_contrato:'Cerrar contrato',ver_comisiones:'Ver comisiones',gestionar_comisiones:'Gestionar comisiones',gestionar_roles:'Gestionar roles',ver_reportes:'Ver reportes',crear_socios:'Crear socios',borrar_socios:'Borrar socios',gestionar_personas:'Gestionar personas'};
 const SEV_LBL={alta:'Prioridad alta',media:'Prioridad media',baja:'Prioridad baja'};
 const tipoTxt=t=>TIPO_LBL[t]||t;
 const noAdminHTML=()=>`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-lock"/></svg></span><b>Sección solo para administración</b><p>Esta consola es exclusiva del rol Admin.</p></div>`;
@@ -1072,13 +1072,14 @@ function marcarRevisada(btn){
 async function cargarRoles(){
   cargandoRoles=true; $('lista').innerHTML='<div class="vacio"><span class="spin"></span> Cargando roles…</div>';
   try{
-    const [roles,permisos,agentes,descalces]=await Promise.all([
+    const [roles,permisos,agentes,descalces,personas]=await Promise.all([
       sbGet('funnel_roles','select=*&order=nivel.desc'),
       sbGet('funnel_permisos','select=*'),
       sbGet('funnel_agentes','select=*&order=nombre.asc'),
-      rpcDescalces()
+      rpcDescalces(),
+      MIS_PERMISOS.gestionar_personas?rpcPersonas():Promise.resolve(undefined)
     ]);
-    ROLDATA={roles,permisos,agentes,descalces}; cargandoRoles=false; if(tab==='roles')render();
+    ROLDATA={roles,permisos,agentes,descalces,personas}; cargandoRoles=false; if(tab==='roles')render();
   }catch(e){ cargandoRoles=false; if(tab==='roles')$('lista').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar los roles</b><p><b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`; }
 }
 // Bloque 1: lo que no calza entre cuentas y equipo se AVISA (no se corrige solo). null = no se pudo medir.
@@ -1094,9 +1095,122 @@ function descalcesHTML(d){
     <div class="tblwrap"><table class="dtbl"><thead><tr><th>Qué pasa</th><th>Persona</th><th>Rol en el equipo</th><th>Rol de su cuenta</th></tr></thead><tbody>${filas}</tbody></table></div>
     <div class="cap" style="margin:8px 0 14px">Una persona del equipo sin cuenta no ve sus prospectos. Nada de esto se corrige solo: lo arregla una persona.</div>`;
 }
+// ── Bloque 1 · paso 3 · PERSONAS DEL EQUIPO: alta con enlace para crear la clave ──
+// Todo pasa por la función `kuxtal-personas` (el servidor valida sesión y permiso; la pantalla
+// solo muestra). undefined = sin permiso (no se muestra) · null = no se pudo leer (se avisa).
+async function rpcPersonas(){
+  try{ const r=await api("rpc/funnel_personas_listar",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+    if(!r.ok) return null; return await r.json(); }catch(e){ return null; }
+}
+async function llamarPersonas(cuerpo,reint){
+  let r;
+  try{ r=await fetch(SB_URL+"/functions/v1/kuxtal-personas",{method:"POST",
+    headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token,"Content-Type":"application/json"},body:JSON.stringify(cuerpo)}); }
+  catch(e){ return {ok:false,mensaje:'No pude conectarme con el servidor. No sé si se hizo: revisá el internet y mirá la lista antes de repetir.'}; }
+  if(r.status===401&&!reint&&await refrescar()) return llamarPersonas(cuerpo,true);
+  let d=null; try{ d=await r.json(); }catch(e){}
+  if(!d||typeof d.mensaje!=='string') return {ok:false,mensaje:r.status===404?'La función de personas todavía no está publicada.':'No pude hablar con el servidor ('+r.status+'). No sé si se hizo: mirá la lista antes de repetir.'};
+  return d;
+}
+const miNivelRol=()=>{ const r=(ROLDATA&&ROLDATA.roles||[]).find(x=>x.clave===ROLE); return r&&r.nivel!=null?r.nivel:0; };
+function rolesAsignables(){
+  return (ROLDATA.roles||[]).filter(r=>r.activo&&r.es_staff&&r.clave!=='cliente'&&(esAdmin()||(r.nivel||0)<miNivelRol()))
+    .sort((a,b)=>(b.nivel||0)-(a.nivel||0));
+}
+// El rol de agente (tmk, vendedor…) dicho con el nombre visible del rol de cuenta que le corresponde.
+const rolDeAgente=op=>{ const r=(ROLDATA.roles||[]).find(x=>x.rol_operativo===op); return r?r.nombre:op; };
+function opcionesJefe(sel){
+  const ag=(ROLDATA.agentes||[]).filter(a=>a.activo).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+  return `<option value="">— sin jefe —</option>`+ag.map(a=>`<option value="${a.id}" ${String(sel)===String(a.id)?'selected':''}>${esc(a.nombre)} · ${esc(rolDeAgente(a.rol))}</option>`).join('');
+}
+function personasHTML(p){
+  if(p===undefined) return '';
+  if(p===null) return `<div class="cap" style="margin:0 0 12px;color:#b3261e">No pude leer la lista de personas del equipo. <b onclick="cargarRoles()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</div>`;
+  const nomJefe=id=>{ const a=(ROLDATA.agentes||[]).find(x=>x.id===id); return a?a.nombre:'—'; };
+  const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const filas=p.map(x=>{
+    const yo=x.user_id===UID;
+    // Solo un id con forma de uuid entra en un onclick (el escapado del HTML no protege el JS).
+    const acc=yo?'<span class="cap">Vos</span>':!UUID.test(String(x.user_id))?'<span class="cap">—</span>':`<div style="display:flex;gap:6px;flex-wrap:nowrap;white-space:nowrap">
+      ${x.activo?`<button class="minibtn" style="background:var(--kux-l);color:var(--kux)" onclick="cambiarRolPersona('${esc(x.user_id)}')">Cambiar rol</button>
+      <button class="minibtn" style="background:var(--kux-l);color:var(--kux)" onclick="accionPersona('restablecer','${esc(x.user_id)}')">Reenviar enlace</button>
+      <button class="minibtn" style="background:#fbe9e9;color:#b3261e" onclick="accionPersona('desactivar','${esc(x.user_id)}')">Desactivar</button>`
+      :`<button class="minibtn" onclick="accionPersona('activar','${esc(x.user_id)}')">Activar</button>`}</div>`;
+    return `<tr><td><b>${esc(x.nombre||'—')}</b><div class="cap">${esc(x.correo||'')}</div></td><td>${esc(x.rol_nombre||x.rol||'sin rol')}</td>
+      <td>${esc(x.jefe_id?nomJefe(x.jefe_id):'—')}</td><td><span class="pill ${x.activo?'on':''}">${x.activo?'Activa':'Desactivada'}</span></td><td>${acc}</td></tr>`;
+  }).join('');
+  return `<div class="adminhead"><h3><svg class="svic" aria-hidden="true"><use href="#ic-users"/></svg> Personas del equipo (${p.length})</h3><button class="minibtn" onclick="altaPersona()">＋ Dar de alta</button></div>
+    <div class="tblwrap"><table class="dtbl"><thead><tr><th>Persona</th><th>Rol</th><th>Jefe</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>${filas||'<tr><td colspan="5">Todavía no hay nadie.</td></tr>'}</tbody></table></div>
+    <div class="cap" style="margin:8px 0 18px">Al dar de alta, la persona recibe un correo con un enlace para crear SU clave (nadie más la conoce). Si ya estaba en el equipo sin cuenta, se le conecta con sus prospectos de siempre. Cambiar el rol o desactivar cierra sus sesiones abiertas.</div>`;
+}
+function altaPersona(){
+  const roles=rolesAsignables();
+  $('rolBody').innerHTML=`<h3>Dar de alta a una persona</h3>
+    <label>Nombre completo</label><input id="p_nom" maxlength="120" autocomplete="off">
+    <label>Correo (será su usuario)</label><input id="p_cor" type="email" inputmode="email" autocomplete="off">
+    <label>Rol</label><select id="p_rol">${roles.map(r=>`<option value="${esc(r.clave)}">${esc(r.nombre)}</option>`).join('')}</select>
+    <label>Jefe directo</label><select id="p_jefe">${opcionesJefe('')}</select>
+    <div class="ferr" id="p_err"></div>
+    <div class="macc"><button class="mcancel" onclick="cerrarRol()">Cancelar</button><button class="msave" id="p_save" onclick="guardarAltaPersona()">Dar de alta</button></div>`;
+  $('rolModal').style.display='flex'; $('p_nom').focus();
+}
+async function guardarAltaPersona(){
+  const nombre=$('p_nom').value.trim(), correo=$('p_cor').value.trim();
+  if(!nombre){ $('p_err').textContent='Poné el nombre.'; return; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)){ $('p_err').textContent='Ese correo no parece un correo.'; return; }
+  const btn=$('p_save'); btn.disabled=true; btn.textContent='Dando de alta…'; $('p_err').textContent='';
+  const d=await llamarPersonas({accion:'alta',nombre,correo,rol:$('p_rol').value,jefe_id:$('p_jefe').value||null});
+  btn.disabled=false; btn.textContent='Dar de alta';
+  if(!d.ok){ $('p_err').textContent=d.mensaje; return; }
+  resultadoPersona(d);
+}
+function cambiarRolPersona(uid){
+  const x=(ROLDATA.personas||[]).find(p=>p.user_id===uid); if(!x) return;
+  const roles=rolesAsignables();
+  $('rolBody').innerHTML=`<h3>Cambiar el rol de ${esc(x.nombre)}</h3>
+    <label>Rol nuevo</label><select id="p_rol">${roles.some(r=>r.clave===x.rol)?'':'<option value="" selected>— elegí un rol —</option>'}${roles.map(r=>`<option value="${esc(r.clave)}" ${r.clave===x.rol?'selected':''}>${esc(r.nombre)}</option>`).join('')}</select>
+    <label>Jefe directo</label><select id="p_jefe">${opcionesJefe(x.jefe_id||'')}</select>
+    <div class="cap" style="margin-top:10px">Se cierran sus sesiones: al volver a entrar ve lo de su rol nuevo.</div>
+    <div class="ferr" id="p_err"></div>
+    <div class="macc"><button class="mcancel" onclick="cerrarRol()">Cancelar</button><button class="msave" id="p_save" onclick="guardarRolPersona('${esc(uid)}')">Cambiar</button></div>`;
+  $('rolModal').style.display='flex';
+}
+async function guardarRolPersona(uid){
+  if(!$('p_rol').value){ $('p_err').textContent='Elegí un rol.'; return; }
+  const btn=$('p_save'); btn.disabled=true; btn.textContent='Cambiando…'; $('p_err').textContent='';
+  const d=await llamarPersonas({accion:'cambiar_rol',user_id:uid,rol:$('p_rol').value,jefe_id:$('p_jefe').value||null});
+  btn.disabled=false; btn.textContent='Cambiar';
+  if(!d.ok){ $('p_err').textContent=d.mensaje; return; }
+  resultadoPersona(d);
+}
+async function accionPersona(accion,uid){
+  const x=(ROLDATA.personas||[]).find(p=>p.user_id===uid); if(!x) return;
+  const que={restablecer:'mandarle un enlace nuevo a',desactivar:'desactivar a',activar:'activar a'}[accion];
+  $('rolBody').innerHTML=`<h3>¿Seguro que querés ${que} ${esc(x.nombre)}?</h3>
+    ${accion==='restablecer'?'<div class="cap">Le llega un correo con un enlace para crear una clave nueva. Hasta que la cree, la de ahora sigue sirviendo.</div>':''}
+    ${accion==='desactivar'?'<div class="cap">No va a poder entrar y se cierran sus sesiones. Su historial se conserva.</div>':''}
+    <div class="ferr" id="p_err"></div>
+    <div class="macc"><button class="mcancel" onclick="cerrarRol()">Cancelar</button><button class="msave" id="p_save">Sí</button></div>`;
+  $('rolModal').style.display='flex';
+  $('p_save').onclick=async()=>{
+    const btn=$('p_save'); btn.disabled=true; btn.textContent='Un momento…';
+    const d=await llamarPersonas({accion,user_id:uid});
+    btn.disabled=false; btn.textContent='Sí';
+    if(!d.ok){ $('p_err').textContent=d.mensaje; return; }
+    resultadoPersona(d);
+  };
+}
+function resultadoPersona(d){
+  if(d.clave_temporal){
+    $('rolBody').innerHTML=`<h3>Hecho, pero sin correo</h3><div class="cap" style="margin-bottom:10px">${esc(d.mensaje)}</div>
+      <div style="font:700 22px/1.3 ui-monospace,Menlo,monospace;letter-spacing:1px;background:var(--kux-l);padding:14px;border-radius:12px;text-align:center;user-select:all">${esc(d.clave_temporal)}</div>
+      <div class="macc"><button class="msave" onclick="cerrarRol()">Ya la anoté</button></div>`;
+  } else { cerrarRol(); toast(d.mensaje); }
+  ROLDATA=null; cargarRoles();
+}
 const rolNombre=clave=>{const r=ROLDATA.roles.find(x=>x.clave===clave);return r?r.nombre:(clave||'—');};
 function rolesPanel(){
-  const {roles,permisos,agentes,descalces}=ROLDATA;
+  const {roles,permisos,agentes,descalces,personas}=ROLDATA;
   // A · Tabla de roles + jerarquía
   const filasRol=roles.map(r=>`<tr>
     <td><b>${esc(r.nombre)}</b><div class="cla">${esc(r.clave)}</div></td>
@@ -1129,7 +1243,7 @@ function rolesPanel(){
     ? organigramaHTML(agentes)
     : `<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-sprout"/></svg></span><b>Organigrama listo para llenarse</b><p>Cuando agregues personas al equipo (pestaña Embudo ▸ Equipo), acá vas a ver el árbol de quién reporta a quién y vas a poder reorganizarlo.</p></div>`;
   const organiWrap=`<div class="adminhead"><h3><svg class="svic" aria-hidden="true"><use href="#ic-users"/></svg> Organigrama del equipo</h3></div>${organi}`;
-  return descalcesHTML(descalces)+tablaRoles+matriz+organiWrap;
+  return descalcesHTML(descalces)+personasHTML(personas)+tablaRoles+matriz+organiWrap;
 }
 // ── F5 · Organigrama visual (árbol) ──
 // Nivel del rol de una persona (para ordenar la cima arriba); usa la tabla de roles.
