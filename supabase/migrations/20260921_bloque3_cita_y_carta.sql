@@ -81,24 +81,32 @@ comment on column public.funnel_prospectos.carta_correo is
 -- mandarle la carta) se borran solos. Solo funnel_cita_confirmar la pone (marca de sesión).
 create or replace function public.funnel_cita_guardia() returns trigger
   language plpgsql set search_path to 'public', 'pg_temp' as $$
+declare v_confirmando boolean; v_err text;
 begin
-  -- Solo la función de confirmar (corre como su dueño, no como la cuenta del equipo) puede
-  -- poner la confirmación: la marca de sesión sola no alcanza (revisión ciber, S3).
-  if current_setting('kux.confirmando', true) is distinct from 'si' or current_user in ('authenticated','anon') then
-    if new.cita_confirmada_en is distinct from old.cita_confirmada_en
-       or new.cita_confirmada_por is distinct from old.cita_confirmada_por
-       or new.carta_whatsapp is distinct from old.carta_whatsapp
-       or new.carta_correo is distinct from old.carta_correo then
-      -- nadie la pone «a mano»: se conserva lo de antes
-      new.cita_confirmada_en := old.cita_confirmada_en; new.cita_confirmada_por := old.cita_confirmada_por;
-      new.carta_whatsapp := old.carta_whatsapp; new.carta_correo := old.carta_correo;
-    end if;
+  -- Solo ESTE update puede poner la confirmación: el de funnel_cita_confirmar (marca de sesión
+  -- + corre como el dueño de la función + cambia cita_confirmada_en). Cualquier otro update
+  -- —aunque venga de otra función con la marca puesta— pasa por la limpieza (ronda 2 ciber).
+  v_confirmando := current_setting('kux.confirmando', true) = 'si'
+                   and current_user not in ('authenticated','anon')
+                   and new.cita_confirmada_en is distinct from old.cita_confirmada_en;
+  if not v_confirmando then
+    -- nadie la pone «a mano»: se conserva lo de antes
+    new.cita_confirmada_en := old.cita_confirmada_en; new.cita_confirmada_por := old.cita_confirmada_por;
+    new.carta_whatsapp := old.carta_whatsapp; new.carta_correo := old.carta_correo;
     if new.presenta_en is distinct from old.presenta_en
        or new.restaurante_id is distinct from old.restaurante_id
        or (old.estado = 'asistira' and new.estado <> 'asistira') then
       new.cita_confirmada_en := null; new.cita_confirmada_por := null;
       new.carta_whatsapp := false; new.carta_correo := false;
     end if;
+  end if;
+  -- Una cita escrita DIRECTO en la tabla por una cuenta del equipo también respeta horario y cupo
+  -- (las funciones ya lo validan antes; esto cierra el camino de la tabla).
+  if current_user in ('authenticated','anon') and new.estado = 'asistira' and new.etapa = 'telemarketing'
+     and (new.presenta_en is distinct from old.presenta_en or new.restaurante_id is distinct from old.restaurante_id
+          or old.estado is distinct from 'asistira') then
+    v_err := public.funnel_horario_problema(new.restaurante_id, new.presenta_en, new.id);
+    if v_err is not null then raise exception '%', v_err; end if;
   end if;
   -- El consentimiento es de ESE teléfono y ESE correo: si cambian, se pierde (siempre).
   if new.telefono is distinct from old.telefono then new.carta_whatsapp := false; end if;
@@ -145,6 +153,8 @@ begin
   return null;
 end $$;
 revoke all on function public.funnel_horario_problema(bigint, timestamptz, bigint) from public, anon, authenticated;
+-- El disparador de la tabla corre como la cuenta del equipo y la necesita (solo devuelve un motivo).
+grant execute on function public.funnel_horario_problema(bigint, timestamptz, bigint) to authenticated;
 
 -- ── 5. el telemarketer cita solo en horarios con cupo ─────────────────────
 create or replace function public.funnel_tmk_resultado(
@@ -286,7 +296,7 @@ create or replace function public.funnel_citas_lista()
                 tmk_nombre text, comentario text)
   language plpgsql stable security definer set search_path to 'public', 'pg_temp' as $$
 begin
-  if not public.funnel_puede('confirmar_citas') then raise exception 'no autorizado'; end if;
+  if not public.funnel_puede('confirmar_citas') or public.funnel_es_tmk() then raise exception 'no autorizado'; end if;
   return query
   select p.id, p.nombre, p.telefono, p.email, p.es_socio, p.estado, p.restaurante_id, p.presenta_en,
          p.cita_confirmada_en, p.cita_confirmada_por, p.carta_whatsapp, p.carta_correo,
@@ -308,7 +318,7 @@ create or replace function public.funnel_cita_confirmar(
 declare p public.funnel_prospectos%rowtype; v_err text;
   v_actor text := left(coalesce(auth.jwt()->>'email', 'crm'), 120);
 begin
-  if not public.funnel_puede('confirmar_citas') then raise exception 'no autorizado'; end if;
+  if not public.funnel_puede('confirmar_citas') or public.funnel_es_tmk() then raise exception 'no autorizado'; end if;
   select * into p from public.funnel_prospectos where id = p_id for update;
   if not found or not coalesce((public.funnel_ve_todo() or (p.tmk_id is not null and p.tmk_id in (select public.funnel_ve_equipo()))), false) then raise exception 'no autorizado'; end if;
   if p.estado <> 'asistira' or p.etapa <> 'telemarketing' then
@@ -344,7 +354,7 @@ create or replace function public.funnel_cita_regresar(p_id bigint, p_motivo tex
 declare p public.funnel_prospectos%rowtype;
   v_actor text := left(coalesce(auth.jwt()->>'email', 'crm'), 120);
 begin
-  if not public.funnel_puede('confirmar_citas') then raise exception 'no autorizado'; end if;
+  if not public.funnel_puede('confirmar_citas') or public.funnel_es_tmk() then raise exception 'no autorizado'; end if;
   p_motivo := nullif(left(btrim(coalesce(p_motivo, '')), 300), '');
   if p_motivo is null then raise exception 'escribí el motivo para el telemarketer'; end if;
   select * into p from public.funnel_prospectos where id = p_id for update;
