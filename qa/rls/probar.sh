@@ -57,7 +57,7 @@ caso "el recién atado ve su prospecto (y no pX, que comparte su correo)" "pNuev
 
 echo "· la matriz de la pestaña Roles manda"
 caso "quitar ver_socios a telemarketing lo deja en 0" "0" telemarketing "update funnel_permisos set permitido=false where rol_clave='telemarketing' and permiso='ver_socios';" "select count(*) from socios;"
-caso "dar editar_socios a telemarketing lo deja editar" "1" telemarketing "update funnel_permisos set permitido=true where rol_clave='telemarketing' and permiso='editar_socios';" "with u as (update socios set estado=estado where id=(select min(id) from public.socios) returning 1) select count(*) from u;"
+caso "dar ver+editar socios a telemarketing lo deja editar (desde 19-sep telemarketing no lee socios)" "1" telemarketing "update funnel_permisos set permitido=true where rol_clave='telemarketing' and permiso in ('editar_socios','ver_socios');" "with u as (update socios set estado=estado where id=(select min(id) from public.socios) returning 1) select count(*) from u;"
 caso "sin editar_socios telemarketing no edita" "0" telemarketing "" "with u as (update socios set estado=estado where id=(select min(id) from public.socios) returning 1) select count(*) from u;"
 caso "quitar ver_comisiones a gerente_tmk: ya no ve las ajenas" "-" gerente_tmk "update funnel_permisos set permitido=false where rol_clave='gerente_tmk' and permiso='ver_comisiones';" "select coalesce(string_agg(id::text,','),'-') from funnel_comisiones where id>=900200;"
 caso "quitar gestionar_comisiones a supervisor: no edita reglas" "0" supervisor "update funnel_permisos set permitido=false where rol_clave='supervisor' and permiso='gestionar_comisiones';" "with u as (update funnel_comision_reglas set activo=activo returning 1) select count(*) from u;"
@@ -518,6 +518,9 @@ CERR8="$CON_CLOSER $SEG $DIG $ADM5 select funnel_cerrar_contrato(900101,'x','y',
 CON_DIG="$CERR8 update funnel_contratos set digitador_id=900061 where prospecto_id=900101;"
 DATOS="'{\"dpi\":\"1234567890123\",\"fecha_nacimiento\":\"1980-05-01\",\"direccion\":\"6a av 1-23 z10\",\"correo\":\"ana@correo.gt\",\"beneficiarios\":[{\"nombre\":\"Luis\",\"parentesco\":\"hijo\"}]}'::jsonb"
 caso "el contrato nace «por digitar»" "por_digitar" gerente_ventas "$CERR8" "$DUE select estado from funnel_contratos where id=$CID;"
+caso "lente b8 P0: el liner anota el enganche en un contrato recién cerrado (por digitar)" "1|100" vendedor "$CERR8" "with u as (update funnel_contratos set enganche=100 where prospecto_id=900101 returning enganche) select count(*)||'|'||max(enganche) from u;"
+caso "lente b8 P0: alguien ajeno al contrato no le toca el enganche" "0" verificador "$CERR8" "with u as (update funnel_contratos set enganche=100 where prospecto_id=900101 returning 1) select count(*) from u;"
+caso "lente b8 P1: quien cierra NO elige el digitador por la API" "sin digitador" vendedor "$CON_CLOSER $SEG $DIG $ADM5" "select funnel_cerrar_contrato(900101,'x','y',900021,900031,900061,4); $DUE select coalesce(digitador_id::text,'sin digitador') from funnel_contratos where id=$CID;"
 caso "la gerencia de ventas asigna el digitador" "900061" gerente_ventas "$CERR8" "select funnel_contrato_asignar_digitador($CID,900061); $DUE select digitador_id from funnel_contratos where id=$CID;"
 caso "el liner no asigna digitador" "ERROR: no autorizado" vendedor "$CERR8 select set_config('kx.cid',(select id::text from funnel_contratos where prospecto_id=900101),true);" "select funnel_contrato_asignar_digitador(current_setting('kx.cid')::bigint,900061);"
 caso "no se asigna como digitador a alguien que no lo es" "ERROR: esa persona no es un digitador activo" gerente_ventas "$CERR8" "select funnel_contrato_asignar_digitador($CID,900041);"

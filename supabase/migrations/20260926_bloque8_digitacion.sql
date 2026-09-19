@@ -54,6 +54,15 @@ create or replace function public.funnel_puede_digitar(c public.funnel_contratos
 $$;
 revoke all on function public.funnel_puede_digitar(public.funnel_contratos) from public, anon, authenticated;
 
+-- ── 0b. el enganche se anota DESPUÉS de cerrar: la política de edición tiene que aceptar «por digitar»
+--      (sin esto el PATCH no tocaba ninguna fila y el enganche se perdía en silencio).
+drop policy if exists fcon_upd on public.funnel_contratos;
+create policy fcon_upd on public.funnel_contratos for update to authenticated
+  using (estado in ('firmado', 'por_digitar', 'por_verificar', 'observado')
+         and (public.funnel_es_gerente() or public.funnel_mi_agente() in (vendedor_id, cerrador_id, digitador_id, verificador_id)))
+  with check (estado in ('firmado', 'por_digitar', 'por_verificar', 'observado')
+         and (public.funnel_es_gerente() or public.funnel_mi_agente() in (vendedor_id, cerrador_id, digitador_id, verificador_id)));
+
 -- ── 1. el cierre: nace «por digitar»; la comisión del digitador nace al validar ──
 do $p$
 declare d text;
@@ -64,7 +73,10 @@ begin
                     $a$            /* kux.b8: primero lo digita el digitador */ 'por_digitar', v_p, v_dm, s.id, v_ds,$a$);
     d := replace(d, $a$  for rg in select * from funnel_comision_reglas g where g.activo and g.rol <> 'verificador'$a$,
                     $a$  for rg in select * from funnel_comision_reglas g where g.activo and g.rol not in ('verificador', 'digitador')   -- kux.b8$a$);
-    if (length(d) - length(replace(d, 'kux.b8', ''))) / 6 <> 2 then raise exception 'no encontré dónde parchar funnel_cerrar_contrato (bloque 8)'; end if;
+    d := replace(d, $a$  if p_digitador is not null and not exists$a$,
+                    $a$  p_digitador := null;   /* kux.b8: el digitador lo asigna la gerencia, nunca quien cierra */
+  if p_digitador is not null and not exists$a$);
+    if (length(d) - length(replace(d, 'kux.b8', ''))) / 6 <> 3 then raise exception 'no encontré dónde parchar funnel_cerrar_contrato (bloque 8)'; end if;
     execute d;
   end if;
 end $p$;
@@ -216,7 +228,7 @@ declare c public.funnel_contratos%rowtype; v_yo bigint := public.funnel_mi_agent
 begin
   select * into c from public.funnel_contratos where id = p_id;
   if not found or public.funnel_es_tmk() or not (public.funnel_puede('corregir_sala')
-       or (v_yo is not null and v_yo in (c.digitador_id, c.verificador_id))) then
+       or coalesce(v_yo in (c.digitador_id, c.verificador_id), false)) then   -- coalesce: con un vacío, «no» (no «desconocido»)
     raise exception 'no autorizado';
   end if;
   if c.estado in ('por_digitar', 'cancelado') then raise exception 'ese contrato todavía no se puede imprimir'; end if;

@@ -3039,7 +3039,8 @@ async function registrarEnganche(cid,pid,enganche,planPago,apiFn,tieneCol,actor)
   const out={patched:false,evento:false};
   if(enganche==null||!(enganche>0)) return out;
   if(tieneCol&&cid!=null){
-    try{ const r=await apiFn("funnel_contratos?id=eq."+cid,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({enganche})}); out.patched=!!r.ok; }catch(e){}
+    /* bloque 8: se pide la fila de vuelta; un PATCH que no tocó ninguna fila (RLS) NO cuenta como guardado */
+    try{ const r=await apiFn("funnel_contratos?id=eq."+cid,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify({enganche})}); const fil=r.ok?await r.json():[]; out.patched=Array.isArray(fil)&&fil.length===1; }catch(e){}
   }
   try{ const r2=await apiFn("funnel_eventos",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({prospecto_id:pid,tipo:'enganche',actor:actor||'crm',payload:{contrato_id:cid,enganche,plan_pago:planPago}})}); out.evento=!!r2.ok; }catch(e){}
   return out;
@@ -3056,7 +3057,9 @@ async function cerrarContrato(id,btn){
       p_digitador:null /* bloque 8: el digitador lo asigna la gerencia */, p_anios:anios, p_solicitud:(ped&&ped.estado==='aprobada'&&ped.membresia===mem)?ped.id:null};
     const res=await rpcSala('funnel_cerrar_contrato',body)||{};
     const eng=g('eng')?Number(g('eng')):null;
-    try{ await registrarEnganche(res.contrato_id,id,eng,g('pln'),api,await probeContratosExt(),USER); }catch(e){}
+    let engOk=true;
+    try{ const tc=await probeContratosExt(); const re=await registrarEnganche(res.contrato_id,id,eng,g('pln'),api,tc,USER); engOk=!(eng>0)||!tc||re.patched; }catch(e){ engOk=!(eng>0); }
+    if(!engOk) toast('Ojo: el contrato se cerró pero el enganche NO se guardó. Avisale a la gerencia de ventas.');
     // Bloque 8: no se imprime al cerrar; el contrato se imprime cuando el digitador valida los datos.
     toast('Contrato cerrado · socio '+(res.no_socio||'')+' · pasa a digitación'); cierreLeads=cierreLeads.filter(x=>x.id!==id); delete CIERRE_F[id]; pintarCierre(true);
   }catch(e){ toast('No se cerró: '+(e.message||'error')); btn.disabled=false; btn.innerHTML=txt; }
