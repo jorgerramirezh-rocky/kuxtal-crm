@@ -31,7 +31,8 @@ vm.runInContext([
   "var toasts=[], el={}, MIS_PERMISOS={}, ROLE='', verTodo=false, esGerente=false, funTab='', AGENTES=[{id:41,nombre:'Vera <b>',rol:'verificador',activo:true},{id:42,nombre:'V2',rol:'verificador',activo:true}], VNOTA={}, VERIF=[];",
   "function $(id){ return el[id]||null; } function toast(m){ toasts.push(m); } async function vistaVerificacion(){}",
   "var api=async (path,opt)=>{ llamadas.push({path, body: opt&&opt.body?JSON.parse(opt.body):null}); return respuesta(); };",
-  ...['partesGT', 'rpcSala', 'pasoCliente', 'vistaMisClientes', 'verifCard', 'asignarVerificador', 'funPintarTabs'].map(extraer),
+  linea('const cuandoGT='), "function hoyStr(){ return '2026-09-19'; } async function funIrTab(){}",
+  ...['partesGT', 'rpcSala', 'pasoCliente', 'tonoPaso', 'misClienteCard', 'vistaMisClientes', 'verifCard', 'asignarVerificador', 'funPintarTabs'].map(extraer),
 ].join('\n'), ctx)
 ctx.respuesta = () => respuesta()
 vm.runInContext('var respuesta=this.respuesta; api=async (path,opt)=>{ llamadas.push({path, body: opt&&opt.body?JSON.parse(opt.body):null}); return respuesta(); };', ctx)
@@ -46,7 +47,8 @@ ctx.el.funCap = {}; ctx.el.funCont = { innerHTML: '' }
 respuesta = () => ({ ok: true, status: 200, json: async () => ([{ id: 1, nombre: 'Ana <img src=x>', telefono: '55', recepcion_en: '2026-09-19T18:00:00Z', etapa: 'sala', mi_papel: 'liner', liner: 'L <i>1</i>', closer: null }]) })
 await ctx.vistaMisClientes()
 const h = ctx.el.funCont.innerHTML
-ok(h.includes('sos el liner') && h.includes('En sala · falta closer') && h.includes('llegó 12:00'), 'la tarjeta dice quién sos, cuándo llegó y en qué paso va')
+ok(h.includes('sos el liner') && h.includes('En sala · falta closer') && h.includes('llegó hoy 12:00') && h.includes('En sala ahora (1)'), 'la tarjeta dice quién sos, cuándo llegó (con el día) y en qué paso va, agrupada')
+ok(h.includes('Esperá a que la sala le asigne closer') && h.includes('href="tel:55"'), 'sin closer: dice qué esperar; teléfono para llamar')
 ok(!h.includes('<img') && !h.includes('<i>1</i>'), '«mis clientes»: escapado')
 respuesta = () => ({ ok: true, status: 200, json: async () => ([]) })
 await ctx.vistaMisClientes()
@@ -63,13 +65,20 @@ ok(ctx.el.funTabs.innerHTML.includes('>Reservas<'), 'con el permiso de reservas,
 
 vm.runInContext("MIS_PERMISOS={verificar_contratos:true};", ctx)
 let vc = ctx.verifCard({ id: 7, cliente: 'x', estado: 'por_verificar', verificador_id: 41, verificador: 'Vera <b>' })
-ok(!vc.includes('id="asv7"') && vc.includes('Verificador: <b>Vera &lt;b&gt;</b>'), 'el verificador ve quién es el asignado; no lo cambia')
+ok(!vc.includes('id="asv7"') && vc.includes('Asignado a vos.'), 'el verificador no cambia la asignación')
 vm.runInContext("MIS_PERMISOS={verificar_contratos:true,corregir_sala:true};", ctx)
 vc = ctx.verifCard({ id: 7, cliente: 'x', estado: 'por_verificar', verificador_id: 41, verificador: 'Vera <b>' })
 ok(vc.includes('id="asv7"') && vc.includes('>V2<') && !vc.includes('<option value="41">'), 'la gerencia asigna el verificador (sin repetir el actual)')
 llamadas.length = 0
-await ctx.asignarVerificador(7, { value: '42', disabled: false })
-ok(llamadas[0] && /funnel_contrato_asignar_verificador/.test(llamadas[0].path) && llamadas[0].body.p_agente === 42, 'asignar manda el verificador elegido')
+await ctx.asignarVerificador(7, { value: '42' }, { disabled: false })
+ok(llamadas[0] && /funnel_contrato_asignar_verificador/.test(llamadas[0].path) && llamadas[0].body.p_agente === 42 && ctx.toasts.includes('Asignado a V2'), 'asignar (con botón) manda el elegido y nombra a la persona')
+let vs = ctx.verifCard({ id: 8, cliente: 'x', estado: 'por_verificar', verificador_id: null })
+ok(vs.includes('Sin verificador') && !/onchange="asignar/.test(vs), 'sin verificador: marca roja; el selector solo no asigna')
+
+vm.runInContext("MIS_PERMISOS={cerrar_contrato:true};", ctx)
+const conC = ctx.misClienteCard({ id: 3, nombre: 'x', etapa: 'sala', mi_papel: 'closer', closer: 'C', contrato: null })
+ok(conC.includes('Ir a cierre'), 'con closer y permiso de cierre: botón «Ir a cierre»')
+ok(ctx.tonoPaso({ contrato: 'verificado' }) === 'ok' && ctx.tonoPaso({ contrato: 'cancelado' }) === 'err' && ctx.tonoPaso({ etapa: 'sala', descuento: 'pendiente' }) === 'warn', 'colores por paso')
 
 if (fallas) { console.log(`🔴 ${fallas} fallas`); process.exit(1) }
 console.log('✅ Mis clientes OK')
