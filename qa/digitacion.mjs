@@ -33,10 +33,11 @@ const ctx = { console, TZ_GT: 'America/Guatemala', llamadas, impresos }
 vm.createContext(ctx)
 vm.runInContext([
   linea('const esc='), linea('const usd='), linea('const DPI_OK='),
-  "var toasts=[], el={}, MIS_PERMISOS={}, ROLE='', verTodo=false, esGerente=false, funTab='', AGENTES=[{id:61,nombre:'Dora <b>',rol:'digitador',activo:true}], DIGIT=[], DBEN={}, DDEV={};",
-  "function $(id){ return el[id]||null; } function toast(m){ toasts.push(m); } function pintarDigit(){} async function vistaDigitacion(){} function imprimirContrato(d){ impresos.push(d); }",
+  "var toasts=[], el={}, MIS_PERMISOS={}, ROLE='', verTodo=false, esGerente=false, funTab='', AGENTES=[{id:61,nombre:'Dora <b>',rol:'digitador',activo:true}], DIGIT=[], DBEN={}, DDEV={}, DDRAFT={}, DCONF={}, ventanaOk=true;",
+  "function $(id){ return el[id]||null; } function toast(m){ toasts.push(m); } async function vistaDigitacion(){} function imprimirContrato(d,w){ impresos.push({d,w}); return true; }",
+  "var window={open:()=>ventanaOk?{close(){},document:{}}:null};",
   "var api=async (path,opt)=>{ llamadas.push({path, body: opt&&opt.body?JSON.parse(opt.body):null}); return respuesta(); };",
-  ...['rpcSala', 'puedeValidar', 'leerDigit', 'digitCard', 'validarDigit', 'devolverDigit', 'funPintarTabs'].map(extraer),
+  ...['rpcSala', 'puedeValidar', 'leerDigit', 'guardarBorrDigit', 'faltaDigit', 'avisarFalta', 'pintarDigit', 'digitCard', 'pedirValidar', 'validarDigit', 'devolverDigit', 'reimprimir', 'funPintarTabs'].map(extraer),
 ].join('\n'), ctx)
 ctx.respuesta = () => respuesta()
 vm.runInContext('var respuesta=this.respuesta; api=async (path,opt)=>{ llamadas.push({path, body: opt&&opt.body?JSON.parse(opt.body):null}); return respuesta(); };', ctx)
@@ -50,7 +51,7 @@ ok(!ctx.puedeValidar({ dpi: '1234567890123', fecha_nacimiento: '1980-01-01', dir
 const c = { id: 5, cliente: 'Ana <img src=x>', membresia: 'VIP', plan_pago: 'Contado', monto: 900, precio_lista: 1000, descuento: 100, enganche: 100, liner: 'L', closer: 'C', digitador_id: 61, digitador: 'Dora <b>', no_socio: '3907', anios: 4, beneficiarios: [] }
 vm.runInContext("MIS_PERMISOS={digitar_contratos:true}; ROLE='digitador';", ctx)
 let h = ctx.digitCard(c)
-ok(h.includes('Validado · imprimir contrato') && h.includes('id="dgdpi5"') && !h.includes('id="asd5"'), 'el digitador ve el formulario; no asigna')
+ok(h.includes('Validar e imprimir…') && h.includes('id="dgdpi5"') && h.includes('obligatorio') && !h.includes('id="asd5"'), 'el digitador ve el formulario (con obligatorios marcados); no asigna')
 ok(!h.includes('<img') && !h.includes('Dora <b>'), 'digitación: escapado')
 vm.runInContext("MIS_PERMISOS={digitar_contratos:true,corregir_sala:true}; ROLE='gerente_ventas';", ctx)
 ok(ctx.digitCard({ ...c, digitador_id: null, digitador: null }).includes('Sin digitador') && ctx.digitCard({ ...c, digitador_id: null }).includes('id="asd5"'), 'la gerencia ve y asigna lo que no tiene digitador')
@@ -67,7 +68,7 @@ ok(llamadas.length === 0 && ctx.toasts.includes('Marcá las tres revisiones ante
 ctx.el.dgk15.checked = true
 await ctx.validarDigit(5, { disabled: false })
 ok(llamadas.length === 2 && /funnel_contrato_digitar/.test(llamadas[0].path) && /funnel_contrato_validar/.test(llamadas[1].path), 'validar: guarda los datos y valida')
-ok(impresos.length === 1 && impresos[0].dpi === '1234567890123' && impresos[0].beneficiarios.length === 1 && impresos[0].no_socio === '3907', 'y recién ahí imprime, con DPI, beneficiarios y número de socio')
+ok(impresos.length === 1 && impresos[0].d.dpi === '1234567890123' && impresos[0].d.beneficiarios.length === 1 && impresos[0].d.no_socio === '3907' && impresos[0].w, 'y recién ahí imprime (en la ventana abierta desde el toque), con DPI, beneficiarios y número de socio')
 
 llamadas.length = 0; ctx.el.dgdev5 = { value: '  ' }
 await ctx.devolverDigit(5, { disabled: false })
@@ -79,6 +80,27 @@ ok(!/imprimirContrato\(/.test(cierre.slice(0, cierre.indexOf('\n}\n'))) && /pasa
 ctx.el.funTabs = { innerHTML: '' }
 vm.runInContext("MIS_PERMISOS={digitar_contratos:true}; ROLE='digitador'; verTodo=false; esGerente=false;", ctx); ctx.funPintarTabs()
 ok(ctx.el.funTabs.innerHTML.includes('>Digitación<') && !ctx.el.funTabs.innerHTML.includes('Mi día'), 'el digitador ve Digitación (y ya no «Mi día»)')
+
+// ── lente de diseño ──
+ok(ctx.faltaDigit({ dpi: '123456789' }, [true, false, true]).join(', ') === 'DPI (9 de 13 dígitos), fecha de nacimiento, dirección, revisión 2', '«Falta:» dice exactamente qué falta')
+ctx.DIGIT.length = 0; ctx.DIGIT.push({ ...c, id: 6, dpi: null, direccion: null }); ctx.DBEN[6] = []
+ctx.el = { funCont: { innerHTML: '' }, dgdpi6: { value: '1234567890123' }, dgfn6: { value: '1980-01-01' }, dgdir6: { value: 'z10 escrita' }, dgk06: { checked: true }, dgk16: { checked: false }, dgk26: { checked: true } }
+vm.runInContext('el=this.el;', ctx); vm.runInContext("MIS_PERMISOS={digitar_contratos:true}; ROLE='digitador';", ctx)
+ctx.pintarDigit()
+const rep = ctx.el.funCont.innerHTML
+ok(rep.includes('value="1234567890123"') && rep.includes('value="z10 escrita"') && /id="dgk06" checked/.test(rep), 'lo escrito y las revisiones marcadas sobreviven al repintar')
+llamadas.length = 0; vm.runInContext('ventanaOk=false; DCONF={};', ctx); ctx.el.dgk16.checked = true
+await ctx.validarDigit(6, { disabled: false })
+ok(llamadas.length === 0 && ctx.toasts.some(t => /no se validó nada/.test(t)), 'si el navegador bloquea la ventana: no se valida nada')
+vm.runInContext('ventanaOk=true;', ctx)
+ctx.el.dgk16.checked = false; ctx.pedirValidar(6)
+ok(!vm.runInContext('DCONF[6]', ctx) && ctx.toasts.some(t => /Falta: revisión 2/.test(t)), 'validar con algo pendiente: no abre la confirmación y dice qué falta')
+ctx.el.dgk16.checked = true; ctx.pedirValidar(6)
+ok(vm.runInContext('DCONF[6]', ctx) === true, 'con todo completo: pide confirmar antes de validar')
+llamadas.length = 0; impresos.length = 0
+respuesta = () => ({ ok: true, status: 200, json: async () => ({ nombre: 'Ana', dpi: '1234567890123', fecha: '2026-09-18' }) })
+await ctx.reimprimir(9, { disabled: false })
+ok(/funnel_contrato_impresion/.test((llamadas[0] || {}).path) && impresos.length === 1 && impresos[0].d.fecha === '2026-09-18', 'reimprimir trae los datos (con la fecha del cierre) e imprime')
 
 if (fallas) { console.log(`🔴 ${fallas} fallas`); process.exit(1) }
 console.log('✅ Digitación OK')

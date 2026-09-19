@@ -208,6 +208,37 @@ end $$;
 revoke all on function public.funnel_contrato_devolver(bigint, text) from public, anon;
 grant execute on function public.funnel_contrato_devolver(bigint, text) to authenticated;
 
+-- Reimprimir (lente de diseño P0-2): los datos del contrato para imprimirlo otra vez. Gerencia de ventas,
+-- el digitador y el verificador asignados. Con la fecha del CIERRE (no la del día en que se imprime).
+create or replace function public.funnel_contrato_impresion(p_id bigint)
+  returns jsonb language plpgsql stable security definer set search_path to 'public', 'pg_temp' as $$
+declare c public.funnel_contratos%rowtype; v_yo bigint := public.funnel_mi_agente(); r jsonb;
+begin
+  select * into c from public.funnel_contratos where id = p_id;
+  if not found or public.funnel_es_tmk() or not (public.funnel_puede('corregir_sala')
+       or (v_yo is not null and v_yo in (c.digitador_id, c.verificador_id))) then
+    raise exception 'no autorizado';
+  end if;
+  if c.estado in ('por_digitar', 'cancelado') then raise exception 'ese contrato todavía no se puede imprimir'; end if;
+  select jsonb_build_object('no_socio', so.no_socio, 'nombre', p.nombre, 'telefono', p.telefono, 'membresia', c.tipo_membresia,
+         'plan', c.plan_pago, 'monto', c.monto, 'enganche', c.enganche, 'anios', so.anios_servicio, 'fecha', (c.creado_en at time zone 'America/Guatemala')::date,
+         'vendedor', v.nombre, 'cerrador', k.nombre, 'digitador', dg.nombre, 'verificador', vf.nombre,
+         'dpi', d.dpi, 'fecha_nacimiento', d.fecha_nacimiento, 'direccion', d.direccion, 'correo', d.correo,
+         'ocupacion', d.ocupacion, 'conyuge', d.conyuge_nombre, 'beneficiarios', coalesce(d.beneficiarios, '[]'::jsonb))
+    into r
+    from public.funnel_prospectos p
+    left join public.socios so on so.id = c.socio_id
+    left join public.funnel_contrato_datos d on d.contrato_id = c.id
+    left join public.funnel_agentes v on v.id = c.vendedor_id
+    left join public.funnel_agentes k on k.id = c.cerrador_id
+    left join public.funnel_agentes dg on dg.id = c.digitador_id
+    left join public.funnel_agentes vf on vf.id = c.verificador_id
+   where p.id = c.prospecto_id;
+  return r;
+end $$;
+revoke all on function public.funnel_contrato_impresion(bigint) from public, anon;
+grant execute on function public.funnel_contrato_impresion(bigint) to authenticated;
+
 -- «Mis clientes»: el closer ve si el digitador le devolvió algo (nota incluida en el paso).
 drop function if exists public.funnel_mis_clientes();
 create or replace function public.funnel_mis_clientes()
