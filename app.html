@@ -2367,7 +2367,7 @@ async function vistaRecepcion(){
 }
 // Lo que la hostess ya escribió NO se pierde cuando se repinta la lista (llega otra familia, etc.).
 function guardarBorr(){ document.querySelectorAll('#funCont [data-borr]').forEach(e=>{ const [id,k]=e.dataset.borr.split(':'); (BORR[id]=BORR[id]||{})[k]=e.value; }); }
-function valB(l,k,def){ const b=BORR[l.id]; return b&&b[k]!==undefined?b[k]:def; }
+function salaVal(l,k,def){ const b=BORR[l.id]; return b&&b[k]!==undefined?b[k]:def; }
 function pintarRecepcion(){
   guardarBorr();
   const {llegar,sala,completos}=salaPartir(window.__REC);
@@ -2396,8 +2396,8 @@ function recepCard(l,varios){
   if(!l.recepcion_en) return `<div class="lead" id="rec${l.id}" style="border-left-color:var(--gris)">
     <div class="lname">${esc(l.nombre)}</div><div class="lmeta">${meta}</div>
     <button class="btn" style="margin-top:10px" onclick="marcarLlegada(${l.id},this)">Llegó</button></div>`;
-  const b=(k,d)=>esc(String(valB(l,k,d??'')));
-  const ec=valB(l,'ec',l.estado_civil||'');
+  const b=(k,d)=>esc(String(salaVal(l,k,d??'')));
+  const ec=salaVal(l,'ec',l.estado_civil||'');
   const no=!!NOCAL[l.id];
   return `<div class="lead" id="rec${l.id}" style="border-left-color:var(--amar)">
     <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">${meta}</div></div><div style="flex:none"><span class="sala-llego">Llegó ${esc(horaGT(l.recepcion_en))}</span></div></div>

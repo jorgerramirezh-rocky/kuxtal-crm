@@ -28,7 +28,7 @@ vm.runInContext([
   "var LUGARES_TODOS=[{id:1,nombre:'Tre <b>Fratelli</b>'},{id:2,nombre:'El Portal'}];",
   "var TURNOS_HOY=[{id:1,restaurante_id:1,agente_id:21,nombre:'Liner <i>uno</i>',rol:'vendedor',disponible:true},{id:2,restaurante_id:1,agente_id:22,nombre:'L2',rol:'vendedor',disponible:false},{id:3,restaurante_id:2,agente_id:23,nombre:'L3 otro lugar',rol:'vendedor',disponible:true},{id:4,restaurante_id:1,agente_id:31,nombre:'C1',rol:'cerrador',disponible:true},{id:5,restaurante_id:1,agente_id:11,nombre:'H1',rol:'recepcion',disponible:true}];",
   "var BORR={}, NOCAL={}, CAMBIO={};", linea('const horaGT='),
-  ...['partesGT', 'enTurno', 'salaPartir', 'avisosSala', 'valB', 'opTurno', 'recepCard', 'salaCard'].map(extraer),
+  ...['partesGT', 'enTurno', 'salaPartir', 'avisosSala', 'salaVal', 'opTurno', 'recepCard', 'salaCard'].map(extraer),
 ].join('\n'), ctx)
 
 let fallas = 0
@@ -136,6 +136,12 @@ vm.runInContext("MIS_PERMISOS={recibir_sala:true}; ROLE='recepcion'; verTodo=fal
 ok(/>Recepción</.test(b2.el.funTabs.innerHTML) && !/Mi día|Turnos|Cierre|Todos/.test(b2.el.funTabs.innerHTML), 'la hostess ve SOLO Recepción')
 vm.runInContext("MIS_PERMISOS={recibir_sala:true,armar_turnos:true}; ROLE='supervisor'; verTodo=true; esGerente=true;", b2); b2.funPintarTabs()
 ok(/>Turnos</.test(b2.el.funTabs.innerHTML) && /Recepción/.test(b2.el.funTabs.innerHTML), 'quien arma turnos ve Turnos y Recepción')
+
+// Una función declarada dos veces: en el navegador gana la última y rompe a la otra pantalla en silencio
+// (pasó en el bloque 4: valB de la sala pisaba la de Mi día del telemarketer).
+const decl = [...src.matchAll(/(?:async )?function ([A-Za-z_$][\w$]*)\(/g)].map(m => m[1])
+const dup = [...new Set(decl.filter((n, i) => decl.indexOf(n) !== i))]
+ok(dup.length === 0, 'ninguna función declarada dos veces en app.html' + (dup.length ? ' → ' + dup.join(', ') : ''))
 
 if (fallas) { console.log(`🔴 ${fallas} fallas`); process.exit(1) }
 console.log('✅ Sala OK')
