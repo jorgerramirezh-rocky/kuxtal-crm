@@ -1762,7 +1762,7 @@ function render(){
 // ── Ficha 360 + histórico (trazabilidad) ──
 function decodeUser(){ try{ const d=JSON.parse(atob(SES.access_token.split('.')[1])); USER=d.email||"equipo"; UID=d.sub||null; ROLE=(d.app_metadata&&d.app_metadata.role)||"invitado"; }catch(e){ USER="equipo"; UID=null; ROLE="invitado"; }
   // F4: flags de rol del embudo (una sola fuente de verdad)
-  esGerente=GERENTES.includes(ROLE); verTodo=esGerente||VENTAS.includes(ROLE); }
+  esGerente=GERENTES.includes(ROLE); verTodo=esGerente||(VENTAS.includes(ROLE)&&ROLE!=='recepcion'); } // bloque 4: la hostess ve solo su sala
 const rolBonito=r=>({admin:'Admin general',gerente_general:'Gerente general',gerente_ventas:'Gerente de ventas',telemarketing:'Telemarketing',supervisor:'Supervisor',reservaciones:'Reservaciones'}[r]||'Invitado');
 async function traerInter(sid,reint){
   try{ const r=await fetch(SB_URL+"/rest/v1/interacciones?socio_id=eq."+sid+"&select=*&order=creado_en.desc&limit=80",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
@@ -2274,15 +2274,17 @@ async function funArrancar(){
     const ag=UID?await getJSON("funnel_agentes?select=id,nombre,rol,email&activo=eq.true&user_id=eq."+encodeURIComponent(UID)):null;
     miAgente=(ag&&ag[0])||null;
     $('funWho').textContent=USER+" · "+(esGerente?'Gerencia':(VENTAS.includes(ROLE)?'Ventas':(miAgente?'TMK':ROLE)));
-    funTab = esGerente ? 'cargar' : (verTodo ? 'recepcion' : 'midia');
+    funTab = esGerente ? 'cargar' : (MIS_PERMISOS.recibir_sala ? 'recepcion' : (verTodo ? 'cierre' : 'midia'));
     funCargado=true;
     funPintarTabs(); await funIrTab(funTab);
   }catch(e){ $('funCont').innerHTML='<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar el embudo</b><p>Puede ser la conexión. <b onclick="funArrancar()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>'; }
 }
 
 function funPintarTabs(){
-  const defs=[['midia','Mi día']];
-  if(verTodo){ defs.push(['recepcion','Recepción']); defs.push(['cierre','Cierre']); defs.push(['postventa','Postventa']); defs.push(['reservas','Reservas']); defs.push(['todos','Todos']); }
+  const defs=ROLE==='recepcion'?[]:[['midia','Mi día']];
+  if(MIS_PERMISOS.recibir_sala||MIS_PERMISOS.armar_turnos) defs.push(['recepcion','Recepción']);
+  if(MIS_PERMISOS.armar_turnos) defs.push(['turnos','Turnos']);
+  if(verTodo){ defs.push(['cierre','Cierre']); defs.push(['postventa','Postventa']); defs.push(['reservas','Reservas']); defs.push(['todos','Todos']); }
   if(MIS_PERMISOS.confirmar_citas) defs.push(['citas','Citas']);
   if(MIS_PERMISOS.gestionar_lugares) defs.push(['lugares','Lugares']);
   if(esGerente){ defs.push(['miequipo','Mi equipo']); defs.push(['analitica','Analítica']); defs.push(['cargar','Cargar base']); defs.push(['equipo','Equipo']); defs.push(['comis','Comisiones']); }
@@ -2292,6 +2294,7 @@ async function funIrTab(k){ funTab=k; funPintarTabs();
   try{
     if(k==='midia'){ await cargarMiDia(); }
     else if(k==='recepcion'){ await vistaRecepcion(); }
+    else if(k==='turnos'){ await vistaTurnos(); }
     else if(k==='citas'){ await vistaCitas(); }
     else if(k==='lugares'){ await vistaLugares(); }
     else if(k==='cierre'){ await vistaCierre(); }
@@ -2312,73 +2315,147 @@ function opAgentes(rol,sel){ return AGENTES.filter(a=>a.activo&&a.rol===rol).map
 // ── RECEPCIÓN (sala de ventas: los citados de HOY llegan, se valida, califica y asigna) ──
 // (M1c) citadosDeHoy() es pura → qa/marco.mjs.
 function citadosDeHoy(list,hoy){ return (list||[]).filter(l=>l.presenta_en&&partesGT(l.presenta_en).d===hoy); }
-let recepSub='hoy';
+// Bloque 4: la hostess ve SOLO las citas confirmadas de hoy de su lugar (funnel_sala_hoy) y todo se
+// escribe por funciones de la base. Al calificar, la rueda asigna el liner; «Pasar a closer», el closer.
+let recepSub='llegar', TURNOS_HOY=[];
+// (bloque 4) Quién puede ir a cada puesto: los de turno hoy en ESE lugar, con ese rol. Pura → qa/sala.mjs.
+function enTurno(turnos,rest,rol){ return (turnos||[]).filter(t=>t.restaurante_id==rest&&t.rol===rol); }
+function salaPartir(list){ const l=list||[]; return {llegar:l.filter(x=>x.etapa!=='sala'), sala:l.filter(x=>x.etapa==='sala')}; }
+async function rpcSala(fn,body){
+  const r=await api("rpc/"+fn,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})});
+  if(!r.ok){ let m='No se pudo'; try{ const e=await r.json(); if(e&&e.message&&r.status<500) m=String(e.message); }catch(_e){} throw new Error(m.charAt(0).toUpperCase()+m.slice(1)); }
+  try{ return await r.json(); }catch(_e){ return null; }
+}
 async function vistaRecepcion(){
-  $('funCap').textContent='Recepción de sala: marcá la llegada del citado, calificá y asigná vendedor/cerrador.';
+  $('funCap').textContent='Sala de hoy: marcá la llegada, completá los datos y calificá. El liner y el closer los asigna la rueda del turno.';
   $('funCont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
-  // Bloque 3: a Recepción solo llegan las citas CONFIRMADAS por el supervisor.
-  window.__REC=await getJSON("funnel_prospectos?select=*&estado=eq.asistira&etapa=in.(telemarketing,presentacion)&cita_confirmada_en=not.is.null&order=presenta_en.asc.nullslast,id.asc");
+  const [lista,turnos]=await Promise.all([rpcSala('funnel_sala_hoy'), rpcSala('funnel_turnos_dia').catch(()=>[])]);
+  window.__REC=lista||[]; TURNOS_HOY=turnos||[];
   pintarRecepcion();
 }
 function pintarRecepcion(){
-  const todos=window.__REC||[];
-  const hoy=citadosDeHoy(todos,hoyStr());
-  const list=recepSub==='hoy'?hoy:todos;
+  const {llegar,sala}=salaPartir(window.__REC);
+  const list=recepSub==='sala'?sala:llegar;
   const tabs=`<div class="subtabs">
-    <button class="st ${recepSub==='hoy'?'on':''}" onclick="recepSub='hoy';pintarRecepcion()">Citados hoy (${hoy.length})</button>
-    <button class="st ${recepSub==='todos'?'on':''}" onclick="recepSub='todos';pintarRecepcion()">Todos los citados (${todos.length})</button>
+    <button class="st ${recepSub==='llegar'?'on':''}" onclick="recepSub='llegar';pintarRecepcion()">Por llegar (${llegar.length})</button>
+    <button class="st ${recepSub==='sala'?'on':''}" onclick="recepSub='sala';pintarRecepcion()">En sala (${sala.length})</button>
   </div>`;
-  $('funCont').innerHTML=tabs+(list.length?list.map(recepCard).join('')
-    :`<div class="vacio"><b>${recepSub==='hoy'?'Nadie citado para hoy':'Nadie en recepción'}</b><p>Acá aparecen las citas que el supervisor ya CONFIRMÓ para presentación (<b>Asistirá</b>). Cuando lleguen, marcá la llegada, validá y calificá.</p></div>`);
+  const sinTurno=!TURNOS_HOY.length?`<div role="status" style="margin:0 0 12px;padding:10px 12px;border-radius:10px;border:1px solid var(--amar);background:#fff8e6;font-size:14px;line-height:1.45"><b>Hoy no hay turno armado.</b> Sin liners ni closers en turno, la rueda no puede asignar: pedile al gerente que arme el turno de hoy.</div>`:'';
+  $('funCont').innerHTML=tabs+sinTurno+(list.length?list.map(l=>recepSub==='sala'?salaCard(l):recepCard(l)).join('')
+    :`<div class="vacio"><b>${recepSub==='sala'?'Nadie en sala todavía':'Nadie por llegar hoy'}</b><p>${recepSub==='sala'?'Cuando un cliente califica, pasa acá con su liner.':'Acá aparecen las citas CONFIRMADAS de hoy en tu lugar.'}</p></div>`);
 }
 async function marcarLlegada(id,btn){
   if(btn) btn.disabled=true;
-  const ts=new Date().toISOString();
-  if(await funPatchLead(id,{recepcion_en:ts,recepcionado_por:USER})){
-    ev(id,'llegada','Llegó a recepción');
-    const l=(window.__REC||[]).find(x=>x.id===id); if(l){ l.recepcion_en=ts; l.recepcionado_por=USER; }
+  try{ await rpcSala('funnel_sala_llegada',{p_id:id});
+    const l=(window.__REC||[]).find(x=>x.id===id); if(l){ l.recepcion_en=new Date().toISOString(); }
     toast('Llegada registrada'); pintarRecepcion();
-  } else { if(btn) btn.disabled=false; toast('No se pudo'); }
+  }catch(e){ if(btn) btn.disabled=false; toast(e.message||'No se pudo'); }
 }
 function recepCard(l){
   const rest=(LUGARES_TODOS.find(r=>r.id==l.restaurante_id)||{}).nombre||'';
-  const cita=l.presenta_en?(partesGT(l.presenta_en).d+' '+partesGT(l.presenta_en).h):'sin fecha de cita';
+  const cita=l.presenta_en?partesGT(l.presenta_en).h:'sin hora';
   const llegada=l.recepcion_en
     ? `<span class="tag" style="background:#e9f7ef;color:#1a8a54">Llegó · ${esc(new Date(l.recepcion_en).toLocaleTimeString('es-GT',{hour:'2-digit',minute:'2-digit'}))}</span>`
     : `<button class="est" style="background:var(--kux);color:#fff;border-color:var(--kux)" onclick="marcarLlegada(${l.id},this)">Marcar llegada</button>`;
   return `<div class="lead" id="rec${l.id}" style="border-left-color:var(--amar)">
     <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">${esc(l.telefono||'')}${rest?(' · '+esc(rest)):''} · cita: ${esc(cita)}</div></div><div style="flex:none">${llegada}</div></div>
     <div class="sub show" style="margin-top:12px">
-      <div class="fld"><label>Edad</label><input type="number" id="edad${l.id}" inputmode="numeric" value="${l.edad||''}"></div>
-      <div class="fld"><label>Estado civil</label><select id="ec${l.id}"><option value="">—</option><option ${l.estado_civil==='casado'?'selected':''}>casado</option><option ${l.estado_civil==='soltero'?'selected':''}>soltero</option><option ${l.estado_civil==='otro'?'selected':''}>otro</option></select></div>
+      <div class="fld"><label for="edad${l.id}">Edad</label><input type="number" id="edad${l.id}" inputmode="numeric" min="18" max="110" value="${l.edad||''}"></div>
+      <div class="fld"><label for="ec${l.id}">Estado civil</label><select id="ec${l.id}"><option value="">—</option><option ${l.estado_civil==='casado'?'selected':''}>casado</option><option ${l.estado_civil==='soltero'?'selected':''}>soltero</option><option ${l.estado_civil==='otro'?'selected':''}>otro</option></select></div>
     </div>
     <div class="sub show">
-      <div class="fld"><label>Tarjetas de crédito (cuántas)</label><input type="number" id="ntc${l.id}" inputmode="numeric" value="${l.tarjetas_credito||''}"></div>
-      <div class="fld"><label>Tipo de tarjetas</label><input id="ttc${l.id}" value="${esc(l.tipo_tarjetas||'')}" placeholder="Visa, Amex…"></div>
+      <div class="fld"><label for="ntc${l.id}">Tarjetas de crédito (cuántas)</label><input type="number" id="ntc${l.id}" inputmode="numeric" min="0" max="50" value="${l.tarjetas_credito??''}"></div>
+      <div class="fld"><label for="ttc${l.id}">Tipo de tarjetas</label><input id="ttc${l.id}" maxlength="100" value="${esc(l.tipo_tarjetas||'')}" placeholder="Visa, Amex…"></div>
     </div>
-    <div class="sub show">
-      <div class="fld"><label>Vendedor</label><select id="vend${l.id}"><option value="">Asignar…</option>${opAgentes('vendedor',l.vendedor_id)}</select></div>
-      <div class="fld"><label>Cerrador</label><select id="cerr${l.id}"><option value="">Asignar…</option>${opAgentes('cerrador',l.cerrador_id)}</select></div>
-    </div>
-    <div class="note"><textarea id="mot${l.id}" placeholder="Si NO califica, ¿por qué?">${esc(l.motivo_no||'')}</textarea></div>
-    <div style="display:flex;gap:8px;margin-top:10px">
-      <button class="btn" style="margin:0;background:var(--verde)" onclick="recepcionar(${l.id},true,this)">Califica → a sala</button>
-      <button class="btn" style="margin:0;background:var(--rojo)" onclick="recepcionar(${l.id},false,this)">No califica</button>
+    <div class="note"><textarea id="mot${l.id}" maxlength="300" aria-label="Motivo si no califica" placeholder="Si NO califica, ¿por qué? (obligatorio)">${esc(l.motivo_no||'')}</textarea></div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="btn" style="margin:0;background:var(--verde);flex:1 1 140px" onclick="recepcionar(${l.id},true,this)">Califica → a sala</button>
+      <button class="btn" style="margin:0;background:var(--rojo);flex:1 1 140px" onclick="recepcionar(${l.id},false,this)">No califica</button>
     </div>
   </div>`;
 }
 async function recepcionar(id,ok,btn){
+  const g=x=>{const e=$(x+id);return e?String(e.value).trim():'';};
+  if(!ok&&!g('mot')){ toast('Escribí por qué no califica'); const m=$('mot'+id); if(m) m.focus(); return; }
   btn.disabled=true;
-  const g=x=>{const e=$(x+id);return e?e.value:'';};
-  const l=(window.__REC||[]).find(x=>x.id===id)||{};
-  // (M1c) si ya se marcó la llegada, esa hora NO se pisa al calificar
-  const body={edad:g('edad')?Number(g('edad')):null, estado_civil:g('ec')||null, tarjetas_credito:g('ntc')?Number(g('ntc')):null, tipo_tarjetas:g('ttc')||null,
-    califica:ok, motivo_no:ok?null:(g('mot')||null), vendedor_id:g('vend')?Number(g('vend')):null, cerrador_id:g('cerr')?Number(g('cerr')):null,
-    recepcion_en:l.recepcion_en||new Date().toISOString(), recepcionado_por:l.recepcionado_por||USER, etapa:ok?'sala':'baja'};
-  if(await funPatchLead(id,body)){ ev(id,'sala',ok?'Calificó → sala':'No califica'); toast(ok?'Pasa a sala':'Marcado: no califica');
-    window.__REC=(window.__REC||[]).filter(x=>x.id!==id); const c=$('rec'+id); if(c)c.remove(); pintarRecepcion(); }
-  else{ btn.disabled=false; toast('No se pudo'); }
+  const body={p_id:id,p_califica:ok,p_edad:g('edad')?Number(g('edad')):null,p_estado_civil:g('ec')||null,
+    p_tarjetas:g('ntc')!==''?Number(g('ntc')):null,p_tipo_tarjetas:g('ttc')||null,p_motivo:ok?null:g('mot')};
+  try{
+    const r=await rpcSala('funnel_sala_calificar',body)||{};
+    const l=(window.__REC||[]).find(x=>x.id===id);
+    if(!ok){ window.__REC=(window.__REC||[]).filter(x=>x.id!==id); toast('Marcado: no califica'); }
+    else if(l){ Object.assign(l,{etapa:'sala',califica:true,recepcion_en:l.recepcion_en||new Date().toISOString()});
+      if(r.liner){ l.vendedor_id=r.liner.agente_id; l.vendedor=r.liner.nombre; toast('Pasa a sala con '+(r.liner.nombre||'su liner')); }
+      else toast(r.aviso?(String(r.aviso).charAt(0).toUpperCase()+String(r.aviso).slice(1)):'Pasa a sala, sin liner todavía'); }
+    pintarRecepcion();
+  }catch(e){ btn.disabled=false; toast(e.message||'No se pudo'); }
 }
+function opTurno(rest,rol,sel){ return enTurno(TURNOS_HOY,rest,rol).map(t=>`<option value="${t.agente_id}" ${sel==t.agente_id?'selected':''}>${esc(t.nombre)}${t.disponible?'':' (no disponible)'}</option>`).join(''); }
+function salaCard(l){
+  const rest=(LUGARES_TODOS.find(r=>r.id==l.restaurante_id)||{}).nombre||'';
+  const puesto=(rol,nom,idAg,etq)=>`<div class="fld"><label for="${rol}${l.id}">${etq}</label>
+      ${idAg?`<div style="font-weight:700;margin-bottom:6px">${esc(nom||'')}</div>`:''}
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="est" style="background:var(--kux);color:#fff;border-color:var(--kux)" onclick="salaAsignar(${l.id},'${rol}',null,this)">${idAg?'Siguiente en la rueda':(rol==='cerrador'?'Pasar a closer':'Asignar liner')}</button>
+        <select id="${rol}${l.id}" aria-label="Cambiar ${etq.toLowerCase()} a mano" onchange="if(this.value)salaAsignar(${l.id},'${rol}',Number(this.value),this)"><option value="">A mano…</option>${opTurno(l.restaurante_id,rol,null)}</select>
+      </div></div>`;
+  return `<div class="lead" id="sal${l.id}" style="border-left-color:var(--verde)">
+    <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">${rest?esc(rest)+' · ':''}llegó ${l.recepcion_en?esc(new Date(l.recepcion_en).toLocaleTimeString('es-GT',{hour:'2-digit',minute:'2-digit'})):''}</div></div></div>
+    <div class="sub show" style="margin-top:12px">
+      ${puesto('vendedor',l.vendedor,l.vendedor_id,'Liner')}
+      ${l.vendedor_id?puesto('cerrador',l.cerrador,l.cerrador_id,'Closer'):''}
+    </div>
+  </div>`;
+}
+async function salaAsignar(id,rol,agente,el){
+  if(el) el.disabled=true;
+  try{
+    const r=await rpcSala('funnel_sala_asignar',{p_id:id,p_rol:rol,p_agente:agente})||{};
+    const l=(window.__REC||[]).find(x=>x.id===id);
+    if(l){ if(rol==='vendedor'){ l.vendedor_id=r.agente_id; l.vendedor=r.nombre; } else { l.cerrador_id=r.agente_id; l.cerrador=r.nombre; } }
+    toast((rol==='vendedor'?'Liner: ':'Closer: ')+(r.nombre||'asignado'));
+    pintarRecepcion();
+  }catch(e){ if(el){ el.disabled=false; if(el.tagName==='SELECT') el.value=''; } toast(e.message||'No se pudo'); }
+}
+
+// ── TURNOS (bloque 4: quién trabaja cada día en qué sala) ──
+let TURNO_FECHA='';
+const ROL_SALA={recepcion:'Hostess',vendedor:'Liner',cerrador:'Closer'};
+async function vistaTurnos(){
+  if(!TURNO_FECHA) TURNO_FECHA=hoyStr();
+  $('funCap').textContent='Turno del día: quién trabaja en qué sala. La rueda reparte entre los que están acá y disponibles.';
+  $('funCont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
+  const t=await rpcSala('funnel_turnos_dia',{p_fecha:TURNO_FECHA})||[];
+  const gente=(AGENTES||[]).filter(a=>a.activo&&ROL_SALA[a.rol]);
+  const puestos=new Set(t.map(x=>x.agente_id));
+  const opG=gente.filter(a=>!puestos.has(a.id)).map(a=>`<option value="${a.id}">${esc(a.nombre)} · ${ROL_SALA[a.rol]}</option>`).join('');
+  const opL=RESTAS.map(r=>`<option value="${r.id}">${esc(r.nombre)}</option>`).join('');
+  const porLugar=RESTAS.map(r=>{ const f=t.filter(x=>x.restaurante_id==r.id); if(!f.length) return '';
+    return `<div class="lead" style="border-left-color:var(--kux)"><div class="lname">${esc(r.nombre)}</div>
+      ${f.map(x=>`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--linea,#e3e8ef)">
+        <div style="flex:1 1 160px"><b>${esc(x.nombre)}</b> · ${ROL_SALA[x.rol]||esc(x.rol)}${x.rol!=='recepcion'?` · ${x.clientes_hoy} hoy`:''}</div>
+        ${x.rol!=='recepcion'?`<button class="est" aria-pressed="${x.disponible}" style="${x.disponible?'background:var(--verde);color:#fff;border-color:var(--verde)':'background:#fdecec;color:var(--rojo);border-color:var(--rojo)'}" onclick="turnoDisp(${x.id},${!x.disponible},this)">${x.disponible?'Disponible':'No disponible'}</button>`:''}
+        <button class="est" aria-label="Quitar a ${esc(x.nombre)} del turno" onclick="turnoQuitar(${x.id},this)">Quitar</button></div>`).join('')}</div>`; }).join('');
+  $('funCont').innerHTML=`<div class="sub show">
+      <div class="fld"><label for="tfecha">Día</label><input type="date" id="tfecha" value="${esc(TURNO_FECHA)}" min="${esc(hoyStr())}" onchange="TURNO_FECHA=this.value;vistaTurnos()"></div>
+    </div>
+    <div class="sub show">
+      <div class="fld"><label for="tquien">Persona</label><select id="tquien"><option value="">${gente.length?'Elegí…':'No hay hostess, liners ni closers dados de alta'}</option>${opG}</select></div>
+      <div class="fld"><label for="tdonde">Sala (lugar)</label><select id="tdonde">${opL}</select></div>
+    </div>
+    <button class="btn" onclick="turnoPoner(this)">Poner en turno</button>
+    <div style="margin-top:14px">${porLugar||`<div class="vacio"><b>Nadie en turno este día</b><p>Sin turno, la rueda no puede asignar liner ni closer.</p></div>`}</div>`;
+}
+async function turnoPoner(btn){
+  const a=$('tquien').value, r=$('tdonde').value; if(!a){ toast('Elegí la persona'); return; } if(!r){ toast('Elegí la sala'); return; }
+  btn.disabled=true;
+  try{ await rpcSala('funnel_turno_poner',{p_fecha:TURNO_FECHA,p_rest:Number(r),p_agente:Number(a)}); toast('En turno'); await vistaTurnos(); }
+  catch(e){ btn.disabled=false; toast(e.message||'No se pudo'); }
+}
+async function turnoQuitar(id,btn){ btn.disabled=true;
+  try{ await rpcSala('funnel_turno_quitar',{p_id:id}); toast('Quitado del turno'); await vistaTurnos(); }catch(e){ btn.disabled=false; toast(e.message||'No se pudo'); } }
+async function turnoDisp(id,v,btn){ btn.disabled=true;
+  try{ await rpcSala('funnel_turno_disponible',{p_id:id,p_disponible:v}); toast(v?'Disponible: vuelve a la rueda':'No disponible: la rueda lo salta'); await vistaTurnos(); }catch(e){ btn.disabled=false; toast(e.message||'No se pudo'); } }
 
 // ── CIERRE (contrato + comisiones) ──
 async function vistaCierre(){
