@@ -37,7 +37,7 @@ vm.runInContext([
   "function $(id){ return el[id]||null; } function toast(m){ toasts.push(m); } async function vistaDigitacion(){} function imprimirContrato(d,w){ impresos.push({d,w}); return true; }",
   "var window={open:()=>ventanaOk?{close(){},document:{}}:null};",
   "var api=async (path,opt)=>{ llamadas.push({path, body: opt&&opt.body?JSON.parse(opt.body):null}); return respuesta(); };",
-  ...['rpcSala', 'puedeValidar', 'leerDigit', 'guardarBorrDigit', 'faltaDigit', 'avisarFalta', 'pintarDigit', 'digitCard', 'pedirValidar', 'validarDigit', 'devolverDigit', 'reimprimir', 'funPintarTabs'].map(extraer),
+  ...['rpcSala', 'puedeValidar', 'leerDigit', 'guardarBorrDigit', 'faltaDigit', 'avisarFalta', 'pintarDigit', 'digitCard', 'pedirValidar', 'validarDigit', 'devolverDigit', 'reimprimir', 'funPintarTabs', 'avisoCierre'].map(extraer),
 ].join('\n'), ctx)
 ctx.respuesta = () => respuesta()
 vm.runInContext('var respuesta=this.respuesta; api=async (path,opt)=>{ llamadas.push({path, body: opt&&opt.body?JSON.parse(opt.body):null}); return respuesta(); };', ctx)
@@ -75,7 +75,7 @@ await ctx.devolverDigit(5, { disabled: false })
 ok(llamadas.length === 0 && ctx.toasts.includes('Escribí qué no cuadra'), 'devolver sin nota: no llama a la base')
 
 const cierre = src.slice(src.indexOf('async function cerrarContrato('), src.indexOf('async function cerrarContrato(') + 2500)
-ok(!/imprimirContrato\(/.test(cierre.slice(0, cierre.indexOf('\n}\n'))) && /pasa a digitación/.test(cierre), 'el cierre ya NO imprime: pasa a digitación')
+ok(!/imprimirContrato\(/.test(cierre.slice(0, cierre.indexOf('\n}\n'))) && /toast\(avisoCierre\(/.test(cierre) && /pasa a digitación/.test(ctx.avisoCierre('1', true)), 'el cierre ya NO imprime: pasa a digitación')
 
 ctx.el.funTabs = { innerHTML: '' }
 vm.runInContext("MIS_PERMISOS={digitar_contratos:true}; ROLE='digitador'; verTodo=false; esGerente=false;", ctx); ctx.funPintarTabs()
@@ -101,6 +101,11 @@ llamadas.length = 0; impresos.length = 0
 respuesta = () => ({ ok: true, status: 200, json: async () => ({ nombre: 'Ana', dpi: '1234567890123', fecha: '2026-09-18' }) })
 await ctx.reimprimir(9, { disabled: false })
 ok(/funnel_contrato_impresion/.test((llamadas[0] || {}).path) && impresos.length === 1 && impresos[0].d.fecha === '2026-09-18', 'reimprimir trae los datos (con la fecha del cierre) e imprime')
+
+// Lente r2: si el enganche no se guardó, el aviso que QUEDA en pantalla lo dice (antes lo pisaba el de éxito).
+ok(/enganche NO se guardó/.test(ctx.avisoCierre('123', false)), 'cierre con enganche perdido: el único aviso lo dice')
+ok(!/enganche/.test(ctx.avisoCierre('123', true)), 'cierre normal: sin alarma de enganche')
+ok((src.match(/toast\([^)]*pasa a digitación/g) || []).length === 0 && src.includes('toast(avisoCierre('), 'cerrarContrato muestra UN solo aviso (avisoCierre)')
 
 if (fallas) { console.log(`🔴 ${fallas} fallas`); process.exit(1) }
 console.log('✅ Digitación OK')

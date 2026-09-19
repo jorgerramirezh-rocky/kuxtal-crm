@@ -3045,6 +3045,10 @@ async function registrarEnganche(cid,pid,enganche,planPago,apiFn,tieneCol,actor)
   try{ const r2=await apiFn("funnel_eventos",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({prospecto_id:pid,tipo:'enganche',actor:actor||'crm',payload:{contrato_id:cid,enganche,plan_pago:planPago}})}); out.evento=!!r2.ok; }catch(e){}
   return out;
 }
+function avisoCierre(noSocio,engOk){
+  const base='Contrato cerrado · socio '+(noSocio||'')+' · pasa a digitación';
+  return engOk?base:base+'. OJO: el enganche NO se guardó — avisale a la gerencia de ventas.';
+}
 async function cerrarContrato(id,btn){
   if(btn.disabled) return; btn.disabled=true; const txt=btn.innerHTML; btn.textContent='Cerrando…';
   guardarCierre(); const f=CIERRE_F[id]||{}; const g=x=>(f[x]!=null?f[x]:(($(x+id)||{}).value||''));
@@ -3059,9 +3063,9 @@ async function cerrarContrato(id,btn){
     const eng=g('eng')?Number(g('eng')):null;
     let engOk=true;
     try{ const tc=await probeContratosExt(); const re=await registrarEnganche(res.contrato_id,id,eng,g('pln'),api,tc,USER); engOk=!(eng>0)||!tc||re.patched; }catch(e){ engOk=!(eng>0); }
-    if(!engOk) toast('Ojo: el contrato se cerró pero el enganche NO se guardó. Avisale a la gerencia de ventas.');
     // Bloque 8: no se imprime al cerrar; el contrato se imprime cuando el digitador valida los datos.
-    toast('Contrato cerrado · socio '+(res.no_socio||'')+' · pasa a digitación'); cierreLeads=cierreLeads.filter(x=>x.id!==id); delete CIERRE_F[id]; pintarCierre(true);
+    /* lente r2: un solo aviso; si el enganche no se guardó, eso es lo que se lee (no lo pisa el de éxito) */
+    toast(avisoCierre(res.no_socio,engOk)); cierreLeads=cierreLeads.filter(x=>x.id!==id); delete CIERRE_F[id]; pintarCierre(true);
   }catch(e){ toast('No se cerró: '+(e.message||'error')); btn.disabled=false; btn.innerHTML=txt; }
 }
 

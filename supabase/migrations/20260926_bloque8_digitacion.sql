@@ -56,12 +56,13 @@ revoke all on function public.funnel_puede_digitar(public.funnel_contratos) from
 
 -- ── 0b. el enganche se anota DESPUÉS de cerrar: la política de edición tiene que aceptar «por digitar»
 --      (sin esto el PATCH no tocaba ninguna fila y el enganche se perdía en silencio).
+--      Lente r2: de las jefaturas, solo quien corrige la sala (no las de TMK) toca el enganche de un contrato ajeno.
 drop policy if exists fcon_upd on public.funnel_contratos;
 create policy fcon_upd on public.funnel_contratos for update to authenticated
   using (estado in ('firmado', 'por_digitar', 'por_verificar', 'observado')
-         and (public.funnel_es_gerente() or public.funnel_mi_agente() in (vendedor_id, cerrador_id, digitador_id, verificador_id)))
+         and (public.funnel_puede('corregir_sala') or public.funnel_mi_agente() in (vendedor_id, cerrador_id, digitador_id, verificador_id)))
   with check (estado in ('firmado', 'por_digitar', 'por_verificar', 'observado')
-         and (public.funnel_es_gerente() or public.funnel_mi_agente() in (vendedor_id, cerrador_id, digitador_id, verificador_id)));
+         and (public.funnel_puede('corregir_sala') or public.funnel_mi_agente() in (vendedor_id, cerrador_id, digitador_id, verificador_id)));
 
 -- ── 1. el cierre: nace «por digitar»; la comisión del digitador nace al validar ──
 do $p$
@@ -179,13 +180,20 @@ begin
   if not found or not public.funnel_puede_digitar(c) then raise exception 'no autorizado'; end if;
   if c.estado <> 'por_digitar' then raise exception 'ese contrato ya no está por digitar'; end if;
   if c.digitador_id is null then raise exception 'primero la gerencia asigna el digitador'; end if;
+  -- Lente r2: como en verificación, quien cerró o participa en la venta no valida su propio contrato.
+  if lower(v_actor) = lower(coalesce(c.cerrado_por, ''))
+     or coalesce(public.funnel_mi_agente() in (c.tmk_id, c.vendedor_id, c.cerrador_id), false) then
+    raise exception 'quien cerró o vendió este contrato no lo valida';
+  end if;
   select * into d from public.funnel_contrato_datos where contrato_id = c.id;
   if not found or d.dpi is null or d.fecha_nacimiento is null or d.direccion is null then
     raise exception 'faltan datos: DPI, fecha de nacimiento y dirección son obligatorios';
   end if;
   update public.funnel_contratos set estado = 'por_verificar', digitado_por = v_actor, digitado_en = now(), devolucion_nota = null
    where id = c.id;
-  -- La comisión del digitador nace ahora, pendiente (se libera al verificar), a nombre del asignado.
+  -- La comisión del digitador nace ahora, pendiente (se libera al verificar), a nombre del asignado —
+  -- y SOLO si validó él (si valida la gerencia en su lugar, nadie cobra un trabajo que no hizo).
+  if coalesce(public.funnel_mi_agente() = c.digitador_id, false) then
   for rg in select * from public.funnel_comision_reglas g where g.activo and g.rol = 'digitador'
                 and (g.tipo_membresia = c.tipo_membresia
                      or (g.tipo_membresia is null and not exists (select 1 from public.funnel_comision_reglas e
@@ -196,6 +204,7 @@ begin
       values (c.id, 'digitador', c.digitador_id, rg.id, round(base, 2), 'pendiente');
     end if;
   end loop;
+  end if;
   insert into public.funnel_eventos(prospecto_id, tipo, actor, payload)
   values (c.prospecto_id, 'digitado', v_actor, jsonb_build_object('contrato_id', c.id));
   return jsonb_build_object('estado', 'por_verificar');
