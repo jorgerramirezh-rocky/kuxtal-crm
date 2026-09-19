@@ -36,7 +36,8 @@ begin;
 insert into auth.users(id,email,raw_app_meta_data) values
  (md5('kx-recepcion')::uuid,'recepcion@prueba.kx','{"role":"recepcion"}'),(md5('kx-vendedor')::uuid,'vendedor@prueba.kx','{"role":"vendedor"}'),
  (md5('kx-verificador')::uuid,'verificador@prueba.kx','{"role":"verificador"}'),(md5('kx-supervisor')::uuid,'supervisor@prueba.kx','{"role":"supervisor"}'),
- (md5('kx-gerente_ventas')::uuid,'gerente_ventas@prueba.kx','{"role":"gerente_ventas"}') on conflict (id) do nothing;
+ (md5('kx-gerente_ventas')::uuid,'gerente_ventas@prueba.kx','{"role":"gerente_ventas"}'),
+ (md5('kx-digitador')::uuid,'digitador@prueba.kx','{"role":"digitador"}') on conflict (id) do nothing;
 set local session_replication_role = replica;
 update funnel_agentes set user_id=md5('kx-telemarketing')::uuid where id=900002;
 update funnel_agentes set user_id=md5('kx-supervisor_tmk')::uuid where id=900001;
@@ -46,7 +47,8 @@ insert into funnel_agentes(id,nombre,rol,email,activo,peso,user_id) overriding s
  (900022,'Liner L2','vendedor','l2@prueba.kx',true,1,null),
  (900031,'Closer C1','cerrador','c1@prueba.kx',true,1,null),
  (900051,'Gerente de ventas GV','gerente_ventas','gv@prueba.kx',true,1,null),
- (900041,'Verif V1','verificador','verificador@prueba.kx',true,1,md5('kx-verificador')::uuid);
+ (900041,'Verif V1','verificador','verificador@prueba.kx',true,1,md5('kx-verificador')::uuid),
+ (900061,'Digit D1','digitador','digitador@prueba.kx',true,1,md5('kx-digitador')::uuid);
 update funnel_agentes set gerente_id=900051 where id=900031;
 set local session_replication_role = origin;
 delete from funnel_horarios where restaurante_id=$REST;
@@ -70,14 +72,18 @@ paso "8 · el gerente de ventas crea un segmento de 10 %" gerente_ventas "insert
 paso "9 · el liner pide el descuento" vendedor "select funnel_descuento_pedir($ID,'QA-Oro',(select id from funnel_descuentos where nombre='QA contado'));" "pendiente|100.00" "select estado||'|'||monto_descuento from funnel_descuento_solicitudes where prospecto_id=$ID order by id desc limit 1"
 SOL=$(psql -X -At "$U/$C" -c "select max(id) from funnel_descuento_solicitudes where prospecto_id=$ID")
 paso "10 · el gerente de ventas lo aprueba" gerente_ventas "select funnel_descuento_resolver($SOL,true);" "aprobada" "select estado from funnel_descuento_solicitudes where id=$SOL"
-paso "11 · el liner cierra (el precio lo pone la base)" vendedor "select funnel_cerrar_contrato($ID,'QA-Oro','Contado',900021,900031,null,4,$SOL);" "por_verificar|900.00|socio" "select c.estado||'|'||c.monto||'|'||p.etapa from funnel_contratos c join funnel_prospectos p on p.id=c.prospecto_id where c.prospecto_id=$ID"
+paso "11 · el liner cierra (el precio lo pone la base)" vendedor "select funnel_cerrar_contrato($ID,'QA-Oro','Contado',900021,900031,null,4,$SOL);" "por_digitar|900.00|socio" "select c.estado||'|'||c.monto||'|'||p.etapa from funnel_contratos c join funnel_prospectos p on p.id=c.prospecto_id where c.prospecto_id=$ID"
 paso "11b · (las comisiones nacen pendientes)" vendedor "select 1;" "pendiente" "select string_agg(distinct estado,',') from funnel_comisiones where contrato_id=$CID"
+paso "11d · la gerencia de ventas asigna el digitador" gerente_ventas "select funnel_contrato_asignar_digitador($CID,900061);" "900061" "select digitador_id from funnel_contratos where id=$CID"
+CIDN=$(psql -X -At "$U/$C" -c "select id from funnel_contratos where prospecto_id=$ID")
+paso "11e · el digitador completa los datos del cliente" digitador "select funnel_contrato_digitar($CIDN,'{\"dpi\":\"1234567890123\",\"fecha_nacimiento\":\"1980-05-01\",\"direccion\":\"6a av 1-23 z10\",\"beneficiarios\":[{\"nombre\":\"Luis\",\"parentesco\":\"hijo\"}]}'::jsonb);" "1234567890123" "select dpi from funnel_contrato_datos where contrato_id=$CIDN"
+paso "11f · el digitador valida: pasa a verificación" digitador "select funnel_contrato_validar($CIDN);" "por_verificar" "select estado from funnel_contratos where id=$CIDN"
 paso "11c · la gerencia de ventas asigna el verificador" gerente_ventas "select funnel_contrato_asignar_verificador($CID,900041);" "900041" "select verificador_id from funnel_contratos where id=$CID"
 paso "12 · el verificador llama y verifica" verificador "select funnel_contrato_verificar($CID,'verificado');" "verificado" "select estado from funnel_contratos where id=$CID"
-paso "13 · comisiones liberadas, cada una a su persona" verificador "select 1;" "cerrador:900031:27.00,gerente_ventas:900051:9.00,supervisor_tmk:900001:9.00,tmk:900002:18.00,vendedor:900021:27.00,verificador:900041:30.00" \
+paso "13 · comisiones liberadas, cada una a su persona" verificador "select 1;" "cerrador:900031:27.00,digitador:900061:50.00,gerente_ventas:900051:9.00,supervisor_tmk:900001:9.00,tmk:900002:18.00,vendedor:900021:27.00,verificador:900041:30.00" \
   "select string_agg(rol||':'||beneficiario_id||':'||monto,',' order by rol) from funnel_comisiones where contrato_id=$CID and estado='liberada' and beneficiario_id is not null"
 paso "14 · nació el socio con el precio final" verificador "select 1;" "900.00|QA-Oro" "select s.total_num||'|'||s.tipo from socios s join funnel_prospectos p on p.socio_id=s.id where p.id=$ID"
-paso "15 · la bitácora cuenta la historia completa" verificador "select 1;" "citar,cita_confirmada,llegada,sala,sala_asignado,descuento_pedido,descuento_aprobado,contrato,verificador_asignado,verificacion" \
+paso "15 · la bitácora cuenta la historia completa" verificador "select 1;" "citar,cita_confirmada,llegada,sala,sala_asignado,descuento_pedido,descuento_aprobado,contrato,digitador_asignado,digitado,verificador_asignado,verificacion" \
   "select string_agg(tipo,',' order by id) from (select distinct on (tipo) id,tipo from funnel_eventos where prospecto_id=$ID order by tipo,id) x"
 dropdb "$C" >/dev/null 2>&1
 echo "── $((N-FALLAS))/$N pasos verdes"
