@@ -2315,6 +2315,7 @@ function funPintarTabs(){
   if(MIS_PERMISOS.confirmar_citas) defs.push(['citas','Citas']);
   if(MIS_PERMISOS.gestionar_lugares) defs.push(['lugares','Lugares']);
   if(MIS_PERMISOS.gestionar_descuentos) defs.push(['descuentos','Descuentos']);
+  if(MIS_PERMISOS.gestionar_comisiones) defs.push(['reglas','Reglas de comisión']);
   if(esGerente){ defs.push(['miequipo','Mi equipo']); defs.push(['analitica','Analítica']); defs.push(['cargar','Cargar base']); defs.push(['equipo','Equipo']); defs.push(['comis','Comisiones']); }
   $('funTabs').innerHTML=defs.map(([k,t])=>`<button class="tab ${funTab===k?'on':''}" onclick="funIrTab('${k}')">${t}</button>`).join('');
 }
@@ -2326,6 +2327,7 @@ async function funIrTab(k){ funTab=k; funPintarTabs();
     else if(k==='aprobaciones'){ await vistaAprobaciones(); }
     else if(k==='verificacion'){ await vistaVerificacion(); }
     else if(k==='descuentos'){ await vistaDescuentos(); }
+    else if(k==='reglas'){ await vistaReglas(); }
     else if(k==='citas'){ await vistaCitas(); }
     else if(k==='lugares'){ await vistaLugares(); }
     else if(k==='cierre'){ await vistaCierre(); }
@@ -2515,27 +2517,56 @@ async function resolverDesc(id,ok,btn){
 
 // ── BLOQUE 5: verificación del contrato con el cliente ──
 let VERIF=[], VNOTA={};
+let VSUB='pend', CANCEL=[], RNOTA={};
 async function vistaVerificacion(){
   $('funCap').textContent='Llamá al cliente y confirmá su contrato. Las comisiones se liberan cuando queda verificado.';
   $('funCont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
-  VERIF=await rpcSala('funnel_contratos_por_verificar')||[]; VNOTA={}; pintarVerif();
+  VERIF=await rpcSala('funnel_contratos_por_verificar')||[]; VNOTA={};
+  CANCEL=MIS_PERMISOS.corregir_sala?(await rpcSala('funnel_contratos_cancelados').catch(()=>[])||[]):[]; RNOTA={};
+  pintarVerif();
 }
 function pintarVerif(){
-  const top=`<div class="sala-top"><div class="cap" style="flex:1">${VERIF.length} por verificar</div><button class="st" style="flex:none" onclick="vistaVerificacion()">Actualizar</button></div>`;
-  $('funCont').innerHTML=`<div class="sala">${top}${VERIF.length?VERIF.map(verifCard).join(''):'<div class="vacio"><b>Nada por verificar</b><p>Cada contrato cerrado aparece acá hasta que lo verifiqués con el cliente.</p></div>'}</div>`;
+  const st=(k,t)=>`<button class="st ${VSUB===k?'on':''}" aria-pressed="${VSUB===k}" onclick="VSUB='${k}';pintarVerif()">${t}</button>`;
+  const top=`<div class="sala-top"><div class="subtabs">${st('pend','Por verificar ('+VERIF.length+')')}${MIS_PERMISOS.corregir_sala?st('canc','Cancelados ('+CANCEL.length+')'):''}</div><button class="st" style="flex:none" onclick="vistaVerificacion()">Actualizar</button></div>`;
+  const cuerpo = VSUB==='canc'&&MIS_PERMISOS.corregir_sala
+    ? (CANCEL.length?CANCEL.map(canceladoCard).join(''):'<div class="vacio"><b>Ningún contrato cancelado</b><p>Cuando un cliente se arrepiente en la verificación, aparece acá.</p></div>')
+    : (VERIF.length?VERIF.map(verifCard).join(''):'<div class="vacio"><b>Nada por verificar</b><p>Cada contrato cerrado aparece acá hasta que lo verifiqués con el cliente.</p></div>');
+  $('funCont').innerHTML=`<div class="sala">${top}${cuerpo}</div>`;
+}
+function canceladoCard(c){
+  const abierto=!!RNOTA[c.id];
+  return `<div class="lead" style="border-left-color:var(--rojo-t)">
+    <div class="lname">${esc(c.cliente)}</div>
+    <div class="lmeta">${esc(c.membresia||'')} · ${usd(c.monto)} · cancelado ${esc(cuandoGT(c.cancelado_en))}${c.cancelado_por?' por '+esc(c.cancelado_por):''}</div>
+    <div role="status" class="sala-aviso">${esc(c.nota||'Se arrepintió')}${Number(c.enganche)>0?`<br><b>Enganche a devolver: ${usd(c.enganche)}</b>`:''}${Number(c.reservas)>0?`<br><b>Tiene ${c.reservas} reserva${c.reservas>1?'s':''}: revisalas en Reservas.</b>`:''}</div>
+    ${!c.se_puede_reabrir?'<div class="lmeta">Ya tiene otro contrato vivo: no se reabre.</div>'
+      :abierto?`<div role="status" class="sala-aviso">Al reabrir: el cliente vuelve a ser socio (con su vencimiento de antes), las comisiones de la venta vuelven a pendiente y el contrato vuelve a verificación.</div>
+        ${Number(c.enganche)>0?`<label style="display:flex;gap:8px;align-items:center;min-height:44px"><input type="checkbox" id="rabe${c.id}"> Confirmé que el enganche (${usd(c.enganche)}) NO se le devolvió</label>`:''}
+        <div class="note"><label class="sala-lbl" for="rab${c.id}">¿Por qué se reabre? Obligatorio.</label><textarea id="rab${c.id}" maxlength="300"></textarea></div>
+        <div class="sala-fila"><button class="btn" onclick="reabrir(${c.id},this)">Confirmar: reabrir</button><button class="est" onclick="RNOTA[${c.id}]=false;pintarVerif()">Cancelar</button></div>`
+      :`<div class="sala-fila"><button class="est sala-sec" onclick="RNOTA[${c.id}]=true;pintarVerif()">Reabrir (fue un error)…</button></div>`}
+  </div>`;
+}
+async function reabrir(id,btn){
+  const nota=String(($('rab'+id)||{}).value||'').trim(); if(!nota){ toast('Escribí por qué se reabre'); return; }
+  const c=(CANCEL||[]).find(x=>x.id===id)||{}; const ok=!!(($('rabe'+id)||{}).checked);
+  if(Number(c.enganche)>0&&!ok){ toast('Confirmá que el enganche no se le devolvió'); return; }
+  if(btn.disabled) return; btn.disabled=true;
+  try{ await rpcSala('funnel_contrato_reabrir',{p_id:id,p_nota:nota,p_enganche_no_devuelto:ok}); toast('Reabierto: vuelve a verificación'); VSUB='pend'; await vistaVerificacion(); }
+  catch(e){ btn.disabled=false; toast(e.message||'No se pudo'); }
 }
 function verifCard(c){
   const tel=String(c.telefono||'').replace(/[^0-9+]/g,'');
   const modo=VNOTA[c.id];
   const acciones = modo==='verificado'
     ? `<div class="sala-fila"><button class="btn sala-ok" onclick="verificar(${c.id},'verificado',this)">Confirmar: el cliente aceptó · libera comisiones</button><button class="est" onclick="VNOTA[${c.id}]=null;pintarVerif()">Cancelar</button></div>`
-    : modo ? `<div class="note"><label class="sala-lbl" for="vnot${c.id}">${modo==='arrepentido'?'¿Qué dijo el cliente? Obligatorio. Esto cancela el contrato.':'¿Qué observaste? Obligatorio.'}</label><textarea id="vnot${c.id}" maxlength="500"></textarea></div>
+    : modo ? `${modo==='arrepentido'&&(Number(c.reservas)>0||Number(c.enganche)>0)?`<div role="status" class="sala-aviso err">${Number(c.reservas)>0?'Tiene '+c.reservas+' reserva'+(c.reservas>1?'s':'')+' a su nombre. ':''}${Number(c.enganche)>0?'Hay que devolverle el enganche: '+usd(c.enganche)+'.':''} Al confirmar, avisá a la gerencia de ventas: las reservas no se cancelan solas.</div>`:''}<div class="note"><label class="sala-lbl" for="vnot${c.id}">${modo==='arrepentido'?'¿Qué dijo el cliente? Obligatorio. Esto cancela el contrato.':'¿Qué observaste? Obligatorio.'}</label><textarea id="vnot${c.id}" maxlength="500"></textarea></div>
       <div class="sala-fila"><button class="btn ${modo==='arrepentido'?'sala-no':''}" onclick="verificar(${c.id},'${modo}',this)">${modo==='arrepentido'?'Confirmar: se arrepintió':'Guardar observación'}</button><button class="est" onclick="VNOTA[${c.id}]=null;pintarVerif()">Cancelar</button></div>`
     : `<div class="sala-fila"><button class="est sala-sec" onclick="VNOTA[${c.id}]='verificado';pintarVerif()">Verificado…</button><button class="est sala-sec" onclick="VNOTA[${c.id}]='observado';pintarVerif()">Con observaciones…</button><button class="est sala-nodisp" onclick="VNOTA[${c.id}]='arrepentido';pintarVerif()">Se arrepintió…</button></div>`;
   return `<div class="lead" id="ver${c.id}" style="border-left-color:${c.estado==='observado'?'var(--amar)':'var(--kux)'}">
     <div class="lname">${esc(c.cliente)}</div>
     <div class="lmeta">${esc(c.membresia||'')} · ${esc(c.plan_pago||'')} · Liner: <b>${esc(c.liner||'—')}</b> · Closer: <b>${esc(c.closer||'—')}</b>${c.digitador?' · Digitador: <b>'+esc(c.digitador)+'</b>':''}</div>
-    <div class="sala-precio"><span>Contrato</span><b>${usd(c.monto)}</b><small>lista ${usd(c.precio_lista)}${Number(c.descuento)>0?' − descuentos '+usd(c.descuento):''}${c.enganche!=null?' · enganche '+usd(c.enganche):''}</small></div>
+    <div class="sala-precio"><span>Contrato</span><b>${usd(c.monto)}</b><small>lista ${usd(c.precio_lista)}${Number(c.descuento)>0?' − descuentos '+usd(c.descuento):''}${c.enganche!=null?' · enganche '+usd(c.enganche):''}${Number(c.reservas)>0?' · '+c.reservas+' reserva'+(c.reservas>1?'s':''):''}</small></div>
     ${c.estado==='observado'?`<div role="status" class="sala-aviso">Con observaciones: ${esc(c.verificacion_nota||'')}</div>`:''}
     ${tel?`<a class="btn" style="display:block;text-align:center;text-decoration:none;margin:0 0 8px" href="tel:${esc(tel)}">Llamar al cliente · ${esc(c.telefono)}</a>`:'<div role="status" class="sala-aviso">Sin teléfono registrado.</div>'}
     ${acciones}
@@ -2549,6 +2580,92 @@ async function verificar(id,res,btn){
     toast(res==='verificado'?'Verificado: comisiones liberadas':res==='observado'?'Quedó con observaciones':'Contrato cancelado');
     if(res==='observado'){ await vistaVerificacion(); } else { VERIF=VERIF.filter(x=>x.id!==id); pintarVerif(); }
   }catch(e){ btn.disabled=false; toast(e.message||'No se pudo'); }
+}
+
+// ── BLOQUE 6: reglas de comisión (gerencia de ventas) ──
+const ROL_COM={tmk:'Telemarketer',supervisor_tmk:'Supervisor de TMK',gerente_tmk:'Gerente de TMK',vendedor:'Liner',cerrador:'Closer',gerente_ventas:'Gerente de ventas',digitador:'Digitador',verificador:'Verificador'};
+let REGLAS=[], RAPAGA={};
+// Cuánto gana un puesto en un contrato: monto fijo + % (se SUMAN). Pura → qa/comisiones.mjs.
+function ganaRegla(r,monto){ return Math.round((Number(r.monto_fijo||0)+Number(r.tasa||0)/100*Number(monto||0))*100)/100; }
+// Contrato típico para mostrar dólares: el precio de la membresía de la regla, o el de la primera membresía.
+function montoTipico(tipo){ const m=MEMBS.find(x=>x.tipo===tipo)||MEMBS[0]; return m?montoMembresia(m):0; }
+async function vistaReglas(){
+  $('funCap').textContent='Cuánto gana cada puesto por contrato. Un cambio vale para los contratos que se cierren desde ahora; los ya cerrados no cambian.';
+  $('funCont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
+  REGLAS=await getJSON("funnel_comision_reglas?select=*&order=rol.asc,tipo_membresia.asc.nullsfirst")||[]; RAPAGA={}; pintarReglas();
+}
+function reglaCard(r){
+  const mt=montoTipico(r.tipo_membresia), gana=ganaRegla(r,mt);
+  const cuando=r.rol==='verificador'?'Aplica a contratos que se verifiquen desde ahora.':'Aplica a contratos que se cierren desde ahora.';
+  return `<div class="lead" style="border-left-color:${r.activo?'var(--verde)':'var(--linea)'};${r.activo?'':'opacity:.75'}">
+    <div class="ltop"><div><div class="lname">${esc(ROL_COM[r.rol]||r.rol)}</div><div class="lmeta">${r.tipo_membresia?'Solo membresía '+esc(r.tipo_membresia)+' (reemplaza a la general)':'Todas las membresías'} · <span class="tag" style="${r.activo?'':'background:#fdecec;color:var(--rojo-t)'}">${r.activo?'Activa':'Apagada'}</span></div></div>
+      ${RAPAGA[r.id]?'':`<button class="est sala-sec" style="flex:none" onclick="${r.activo?`RAPAGA[${r.id}]=true;pintarReglas()`:`guardarRegla(${r.id},{activo:true},this)`}">${r.activo?'Apagar…':'Encender'}</button>`}</div>
+    ${RAPAGA[r.id]?`<div role="status" class="sala-aviso err">Al apagarla, el ${esc(ROL_COM[r.rol]||r.rol)} deja de cobrar en contratos nuevos.<div class="sala-fila"><button class="btn sala-no" onclick="guardarRegla(${r.id},{activo:false},this)">Confirmar: apagar</button><button class="est" onclick="RAPAGA[${r.id}]=false;pintarReglas()">Cancelar</button></div></div>`:''}
+    <div class="sala-precio"><span>En un contrato de ${usd(mt)} gana</span><b>${usd(gana)}</b><small>${cuando}</small></div>
+    <div class="sub show" style="margin-top:10px">
+      <div class="fld"><label for="rt${r.id}">% del contrato</label><input id="rt${r.id}" type="number" inputmode="decimal" min="0" max="50" step="0.1" value="${esc(String(r.tasa??0))}"></div>
+      <div class="fld"><label for="rm${r.id}">Monto fijo (US$) · se suma al %</label><input id="rm${r.id}" type="number" inputmode="decimal" min="0" step="1" value="${esc(String(r.monto_fijo??0))}"></div>
+    </div>
+    <button class="est" onclick="guardarRegla(${r.id},null,this)">Guardar cambios</button>
+  </div>`;
+}
+function pintarReglas(){
+  const opR=Object.entries(ROL_COM).map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('');
+  const opM=MEMBS.map(m=>`<option value="${esc(m.tipo)}">${esc(m.tipo)}</option>`).join('');
+  const puedeGV=['admin','gerente_general'].includes(ROLE);
+  const gvs=(AGENTES||[]).filter(a=>a.activo&&a.rol==='gerente_ventas');
+  const closers=(AGENTES||[]).filter(a=>a.activo&&a.rol==='cerrador');
+  const secGV=puedeGV?`<div class="lead" style="border-left-color:var(--amar)"><div class="lname">Gerente de ventas de cada closer</div>
+    <div class="lmeta">Quien cobra la comisión «Gerente de ventas» de las ventas de ese closer.</div>
+    ${!gvs.length?'<div role="status" class="sala-aviso">Todavía no hay gerentes de ventas dados de alta en Equipo.</div>':''}
+    ${closers.map(c=>`<div class="fld" style="margin-top:8px"><label for="gv${c.id}">${esc(c.nombre)}</label><select id="gv${c.id}" onchange="ponerGerente(${c.id},this)"><option value="">Sin gerente (no se paga esa comisión)</option>${gvs.map(g=>`<option value="${g.id}" ${c.gerente_id==g.id?'selected':''}>${esc(g.nombre)}</option>`).join('')}</select></div>`).join('')||'<div class="lmeta">No hay closers activos.</div>'}</div>`:'';
+  $('funCont').innerHTML=`<div class="sala">${secGV}${REGLAS.map(reglaCard).join('')}
+    <div class="lead" style="border-left-color:var(--kux)"><div class="lname">Nueva regla</div>
+      <div class="sub show" style="margin-top:10px">
+        <div class="fld"><label for="nrrol">Puesto</label><select id="nrrol">${opR}</select></div>
+        <div class="fld"><label for="nrmem">Membresía</label><select id="nrmem"><option value="">Todas</option>${opM}</select></div>
+        <div class="fld"><label for="nrt">% del contrato</label><input id="nrt" type="number" inputmode="decimal" min="0" max="50" step="0.1" value="0"></div>
+        <div class="fld"><label for="nrm">Monto fijo (US$) · se suma al %</label><input id="nrm" type="number" inputmode="decimal" min="0" step="1" value="0"></div>
+      </div>
+      <button class="btn" onclick="crearRegla(this)">Crear regla</button></div></div>`;
+}
+// Error de la base en palabras (regla repetida, comisión del gerente de ventas, sin permiso).
+async function errRegla(r){ let e={}; try{ e=await r.json(); }catch(_e){}
+  if(r.status===409||e.code==='23505') return 'Ya hay una regla activa para ese puesto y membresía: editá esa';
+  if(e.message&&/gerente general/.test(e.message)) return 'La comisión del gerente de ventas la fija el gerente general';
+  return r.status===401||r.status===403?'No tenés permiso para cambiar reglas':'No se pudo guardar'; }
+function valoresRegla(t,m){ const tasa=Number(t), monto=Number(m);
+  if(!(tasa>=0&&tasa<=50)) return 'El porcentaje va de 0 a 50';
+  if(!(monto>=0&&monto<=100000)) return 'El monto fijo va de 0 a 100,000';
+  return null; }
+async function guardarRegla(id,cambio,btn){
+  let body=cambio;
+  if(!body){ const t=$('rt'+id).value, m=$('rm'+id).value; const e=valoresRegla(t,m); if(e){ toast(e); return; } body={tasa:Number(t),monto_fijo:Number(m)};
+    // Un % alto suele ser un error de dedo (30 en vez de 3): se confirma con el monto en dólares.
+    if(body.tasa>10&&!(btn&&btn.dataset.ok)){ const r=REGLAS.find(x=>x.id===id)||{}; const g=ganaRegla(body,montoTipico(r.tipo_membresia));
+      if(btn){ btn.dataset.ok='1'; btn.textContent='¿Seguro? '+body.tasa+' % = '+usd(g)+' por contrato · tocá de nuevo'; } return; } }
+  if(btn.disabled) return; btn.disabled=true;
+  try{ const r=await api("funnel_comision_reglas?id=eq."+id,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify(body)});
+    if(!r.ok) throw new Error(await errRegla(r));
+    const rows=await r.json(); if(!rows.length) throw new Error('No se guardó (¿tenés permiso?)');
+    toast('Regla guardada: vale para los próximos contratos'); await vistaReglas(); }
+  catch(e){ btn.disabled=false; toast(e.message||'No se pudo'); }
+}
+async function ponerGerente(id,sel){ const v=sel.value?Number(sel.value):null; sel.disabled=true;
+  try{ const r=await api("funnel_agentes?id=eq."+id,{method:"PATCH",headers:{"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify({gerente_id:v})});
+    if(!r.ok){ let e={}; try{ e=await r.json(); }catch(_e){} throw new Error(e.message&&r.status<500?String(e.message):'No se pudo'); }
+    const a=(AGENTES||[]).find(x=>x.id===id); if(a) a.gerente_id=v; toast(v?'Gerente de ventas asignado':'Sin gerente de ventas'); }
+  catch(e){ toast((e.message||'No se pudo').replace(/^./,c=>c.toUpperCase())); await vistaReglas(); }
+  finally{ sel.disabled=false; } }
+async function crearRegla(btn){
+  const t=$('nrt').value, m=$('nrm').value; const e=valoresRegla(t,m); if(e){ toast(e); return; }
+  if(!(Number(t)>0||Number(m)>0)){ toast('Poné un porcentaje o un monto'); return; }
+  if(Number(t)>10&&!btn.dataset.ok){ btn.dataset.ok='1'; btn.textContent='¿Seguro? '+Number(t)+' % = '+usd(ganaRegla({tasa:t,monto_fijo:m},montoTipico($('nrmem').value||null)))+' por contrato · tocá de nuevo'; return; }
+  if(REGLAS.some(r=>r.activo&&r.rol===$('nrrol').value&&(r.tipo_membresia||'')===($('nrmem').value||''))){ toast('Ya hay una regla activa para ese puesto y membresía: editala'); return; }
+  if(btn.disabled) return; btn.disabled=true;
+  try{ const r=await api("funnel_comision_reglas",{method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=minimal"},body:JSON.stringify({rol:$('nrrol').value,tipo_membresia:$('nrmem').value||null,tasa:Number(t),monto_fijo:Number(m),activo:true})});
+    if(!r.ok) throw new Error(await errRegla(r)); toast('Regla creada'); await vistaReglas(); }
+  catch(e){ btn.disabled=false; toast(e.message||'No se pudo'); }
 }
 
 // ── BLOQUE 5: segmentos de descuento (gerente de ventas) ──
