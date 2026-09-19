@@ -90,7 +90,7 @@ caso "alta con un jefe que no existe: frena" "ERROR" _servicio "$NUEVA" "select 
 caso "nada sobre uno mismo" "ERROR" _servicio "" "select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-admin')::uuid, 'desactivar');"
 caso "cambiar a liner: el tmk se da de baja y nace un vendedor" "vendedor" _dueno "$ALTA update auth.users set raw_app_meta_data='{\"role\":\"vendedor\"}' where id=md5('kx-nueva')::uuid; select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'cambiar_rol', null, 'vendedor', null);" "select string_agg(rol,',') from funnel_agentes where user_id=md5('kx-nueva')::uuid and activo;"
 caso "cambiar el rol cierra sus sesiones" "2" _servicio "$ALTA insert into auth.sessions(user_id) values (md5('kx-nueva')::uuid),(md5('kx-nueva')::uuid); update auth.users set raw_app_meta_data='{\"role\":\"vendedor\"}' where id=md5('kx-nueva')::uuid;" "select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'cambiar_rol', null, 'vendedor', null);"
-caso "pasar a hostess (sin rol de agente): queda sin agente activo" "0" _dueno "$ALTA update auth.users set raw_app_meta_data='{\"role\":\"recepcion\"}' where id=md5('kx-nueva')::uuid; select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'cambiar_rol', null, 'recepcion', null);" "select count(*) from funnel_agentes where user_id=md5('kx-nueva')::uuid and activo;"
+caso "pasar a hostess (bloque 4: la hostess es agente para estar en un turno): un solo agente activo, de recepción" "1|recepcion" _dueno "$ALTA update auth.users set raw_app_meta_data='{\"role\":\"recepcion\"}' where id=md5('kx-nueva')::uuid; select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'cambiar_rol', null, 'recepcion', null);" "select count(*)||'|'||max(rol) from funnel_agentes where user_id=md5('kx-nueva')::uuid and activo;"
 caso "desactivar cierra sus sesiones" "1" _dueno "$ALTA insert into auth.sessions(user_id) values (md5('kx-nueva')::uuid);" "select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'desactivar');"
 caso "desactivar da de baja su agente" "0" _dueno "$ALTA select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'desactivar');" "select count(*) from funnel_agentes where user_id=md5('kx-nueva')::uuid and activo;"
 caso "activar: vuelve su agente" "1" _dueno "$ALTA select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'desactivar'); select funnel_personas_registrar(md5('kx-admin')::uuid, md5('kx-nueva')::uuid, 'activar');" "select count(*) from funnel_agentes where user_id=md5('kx-nueva')::uuid and activo;"
@@ -223,6 +223,72 @@ caso "ronda 2: supervisor cita DIRECTO en la tabla en un horario lleno: frena" "
 caso "ronda 2: con la marca de sesión, otra función NO conserva la confirmación" "false" telemarketing "$CITADO" "$DUE select set_config('request.jwt.claims', '{\"role\":\"authenticated\",\"app_metadata\":{\"role\":\"admin\"},\"email\":\"admin@prueba.kx\"}', true); select funnel_cita_confirmar(900101,$REST1,$CUANDO,true,false); select set_config('request.jwt.claims', '$(claims telemarketing)', true); set local role authenticated; select set_config('kux.confirmando','si',true); $RES(900101,'no_interesado',false); $DUE select (cita_confirmada_en is not null)::text from funnel_prospectos where id=900101;"
 caso "ronda 2: un telemarketer con el permiso igual no confirma" "ERROR: no autorizado" telemarketing "$CITADO update funnel_permisos set permitido=true where rol_clave='telemarketing' and permiso='confirmar_citas';" "$CONF(900101,$REST1,$CUANDO,false,false);"
 caso "anónimo no confirma ni lista" "false|false" _dueno "" "select has_function_privilege('anon','public.funnel_cita_confirmar(bigint,bigint,timestamptz,boolean,boolean)','execute')::text||'|'||has_function_privilege('anon','public.funnel_citas_lista()','execute')::text;"
+
+echo "· bloque 4: la sala (hostess, liner, closer por turno)"
+REST2="(select min(id) from funnel_restaurantes where activo and id>$REST1)"
+HOY_GT="((now() at time zone 'America/Guatemala')::date)"
+A_LAS="(($HOY_GT + time '12:00') at time zone 'America/Guatemala')"
+SALA="insert into auth.users(id,email,raw_app_meta_data) values (md5('kx-recepcion')::uuid,'recepcion@prueba.kx','{\"role\":\"recepcion\"}'),(md5('kx-vendedor')::uuid,'vendedor@prueba.kx','{\"role\":\"vendedor\"}') on conflict (id) do nothing;
+ insert into funnel_agentes(id,nombre,rol,email,activo,peso,user_id) overriding system value values
+  (900011,'H1','recepcion','recepcion@prueba.kx',true,1,md5('kx-recepcion')::uuid),(900012,'H2','recepcion','h2@prueba.kx',true,1,null),
+  (900021,'L1','vendedor','vendedor@prueba.kx',true,1,md5('kx-vendedor')::uuid),(900022,'L2','vendedor','l2@prueba.kx',true,1,null),
+  (900031,'C1','cerrador','c1@prueba.kx',true,1,null),(900032,'C2','cerrador','c2@prueba.kx',true,1,null),(900033,'C3','cerrador','c3@prueba.kx',true,1,null);
+ insert into funnel_turnos(id,fecha,restaurante_id,agente_id) overriding system value values
+  (900401,$HOY_GT,$REST1,900011),(900402,$HOY_GT,$REST2,900012),(900403,$HOY_GT,$REST1,900021),(900404,$HOY_GT,$REST1,900022),
+  (900405,$HOY_GT,$REST1,900031),(900406,$HOY_GT,$REST1,900032);
+ select set_config('kux.confirmando','si',true);
+ update funnel_prospectos set estado='asistira', etapa='telemarketing', restaurante_id=$REST1, presenta_en=$A_LAS, cita_confirmada_en=now() where id in (900101,900104);
+ update funnel_prospectos set estado='asistira', etapa='telemarketing', restaurante_id=$REST2, presenta_en=$A_LAS, cita_confirmada_en=now() where id=900102;
+ update funnel_prospectos set estado='asistira', etapa='telemarketing', restaurante_id=$REST1, presenta_en=$A_LAS+interval '1 day', cita_confirmada_en=now() where id=900103;
+ select set_config('kux.confirmando','',true);
+ update funnel_prospectos set estado='asistira', etapa='telemarketing', restaurante_id=$REST1, presenta_en=$A_LAS where id=900105;"
+CAL="select funnel_sala_calificar"
+ASG="select funnel_sala_asignar"
+EN_SALA="$SALA select set_config('request.jwt.claims','{\"role\":\"authenticated\",\"app_metadata\":{\"role\":\"admin\"},\"email\":\"admin@prueba.kx\"}',true); select funnel_sala_calificar(900101,true,40,'casado',2,'Visa',null);"
+caso "la hostess ve SOLO las citas confirmadas de hoy de SU lugar" "pA,pX" recepcion "$SALA" "select string_agg(nombre,',' order by nombre) from funnel_sala_hoy();"
+caso "la hostess sin turno hoy no ve nada" "0" recepcion "$SALA delete from funnel_turnos where agente_id=900011;" "select count(*) from funnel_sala_hoy();"
+caso "la hostess con la matriz apagada no entra" "ERROR: no autorizado" recepcion "$SALA update funnel_permisos set permitido=false where rol_clave='recepcion' and permiso='recibir_sala';" "select count(*) from funnel_sala_hoy();"
+caso "la hostess ya no lee la tabla directo" "0" recepcion "$SALA" "select count(*) from funnel_prospectos;"
+caso "la hostess ya no escribe la tabla directo" "0" recepcion "$SALA" "with u as (update funnel_prospectos set vendedor_id=900021 returning 1) select count(*) from u;"
+caso "la hostess ya no ve contratos ni reservas" "0|0" recepcion "$SALA" "select (select count(*) from funnel_contratos)||'|'||(select count(*) from funnel_reservas);"
+caso "gerencia de ventas ve todos los lugares de hoy" "pA,pB,pX" gerente_ventas "$SALA" "select string_agg(nombre,',' order by nombre) from funnel_sala_hoy();"
+caso "tmk no ve la sala" "ERROR: no autorizado" telemarketing "$SALA" "select count(*) from funnel_sala_hoy();"
+caso "llegada: queda anotada" "true" recepcion "$SALA" "select funnel_sala_llegada(900101); $DUE select (recepcion_en is not null)::text from funnel_prospectos where id=900101;"
+caso "llegada en OTRO lugar: frena" "ERROR: no autorizado" recepcion "$SALA" "select funnel_sala_llegada(900102);"
+caso "llegada de una cita de MAÑANA: frena" "ERROR: no autorizado" recepcion "$SALA" "select funnel_sala_llegada(900103);"
+caso "llegada de una cita SIN confirmar: frena" "ERROR: no autorizado" recepcion "$SALA" "select funnel_sala_llegada(900105);"
+caso "califica → la rueda le da el primer liner" "sala|900021" recepcion "$SALA" "$CAL(900101,true,40,'casado',2,'Visa',null); $DUE select etapa||'|'||vendedor_id from funnel_prospectos where id=900101;"
+caso "rueda pareja: dos clientes → dos liners distintos" "900021,900022" recepcion "$SALA" "$CAL(900101,true); $CAL(900104,true); $DUE select string_agg(vendedor_id::text,',' order by vendedor_id) from funnel_prospectos where id in (900101,900104);"
+caso "rueda: el liner que salió a comer se salta" "900022" recepcion "$SALA update funnel_turnos set disponible=false where id=900403;" "$CAL(900101,true); $DUE select vendedor_id from funnel_prospectos where id=900101;"
+caso "sin liner en turno: califica igual y AVISA" "sala|null|true" recepcion "$SALA delete from funnel_turnos where agente_id in (900021,900022);" "select set_config('kx.aviso',funnel_sala_calificar(900101,true)->>'aviso',true); $DUE select etapa||'|'||coalesce(vendedor_id::text,'null')||'|'||(current_setting('kx.aviso') ilike '%no hay ningún liner%')::text from funnel_prospectos where id=900101;"
+caso "no califica sin motivo: frena" "ERROR: escribí por qué no califica" recepcion "$SALA" "$CAL(900101,false);"
+caso "no califica con motivo: baja y sin liner" "baja|null" recepcion "$SALA" "$CAL(900101,false,null,null,null,null,'sin tarjeta'); $DUE select etapa||'|'||coalesce(vendedor_id::text,'null') from funnel_prospectos where id=900101;"
+caso "edad absurda: frena" "ERROR: la edad no cuadra (18 a 110)" recepcion "$SALA" "$CAL(900101,true,7);"
+caso "pasar a closer: la rueda le da el primer closer" "900031" recepcion "$EN_SALA" "$ASG(900101,'cerrador'); $DUE select cerrador_id from funnel_prospectos where id=900101;"
+caso "closer antes de calificar: frena" "ERROR: primero tiene que calificar" recepcion "$SALA" "$ASG(900101,'cerrador');"
+caso "sin liner no hay closer" "ERROR: primero el liner" recepcion "$SALA delete from funnel_turnos where agente_id in (900021,900022);" "$CAL(900101,true); $ASG(900101,'cerrador');"
+caso "sin closer en turno: avisa, no se calla" "ERROR: no hay ningún closer disponible en turno hoy en este lugar: pedile al gerente que arme el turno" recepcion "$EN_SALA delete from funnel_turnos where agente_id in (900031,900032);" "$ASG(900101,'cerrador');"
+caso "el liner asignado lo pasa a closer" "900031" vendedor "$EN_SALA" "$ASG(900101,'cerrador'); $DUE select cerrador_id from funnel_prospectos where id=900101;"
+caso "el liner NO asignado no lo pasa" "ERROR: no autorizado" vendedor "$EN_SALA update funnel_prospectos set vendedor_id=900022 where id=900101;" "$ASG(900101,'cerrador');"
+caso "el liner no elige closer a mano" "ERROR: no autorizado" vendedor "$EN_SALA" "$ASG(900101,'cerrador',900032);"
+caso "a mano: la hostess cambia a otro closer en turno (queda anotado)" "900032|manual|recepcion@prueba.kx" recepcion "$EN_SALA" "$ASG(900101,'cerrador',900032); $DUE select agente_id||'|'||modo||'|'||actor from funnel_sala_asignaciones where prospecto_id=900101 and rol='cerrador';"
+caso "a mano a alguien FUERA de turno: frena" "ERROR: esa persona no está en turno hoy como closer en este lugar" recepcion "$EN_SALA" "$ASG(900101,'cerrador',900033);"
+caso "a mano con un liner en el puesto de closer: frena" "ERROR: esa persona no está en turno hoy como closer en este lugar" recepcion "$EN_SALA" "$ASG(900101,'cerrador',900022);"
+caso "la rueda tiene candado por lugar y rol" "true" _dueno "" "select (pg_get_functiondef('public.funnel_sala_rueda(bigint,text,bigint)'::regprocedure) ilike '%pg_advisory_xact_lock%')::text;"
+caso "nadie escribe asignaciones directo (ni gerencia)" "ERROR" gerente_ventas "$SALA" "insert into funnel_sala_asignaciones(prospecto_id,rol,agente_id,modo) values (900101,'vendedor',900021,'rueda');"
+caso "nadie escribe turnos directo (ni gerencia)" "ERROR" gerente_ventas "$SALA" "insert into funnel_turnos(fecha,restaurante_id,agente_id) values (current_date,$REST1,900033);"
+caso "la bitácora de la sala no se falsifica" "ERROR" gerente_tmk "" "insert into funnel_eventos(prospecto_id,tipo,actor,payload) values (900101,'sala_asignado','gerente_tmk@prueba.kx','{}');"
+caso "la hostess no arma turnos" "ERROR: no autorizado" recepcion "$SALA" "select funnel_turno_poner($HOY_GT,$REST1,900033);"
+caso "el supervisor de ventas arma el turno" "1" supervisor "$SALA" "select funnel_turno_poner($HOY_GT,$REST1,900033); $DUE select count(*) from funnel_turnos where agente_id=900033;"
+caso "turno en una fecha que ya pasó: frena" "ERROR: esa fecha ya pasó" supervisor "$SALA" "select funnel_turno_poner($HOY_GT-1,$REST1,900033);"
+caso "turno a un telemarketer: frena" "ERROR: esa persona no es hostess, liner ni closer activo" supervisor "$SALA" "select funnel_turno_poner($HOY_GT,$REST1,900002);"
+caso "una persona, un lugar por día (se mueve, no se duplica)" "1" supervisor "$SALA" "select funnel_turno_poner($HOY_GT,$REST2,900021); $DUE select count(*) from funnel_turnos where agente_id=900021;"
+caso "la hostess pausa a un liner de SU sala" "false" recepcion "$SALA" "select funnel_turno_disponible(900403,false); $DUE select disponible::text from funnel_turnos where id=900403;"
+caso "la hostess NO pausa a alguien de otra sala" "ERROR: no autorizado" recepcion "$SALA" "select funnel_turno_disponible(900402,false);"
+caso "la hostess ve el turno de su sala, no el de otra" "5" recepcion "$SALA" "select count(*) from funnel_turnos_dia();"
+caso "tmk no ve turnos" "ERROR: no autorizado" telemarketing "$SALA" "select count(*) from funnel_turnos_dia();"
+caso "la rueda y la toma no se llaman desde afuera" "false|false" _dueno "" "select has_function_privilege('authenticated','public.funnel_sala_rueda(bigint,text,bigint)','execute')::text||'|'||has_function_privilege('authenticated','public.funnel_sala_tomar(bigint)','execute')::text;"
+caso "anónimo no toca la sala" "false|false|false" _dueno "" "select has_function_privilege('anon','public.funnel_sala_hoy()','execute')::text||'|'||has_function_privilege('anon','public.funnel_sala_calificar(bigint,boolean,integer,text,integer,text,text)','execute')::text||'|'||has_function_privilege('anon','public.funnel_turno_poner(date,bigint,bigint)','execute')::text;"
 
 echo "── $((N-FALLAS))/$N verdes"
 [ "$FALLAS" -eq 0 ]
