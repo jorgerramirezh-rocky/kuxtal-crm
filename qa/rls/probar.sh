@@ -477,6 +477,9 @@ caso "ciber2: atar una cuenta ajena a un agente: no" "ERROR: esa cuenta no es la
 caso "ciber2 A7: el gerente general con un agente fantasma a su correo no verifica" "ERROR: no podés verificar una venta en la que participaste" gerente_general "$CON_CLOSER $SEG set local session_replication_role = replica; insert into funnel_agentes(id,nombre,rol,email,activo,peso) overriding system value values (900077,'fantasma','gerente_ventas','gerente_general@prueba.kx',true,1); update funnel_agentes set gerente_id=900077 where id=900031; set local session_replication_role = origin; $ADM5 select funnel_cerrar_contrato(900101,'x','y',900021,900031,null,4);" "$VER($CID,'verificado');"
 caso "Equipo sigue andando: un gerente de TMK agrega un telemarketer" "1" gerente_tmk "" "with i as (insert into funnel_agentes(nombre,email,rol,peso) values ('Nuevo','nuevo@prueba.kx','tmk',1) returning 1) select count(*) from i;"
 caso "Equipo sigue andando: y lo desactiva" "1" gerente_tmk "" "with u as (update funnel_agentes set activo=false where id=900004 returning 1) select count(*) from u;"
+caso "ciber3 B1: nadie borra agentes (ni gerencia)" "ERROR" gerente_tmk "$GV" "delete from funnel_agentes where id=900051;"
+caso "ciber3 B1: comisiones atadas a un agente que existe" "ERROR" _dueno "$CERRADO" "update funnel_comisiones set beneficiario_id=999999 where contrato_id=$CID;"
+caso "ciber3 B2/B4: sin agente propio, un gerente de ventas no verifica" "ERROR: no podés verificar una venta en la que participaste" gerente_ventas "$CERRADO" "$VER($CID,'verificado');"
 caso "nadie vacía tablas con TRUNCATE" "false|false|false" _dueno "" "select has_table_privilege('authenticated','public.socios','truncate')::text||'|'||has_table_privilege('anon','public.funnel_membresias','truncate')::text||'|'||has_table_privilege('authenticated','public.funnel_permisos','truncate')::text;"
 
 echo "── $((N-FALLAS))/$N verdes"

@@ -91,6 +91,11 @@ begin
   end if;
   return new;
 end $$;
+-- Ronda 3 ciber: nadie BORRA agentes (se desactivan); borrar y recrear el mismo id robaba comisiones.
+revoke delete on public.funnel_agentes from anon, authenticated;
+alter table public.funnel_comisiones drop constraint if exists funnel_comisiones_beneficiario_fk;
+alter table public.funnel_comisiones add constraint funnel_comisiones_beneficiario_fk
+  foreign key (beneficiario_id) references public.funnel_agentes(id);
 drop trigger if exists trg_funnel_agente_gerente_guardia on public.funnel_agentes;
 create trigger trg_funnel_agente_gerente_guardia before insert or update on public.funnel_agentes
   for each row execute function public.funnel_agente_gerente_guardia();
@@ -151,13 +156,16 @@ begin
                              (select supervisor_id from public.funnel_agentes where id = c.tmk_id))
                 and (a.id = v_yo or a.user_id = auth.uid()))
      or lower(v_actor) = lower(coalesce(c.reabierto_por, ''))
+     -- kux.b6: sin agente propio solo verifican admin y el gerente general (un agente borrado o sin
+     -- cuenta no esconde a quien cobra).
+     or (v_yo is null and public.funnel_rol() not in ('admin', 'gerente_general'))
      -- kux.b6: ni quien tenga cualquier comisión de ESTE contrato (por agente, cuenta o correo).
      or exists (select 1 from public.funnel_comisiones m join public.funnel_agentes a on a.id = m.beneficiario_id
                  where m.contrato_id = c.id
                    and (a.id = v_yo or a.user_id = auth.uid() or lower(trim(coalesce(a.email, ''))) = lower(v_actor))) then
     raise exception 'no podés verificar una venta en la que participaste';
   end if;$a$);
-    if (length(d) - length(replace(d, 'kux.b6', ''))) / 6 <> 4 then raise exception 'no encontré dónde parchar funnel_contrato_verificar (bloque 6)'; end if;
+    if (length(d) - length(replace(d, 'kux.b6', ''))) / 6 <> 5 then raise exception 'no encontré dónde parchar funnel_contrato_verificar (bloque 6)'; end if;
     execute d;
   end if;
 end $p$;
