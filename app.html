@@ -2299,16 +2299,17 @@ async function funArrancar(){
     const ag=UID?await getJSON("funnel_agentes?select=id,nombre,rol,email&activo=eq.true&user_id=eq."+encodeURIComponent(UID)):null;
     miAgente=(ag&&ag[0])||null;
     $('funWho').textContent=USER+" · "+(esGerente?'Gerencia':(VENTAS.includes(ROLE)?'Ventas':(miAgente?'TMK':ROLE)));
-    funTab = esGerente ? 'cargar' : (MIS_PERMISOS.recibir_sala ? 'recepcion' : (['vendedor','cerrador'].includes(ROLE) ? 'misclientes' : (ROLE==='verificador' && MIS_PERMISOS.verificar_contratos ? 'verificacion' : (verTodo ? 'cierre' : 'midia'))));
+    funTab = esGerente ? 'cargar' : (MIS_PERMISOS.recibir_sala ? 'recepcion' : (['vendedor','cerrador'].includes(ROLE) ? 'misclientes' : (ROLE==='digitador' && MIS_PERMISOS.digitar_contratos ? 'digitacion' : (ROLE==='verificador' && MIS_PERMISOS.verificar_contratos ? 'verificacion' : (verTodo ? 'cierre' : 'midia')))));
     funCargado=true;
     funPintarTabs(); await funIrTab(funTab);
   }catch(e){ $('funCont').innerHTML='<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar el embudo</b><p>Puede ser la conexión. <b onclick="funArrancar()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>'; }
 }
 
 function funPintarTabs(){
-  const defs=['recepcion','vendedor','cerrador'].includes(ROLE)?[]:[['midia','Mi día']]; // «Mi día» es del telemarketer
+  const defs=['recepcion','vendedor','cerrador','digitador','verificador'].includes(ROLE)?[]:[['midia','Mi día']]; // «Mi día» es del telemarketer
   // Bloque 5: lo que ese puesto hace primero va al frente.
   if(MIS_PERMISOS.aprobar_descuentos) defs.push(['aprobaciones','Aprobaciones']);
+  if(MIS_PERMISOS.digitar_contratos) defs.push(['digitacion','Digitación']);
   if(MIS_PERMISOS.verificar_contratos) defs.push(['verificacion','Verificación']);
   if(MIS_PERMISOS.recibir_sala||MIS_PERMISOS.armar_turnos) defs.push(['recepcion','Recepción']);
   if(MIS_PERMISOS.armar_turnos) defs.push(['turnos','Turnos']);
@@ -2333,6 +2334,7 @@ async function funIrTab(k){ funTab=k; funPintarTabs();
     else if(k==='descuentos'){ await vistaDescuentos(); }
     else if(k==='reglas'){ await vistaReglas(); }
     else if(k==='misclientes'){ await vistaMisClientes(); }
+    else if(k==='digitacion'){ await vistaDigitacion(); }
     else if(k==='citas'){ await vistaCitas(); }
     else if(k==='lugares'){ await vistaLugares(); }
     else if(k==='cierre'){ await vistaCierre(); }
@@ -2602,6 +2604,7 @@ async function verificar(id,res,btn){
 function pasoCliente(c){
   if(c.contrato==='verificado') return 'Contrato verificado';
   if(c.contrato==='cancelado') return 'Se arrepintió';
+  if(c.contrato==='por_digitar') return c.devolucion_nota?'Cerrado · el digitador devolvió: '+c.devolucion_nota:'Cerrado · en digitación';
   if(c.contrato==='observado') return 'Cerrado · el verificador dejó observaciones';
   if(c.contrato==='por_verificar') return 'Cerrado · falta verificar';
   if(c.etapa==='baja') return 'No calificó / baja';
@@ -2613,7 +2616,7 @@ function pasoCliente(c){
 // Color del paso: verde terminado, rojo se cayó, ámbar falta algo, neutro lo demás. Pura → qa/misclientes.mjs.
 function tonoPaso(c){ const p=pasoCliente(c);
   if(p==='Contrato verificado') return 'ok'; if(p==='Se arrepintió'||p==='No calificó / baja') return 'err';
-  if(/falta|esperando|observaciones/.test(p)) return 'warn'; return ''; }
+  if(/falta|esperando|observaciones|devolvió/.test(p)) return 'warn'; return ''; }
 function misClienteCard(c){
   const tono=tonoPaso(c), borde={ok:'#177a4f',err:'var(--rojo-t)',warn:'var(--amar)'}[tono]||'var(--kux)';
   const tel=String(c.telefono||'').replace(/[^0-9+]/g,'');
@@ -2640,6 +2643,74 @@ async function vistaMisClientes(){
        ${antes.length?`<div class="sala-lbl" style="margin:14px 0 6px">Cerrados y anteriores (${antes.length})</div>${antes.map(misClienteCard).join('')}`:''}`
     :'<div class="vacio"><b>Todavía no tenés clientes</b><p>Cuando la sala te asigne a alguien, aparece acá.</p></div>'}</div>`;
 }
+
+// ── BLOQUE 8: digitación (el digitador completa y valida ANTES de imprimir) ──
+let DIGIT=[], DBEN={}, DDEV={};
+const DPI_OK=v=>/^[0-9]{13}$/.test(String(v||'').replace(/[^0-9]/g,''));
+// ¿Se puede validar? DPI de 13 dígitos, nacimiento, dirección y las tres revisiones marcadas. Pura → qa/digitacion.mjs.
+function puedeValidar(d,checks){ return !!(DPI_OK(d.dpi)&&d.fecha_nacimiento&&String(d.direccion||'').trim()&&checks&&checks.every(Boolean)); }
+async function vistaDigitacion(){
+  $('funCap').textContent='Completá los datos del cliente y validá: el contrato se imprime recién al validar y pasa a verificación.';
+  $('funCont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
+  DIGIT=await rpcSala('funnel_contratos_por_digitar')||[]; DBEN={}; DDEV={};
+  DIGIT.forEach(c=>{ DBEN[c.id]=(c.beneficiarios||[]).map(b=>({nombre:b.nombre||'',parentesco:b.parentesco||''})); });
+  pintarDigit();
+}
+function leerDigit(id){ const v=k=>String(($('dg'+k+id)||{}).value||'').trim();
+  (DBEN[id]||[]).forEach((b,i)=>{ b.nombre=String(($('dgbn'+id+'_'+i)||{}).value||b.nombre).trim(); b.parentesco=String(($('dgbp'+id+'_'+i)||{}).value||b.parentesco).trim(); });
+  return {dpi:v('dpi'),fecha_nacimiento:v('fn'),direccion:v('dir'),correo:v('cor'),ocupacion:v('ocu'),conyuge_nombre:v('cony'),beneficiarios:(DBEN[id]||[]).filter(b=>b.nombre)}; }
+function pintarDigit(){
+  const top=`<div class="sala-top"><div class="cap" style="flex:1">${DIGIT.length} por digitar</div><button class="st" style="flex:none" onclick="vistaDigitacion()">Actualizar</button></div>`;
+  $('funCont').innerHTML=`<div class="sala">${top}${DIGIT.length?DIGIT.map(digitCard).join(''):'<div class="vacio"><b>Nada por digitar</b><p>Cada contrato cerrado aparece acá hasta que se validen los datos del cliente.</p></div>'}</div>`;
+}
+function digitCard(c){
+  const ger=!!MIS_PERMISOS.corregir_sala, mio=!ger||c.digitador_id;
+  const inp=(k,lbl,val,extra)=>`<div class="fld"><label for="dg${k}${c.id}">${lbl}</label><input id="dg${k}${c.id}" value="${esc(val||'')}" ${extra||''}></div>`;
+  const ben=(DBEN[c.id]||[]).map((b,i)=>`<div class="sub show"><div class="fld"><label for="dgbn${c.id}_${i}">Beneficiario ${i+1}</label><input id="dgbn${c.id}_${i}" maxlength="120" value="${esc(b.nombre)}"></div><div class="fld"><label for="dgbp${c.id}_${i}">Parentesco</label><input id="dgbp${c.id}_${i}" maxlength="60" value="${esc(b.parentesco)}"></div></div>`).join('');
+  return `<div class="lead" style="border-left-color:${c.devolucion_nota?'var(--amar)':'var(--kux)'}">
+    <div class="lname">${esc(c.cliente)}</div>
+    <div class="lmeta">${esc(c.membresia||'')} · ${esc(c.plan_pago||'')} · Liner: <b>${esc(c.liner||'—')}</b> · Closer: <b>${esc(c.closer||'—')}</b></div>
+    <div class="sala-precio"><span>Contrato</span><b>${usd(c.monto)}</b><small>lista ${usd(c.precio_lista)}${Number(c.descuento)>0?' − descuentos '+usd(c.descuento):''}${c.enganche!=null?' · enganche '+usd(c.enganche):''}</small></div>
+    ${c.devolucion_nota?`<div role="status" class="sala-aviso">Devuelto: ${esc(c.devolucion_nota)}</div>`:''}
+    ${ger?`${c.digitador_id?`<div class="lmeta">Digitador: <b>${esc(c.digitador||'')}</b></div>`:'<div role="status" class="sala-aviso err">Sin digitador: nadie lo va a digitar hasta que lo asignés.</div>'}
+      <div class="sala-fila" style="margin:0 0 8px"><select id="asd${c.id}" aria-label="Asignar digitador" style="max-width:360px;flex:1 1 180px"><option value="">${c.digitador_id?'Cambiar a…':'Elegí digitador…'}</option>${(AGENTES||[]).filter(a=>a.activo&&a.rol==='digitador'&&a.id!==c.digitador_id).map(a=>`<option value="${a.id}">${esc(a.nombre)}</option>`).join('')}</select><button class="est" onclick="asignarDigitador(${c.id},$('asd${c.id}'),this)">Asignar</button></div>`:''}
+    ${mio&&c.digitador_id?`
+    <div class="sub show">${inp('dpi','DPI (13 dígitos)',c.dpi,'inputmode="numeric" maxlength="15"')}${inp('fn','Fecha de nacimiento',c.fecha_nacimiento,'type="date"')}</div>
+    <div class="sub show">${inp('dir','Dirección',c.direccion,'maxlength="300"')}${inp('cor','Correo',c.correo,'type="email" maxlength="120"')}</div>
+    <div class="sub show">${inp('ocu','Ocupación',c.ocupacion,'maxlength="120"')}${inp('cony','Cónyuge',c.conyuge_nombre,'maxlength="120"')}</div>
+    ${ben}${(DBEN[c.id]||[]).length<5?`<button class="est sala-sec" onclick="DBEN[${c.id}]=leerDigit(${c.id}).beneficiarios.concat([{nombre:'',parentesco:''}]);pintarDigit()">Agregar beneficiario</button>`:''}
+    <div class="sala-lbl" style="margin-top:10px">Antes de validar, revisá:</div>
+    ${['El nombre coincide con el DPI','Membresía, plan y precio son los acordados','El enganche es el correcto'].map((t,i)=>`<label style="display:flex;gap:8px;align-items:center;min-height:44px"><input type="checkbox" id="dgk${i}${c.id}"> ${t}</label>`).join('')}
+    ${DDEV[c.id]?`<div class="note"><label class="sala-lbl" for="dgdev${c.id}">¿Qué no cuadra? Obligatorio.</label><textarea id="dgdev${c.id}" maxlength="300"></textarea></div>
+      <div class="sala-fila"><button class="btn sala-no" onclick="devolverDigit(${c.id},this)">Confirmar devolución</button><button class="est" onclick="DDEV[${c.id}]=false;pintarDigit()">Cancelar</button></div>`
+    :`<div class="sala-fila"><button class="btn sala-ok" onclick="validarDigit(${c.id},this)">Validado · imprimir contrato</button><button class="est sala-sec" onclick="guardarDigit(${c.id},this)">Guardar</button><button class="est sala-nodisp" onclick="DDEV[${c.id}]=true;pintarDigit()">Devolver…</button></div>`}`:''}
+  </div>`;
+}
+async function asignarDigitador(id,sel,btn){ const v=Number(sel&&sel.value); if(!v){ toast('Elegí el digitador'); return; }
+  if(btn){ if(btn.disabled) return; btn.disabled=true; }
+  const nom=((AGENTES||[]).find(a=>a.id===v)||{}).nombre||'';
+  try{ await rpcSala('funnel_contrato_asignar_digitador',{p_id:id,p_agente:v}); toast('Asignado a '+nom); await vistaDigitacion(); }
+  catch(e){ if(btn) btn.disabled=false; toast(e.message||'No se pudo'); } }
+async function guardarDigit(id,btn){ if(btn.disabled) return; btn.disabled=true;
+  try{ await rpcSala('funnel_contrato_digitar',{p_id:id,p_datos:leerDigit(id)}); toast('Datos guardados'); }
+  catch(e){ toast(e.message||'No se pudo'); } finally{ btn.disabled=false; } }
+async function validarDigit(id,btn){
+  const d=leerDigit(id), checks=[0,1,2].map(i=>!!(($('dgk'+i+id)||{}).checked));
+  if(!DPI_OK(d.dpi)){ toast('El DPI tiene que tener 13 dígitos'); return; }
+  if(!d.fecha_nacimiento||!d.direccion){ toast('Faltan la fecha de nacimiento o la dirección'); return; }
+  if(!puedeValidar(d,checks)){ toast('Marcá las tres revisiones antes de validar'); return; }
+  if(btn.disabled) return; btn.disabled=true;
+  const c=DIGIT.find(x=>x.id===id)||{};
+  try{ await rpcSala('funnel_contrato_digitar',{p_id:id,p_datos:d}); await rpcSala('funnel_contrato_validar',{p_id:id});
+    imprimirContrato({ no_socio:c.no_socio, nombre:c.cliente, telefono:c.telefono, membresia:c.membresia, plan:c.plan_pago, monto:Number(c.monto)||0, enganche:c.enganche, anios:c.anios||4,
+      vendedor:c.liner||'', cerrador:c.closer||'', digitador:c.digitador||'', verificador:'',
+      dpi:String(d.dpi).replace(/[^0-9]/g,''), fecha_nacimiento:d.fecha_nacimiento, direccion:d.direccion, correo:d.correo, ocupacion:d.ocupacion, conyuge:d.conyuge_nombre, beneficiarios:d.beneficiarios });
+    toast('Validado · contrato impreso · pasa a verificación'); DIGIT=DIGIT.filter(x=>x.id!==id); pintarDigit(); }
+  catch(e){ btn.disabled=false; toast(e.message||'No se pudo'); } }
+async function devolverDigit(id,btn){ const nota=String(($('dgdev'+id)||{}).value||'').trim(); if(!nota){ toast('Escribí qué no cuadra'); return; }
+  if(btn.disabled) return; btn.disabled=true;
+  try{ await rpcSala('funnel_contrato_devolver',{p_id:id,p_nota:nota}); toast('Devuelto con la nota'); await vistaDigitacion(); }
+  catch(e){ btn.disabled=false; toast(e.message||'No se pudo'); } }
 
 // ── BLOQUE 6: reglas de comisión (gerencia de ventas) ──
 const ROL_COM={tmk:'Telemarketer',supervisor_tmk:'Supervisor de TMK',gerente_tmk:'Gerente de TMK',vendedor:'Liner',cerrador:'Closer',gerente_ventas:'Gerente de ventas',digitador:'Digitador',verificador:'Verificador'};
@@ -2868,9 +2939,6 @@ function cierreCard(l){
     ${estadoDesc}
     ${pendiente?'':`<div class="fld" style="margin-top:8px"><label for="seg${l.id}">Descuento por segmento (opcional)</label><select id="seg${l.id}" style="width:100%"><option value="">Sin descuento</option>${segs}</select></div>
     <button class="est sala-sec" style="margin-top:8px" onclick="pedirDescuento(${l.id},this)">Pedir aprobación del descuento</button>`}
-    <div class="sub show" style="margin-top:10px">
-      <div class="fld"><label for="dig${l.id}">Digitador</label><select id="dig${l.id}"><option value="">—</option>${opAgentes('digitador',f.dig?Number(f.dig):null)}</select></div>
-    </div>
     ${!l.cerrador_id?`<div role="status" class="sala-aviso">Falta el closer: en Recepción, «Pasar a closer». Sin closer no se cierra.</div>`
       :pendiente?''
       :`<button class="btn" onclick="cerrarContrato(${l.id},this)"><svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Cerrar contrato en ${usd(final)}</button>`}
@@ -2911,7 +2979,8 @@ table{width:100%;border-collapse:collapse}td{padding:7px 6px;border-bottom:1px s
 .legal{margin-top:30px;font-size:10.5px;color:var(--gris);line-height:1.5;border-top:1px solid var(--linea);padding-top:12px}@media print{body{padding:0}@page{margin:16mm}}</style></head><body>
 <div class="hdr"><div><div class="lg">KUXTAL <span class="pl"><svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.06em"><path d="M17.8 19.2 16 11l3.5-3.5a2.12 2.12 0 0 0-3-3L13 8 4.8 6.2a1 1 0 0 0-.9.3l-.9.9a1 1 0 0 0 .3 1.6L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 2.5 5.6a1 1 0 0 0 1.6.3l.9-.9a1 1 0 0 0 .3-.9z"/></svg></span></div><div class="tag">CADA DESTINO, UNA HISTORIA</div></div>
 <div class="doc"><div class="t">CONTRATO DE MEMBRESÍA</div><div class="m">No. de socio: <b>${esc(d.no_socio||'—')}</b></div><div class="m">Fecha: ${fmt(hoy)}</div></div></div>
-<h2>Datos del socio</h2><table>${fila('Nombre',d.nombre)}${fila('Teléfono',d.telefono)}</table>
+<h2>Datos del socio</h2><table>${fila('Nombre',d.nombre)}${d.dpi?fila('DPI',d.dpi):''}${d.fecha_nacimiento?fila('Fecha de nacimiento',fmt(d.fecha_nacimiento)):''}${fila('Teléfono',d.telefono)}${d.correo?fila('Correo',d.correo):''}${d.direccion?fila('Dirección',d.direccion):''}${d.ocupacion?fila('Ocupación',d.ocupacion):''}${d.conyuge?fila('Cónyuge',d.conyuge):''}</table>
+${(d.beneficiarios||[]).length?`<h2>Beneficiarios</h2><table>${d.beneficiarios.map(b=>fila(b.parentesco||'Beneficiario',b.nombre)).join('')}</table>`:''}
 <h2>Membresía</h2><table>${fila('Tipo de membresía',d.membresia)}${fila('Vigencia',(Number(d.anios)||4)+' años')}${fila('Ingreso',fmt(hoy))}${fila('Vence',fmt(vencIso))}</table>
 <h2>Inversión y plan de pago</h2><table>${fila('Plan de pago',d.plan)}${d.enganche>0?fila('Enganche (pago inicial)','US$ '+Number(d.enganche).toLocaleString('en-US',{minimumFractionDigits:2})):''}</table>
 <div class="monto"><span>Total de la membresía</span><span class="n">US$ ${Number(d.monto||0).toLocaleString('en-US',{minimumFractionDigits:2})}</span></div>
@@ -2951,13 +3020,12 @@ async function cerrarContrato(id,btn){
     const anios=Number(g('vig'))||4, mem=g('mem');
     // Bloque 5: el monto NO se manda; la base lo calcula. El descuento va solo si está aprobado para esta membresía.
     const body={p_prospecto:id, p_membresia:mem, p_plan:g('pln'), p_vendedor:l.vendedor_id||null, p_cerrador:l.cerrador_id||null,
-      p_digitador:g('dig')?Number(g('dig')):null, p_anios:anios, p_solicitud:(ped&&ped.estado==='aprobada'&&ped.membresia===mem)?ped.id:null};
+      p_digitador:null /* bloque 8: el digitador lo asigna la gerencia */, p_anios:anios, p_solicitud:(ped&&ped.estado==='aprobada'&&ped.membresia===mem)?ped.id:null};
     const res=await rpcSala('funnel_cerrar_contrato',body)||{};
     const eng=g('eng')?Number(g('eng')):null;
     try{ await registrarEnganche(res.contrato_id,id,eng,g('pln'),api,await probeContratosExt(),USER); }catch(e){}
-    imprimirContrato({ no_socio:res.no_socio, nombre:l.nombre, telefono:l.telefono, membresia:mem, plan:g('pln'), monto:Number(res.monto)||0, enganche:eng, anios:anios,
-      vendedor:agN(l.vendedor_id), cerrador:agN(l.cerrador_id), digitador:agN(g('dig')), verificador:'' });
-    toast('Contrato cerrado · pasa a verificación'); cierreLeads=cierreLeads.filter(x=>x.id!==id); delete CIERRE_F[id]; pintarCierre(true);
+    // Bloque 8: no se imprime al cerrar; el contrato se imprime cuando el digitador valida los datos.
+    toast('Contrato cerrado · socio '+(res.no_socio||'')+' · pasa a digitación'); cierreLeads=cierreLeads.filter(x=>x.id!==id); delete CIERRE_F[id]; pintarCierre(true);
   }catch(e){ toast('No se cerró: '+(e.message||'error')); btn.disabled=false; btn.innerHTML=txt; }
 }
 
