@@ -309,6 +309,11 @@ caso "ciber3 #1: ni gerencia cambia el telemarketer de quien ya llegó" "ERROR: 
 caso "ciber3 #1: gerencia sí reparte a quien no llegó" "1" gerente_tmk "" "with u as (update funnel_prospectos set tmk_id=900003 where id=900105 returning 1) select count(*) from u;"
 caso "ciber3 #2: nadie cuelga el prospecto de un socio ajeno" "ERROR: eso no se cambia directo en la tabla" gerente_ventas "$CON_CLOSER" "update funnel_prospectos set socio_id=(select min(id) from socios) where id=900101;"
 caso "ciber3 #2: ni lo da de alta ya colgado de un socio" "ERROR: eso se anota desde Recepción, no directo en la tabla" gerente_ventas "" "insert into funnel_prospectos(nombre,socio_id) values ('x',(select min(id) from socios));"
+echo "· bloque 4 · George 19-sep: solo gerencia de ventas corrige la sala al cerrar"
+caso "gerente de TMK NO cierra con otro closer" "ERROR: el liner y el closer del contrato son los que asignó la sala" gerente_tmk "$CON_CLOSER $MEMB" "select funnel_cerrar_contrato(900101,'x','y',1000,900021,900032,null,null,4);"
+caso "supervisor de TMK NO cierra antes de calificar" "ERROR: solo se cierra a quien calificó en la sala" supervisor_tmk "$SALA $MEMB" "select funnel_cerrar_contrato(900101,'x','y',1000,900021,900031,null,null,4);"
+caso "gerente de ventas SÍ corrige el closer al cerrar" "socio|900032" gerente_ventas "$CON_CLOSER $MEMB" "select funnel_cerrar_contrato(900101,'x','y',1000,900021,900032,null,null,4); $DUE select etapa||'|'||cerrador_id from funnel_prospectos where id=900101;"
+caso "corregir_sala solo en admin, gerente general y de ventas" "admin,gerente_general,gerente_ventas" _dueno "" "select string_agg(rol_clave,',' order by rol_clave) from funnel_permisos where permiso='corregir_sala' and permitido;"
 echo "· bloque 4 · ronda 1 QA: la rueda cuenta bien"
 # L1 «recibió» 2 hoy pero ya no los tiene; L2 tiene 1 de verdad → la rueda le toca a L1 (contar filas crudas daría L2).
 CRUDO="$SALA update funnel_prospectos set vendedor_id=900022 where id=900104;

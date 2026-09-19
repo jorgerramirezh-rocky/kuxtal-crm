@@ -25,6 +25,11 @@ select r.clave, p.permiso,
          else r.clave in ('admin','gerente_general','gerente_ventas','supervisor','recepcion') end
   from public.funnel_roles r cross join (values ('armar_turnos'), ('recibir_sala')) p(permiso)
 on conflict do nothing;
+-- Corregir liner/closer al cerrar un contrato: SOLO gerencia de ventas (George, 19-sep: telemarketing no).
+insert into public.funnel_permisos(rol_clave, permiso, permitido)
+select r.clave, 'corregir_sala', r.clave in ('admin','gerente_general','gerente_ventas')
+  from public.funnel_roles r
+on conflict do nothing;
 
 -- La hostess trabaja como agente (para poder estar en un turno).
 update public.funnel_roles set rol_operativo = 'recepcion'
@@ -407,9 +412,9 @@ begin
   d := pg_get_functiondef('public.funnel_cerrar_contrato(bigint,text,text,numeric,bigint,bigint,bigint,bigint,integer)'::regprocedure);
   if position('kux.b4.sala' in d) = 0 then
     d := replace(d, '  -- Anti-fraude (nuevo): cada beneficiario',
-      E'  -- kux.b4.sala: quien no es gerente cierra SOLO lo que dejó la sala: calificado, en sala, con\n'
-      || E'  -- closer, y con el liner y el closer que asignó la rueda (o a mano en Recepción). Ronda 2 ciber.\n'
-      || E'  if not funnel_es_gerente() then\n'
+      E'  -- kux.b4.sala: sin el permiso corregir_sala (solo gerencia de ventas) se cierra SOLO lo que dejó\n'
+      || E'  -- la sala: calificado, en sala, con closer, y con el liner y el closer que asignó la rueda.\n'
+      || E'  if not funnel_puede(''corregir_sala'') then\n'
       || E'    if pr.etapa is distinct from ''sala'' or not coalesce(pr.califica, false) then\n'
       || E'      raise exception ''solo se cierra a quien calificó en la sala'';\n'
       || E'    end if;\n'
