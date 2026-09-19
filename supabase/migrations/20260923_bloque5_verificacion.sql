@@ -97,7 +97,8 @@ alter table public.funnel_contratos
   add column if not exists verificacion_nota text,
   add column if not exists cerrado_por text;
 alter table public.funnel_contratos drop constraint if exists funnel_contratos_enganche_ck;
-alter table public.funnel_contratos add constraint funnel_contratos_enganche_ck check (enganche is null or enganche >= 0);
+alter table public.funnel_contratos add constraint funnel_contratos_enganche_ck
+  check (enganche is null or (enganche >= 0 and enganche <> 'NaN'::numeric and (monto is null or enganche <= monto)));
 -- El enganche lo completa quien participa, y solo mientras el contrato no está verificado ni cancelado.
 drop policy if exists fcon_upd on public.funnel_contratos;
 create policy fcon_upd on public.funnel_contratos for update to authenticated
@@ -121,6 +122,22 @@ update public.funnel_comisiones set estado = 'liberada'
 alter table public.socios add column if not exists contrato_cancelado_en timestamptz;
 comment on column public.socios.contrato_cancelado_en is
   'Bloque 5: el cliente se arrepintió en la verificación; el socio no se borra, queda marcado.';
+
+-- Ronda 2: dar de baja por la tabla a un socio con el contrato todavía por verificar trababa la
+-- verificación. Eso lo hace solo la gerencia de ventas (corregir_sala); lo demás, por la verificación.
+create or replace function public.funnel_baja_guardia() returns trigger
+  language plpgsql set search_path to 'public', 'pg_temp' as $$
+begin
+  if current_user in ('authenticated', 'anon') and old.etapa = 'socio' and new.etapa = 'baja'
+     and not public.funnel_puede('corregir_sala')
+     and exists (select 1 from public.funnel_contratos c where c.prospecto_id = old.id and c.estado in ('por_verificar', 'observado')) then
+    raise exception 'ese contrato está por verificar: la baja la marca el verificador («se arrepintió») o la gerencia de ventas';
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_funnel_baja_guardia on public.funnel_prospectos;
+create trigger trg_funnel_baja_guardia before update on public.funnel_prospectos
+  for each row execute function public.funnel_baja_guardia();
 
 -- ── 5. precio: una sola fuente ────────────────────────────────────────────
 -- Precio de lista y descuento propio de la membresía (activa). null si no existe.
@@ -246,7 +263,8 @@ begin
                        or (v_yo is not null and v_yo in (pr.vendedor_id, pr.cerrador_id))) then
     raise exception 'no autorizado';
   end if;
-  update public.funnel_descuento_solicitudes set estado = 'reemplazada', resuelto_por = v_actor, resuelto_en = now(), nota = 'retirado'
+  -- resuelto_por se conserva (quién aprobó); el retiro queda en la bitácora.
+  update public.funnel_descuento_solicitudes set estado = 'reemplazada', nota = 'retirado por ' || v_actor
    where prospecto_id = pr.id and estado in ('pendiente', 'aprobada');
   get diagnostics v_n = row_count;
   if v_n = 0 then raise exception 'no hay pedido de descuento vivo'; end if;
@@ -409,6 +427,9 @@ begin
   if c.estado not in ('por_verificar', 'observado') then raise exception 'ese contrato ya no está por verificar'; end if;
   -- Nadie verifica una venta en la que participó.
   if (v_yo is not null and v_yo in (c.vendedor_id, c.cerrador_id, c.digitador_id, c.tmk_id))
+     -- por CUENTA, no solo por agente: quien cambió de puesto sigue siendo la misma persona (ronda 2).
+     or exists (select 1 from public.funnel_agentes a where a.user_id = auth.uid()
+                 and a.id in (c.vendedor_id, c.cerrador_id, c.digitador_id, c.tmk_id))
      or lower(v_actor) = lower(coalesce(c.cerrado_por, ''))
      or lower(v_actor) in (select lower(coalesce(x, '')) from public.funnel_descuento_solicitudes ds,
                            lateral (values (ds.pedido_por), (ds.resuelto_por)) v(x) where ds.id = c.descuento_solicitud_id) then
