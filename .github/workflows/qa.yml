@@ -34,6 +34,8 @@ jobs:
         run: node qa/citas.mjs
       - name: Sala (bloque 4)
         run: node qa/sala.mjs
+      - name: Verificación y descuentos (bloque 5)
+        run: node qa/verificacion.mjs
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed   # v2.0.5 (pin por SHA)
         with:
           deno-version: v2.x
