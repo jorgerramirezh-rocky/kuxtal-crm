@@ -30,7 +30,7 @@ jobs:
       - name: Correr QA (responsive + errores + piezas)
         run: node qa/check.mjs
       - name: Embudo y Mi día (pruebas sin navegador)
-        run: node qa/marco.mjs && node qa/mi-dia.mjs && node qa/panel-personas.mjs && node qa/citas.mjs && node qa/sala.mjs && node qa/verificacion.mjs
+        run: node qa/marco.mjs && node qa/mi-dia.mjs && node qa/panel-personas.mjs && node qa/citas.mjs && node qa/sala.mjs && node qa/verificacion.mjs && node qa/comisiones.mjs
 
   deploy:
     needs: qa
