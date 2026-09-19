@@ -91,7 +91,7 @@ const bloque = src.slice(src.indexOf('// ── RECEPCIÓN (sala de ventas'), sr
 ok(bloque.includes("rpcSala('funnel_sala_hoy')") && !bloque.includes('funnel_prospectos?'), 'Recepción lee SOLO por funnel_sala_hoy')
 ok(!bloque.includes('funPatchLead') && !/\bev\(/.test(bloque), 'Recepción escribe SOLO por funciones (sin PATCH ni bitácora a mano)')
 ok(/MIS_PERMISOS\.recibir_sala\|\|MIS_PERMISOS\.armar_turnos\) defs\.push\(\['recepcion'/.test(src), 'la pestaña Recepción depende del permiso de la matriz')
-ok(src.includes("verTodo=esGerente||(VENTAS.includes(ROLE)&&ROLE!=='recepcion')"), 'la hostess ya no «ve todo» en la pantalla')
+ok(src.includes("verTodo=esGerente||['reservaciones','servicio'].includes(ROLE);"), 'la hostess (y desde el bloque 7 liner, closer, digitador y verificador) ya no «ven todo» en la pantalla')
 
 // ── comportamiento (con la base simulada): lo que la revisión de QA pidió medir, no solo textos ──
 const llamadas = []

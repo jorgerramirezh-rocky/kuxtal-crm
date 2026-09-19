@@ -1786,7 +1786,7 @@ function render(){
 // ── Ficha 360 + histórico (trazabilidad) ──
 function decodeUser(){ try{ const d=JSON.parse(atob(SES.access_token.split('.')[1])); USER=d.email||"equipo"; UID=d.sub||null; ROLE=(d.app_metadata&&d.app_metadata.role)||"invitado"; }catch(e){ USER="equipo"; UID=null; ROLE="invitado"; }
   // F4: flags de rol del embudo (una sola fuente de verdad)
-  esGerente=GERENTES.includes(ROLE); verTodo=esGerente||(VENTAS.includes(ROLE)&&ROLE!=='recepcion'); } // bloque 4: la hostess ve solo su sala
+  esGerente=GERENTES.includes(ROLE); verTodo=esGerente||['reservaciones','servicio'].includes(ROLE); } // bloque 7: liner, closer, digitador y verificador ven solo lo suyo
 const rolBonito=r=>({admin:'Admin general',gerente_general:'Gerente general',gerente_ventas:'Gerente de ventas',telemarketing:'Telemarketing',supervisor:'Supervisor',reservaciones:'Reservaciones',recepcion:'Hostess',vendedor:'Liner',cerrador:'Closer'}[r]||'Invitado');
 async function traerInter(sid,reint){
   try{ const r=await fetch(SB_URL+"/rest/v1/interacciones?socio_id=eq."+sid+"&select=*&order=creado_en.desc&limit=80",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
@@ -2293,25 +2293,28 @@ async function funArrancar(){
     PLANES=(await getJSON("funnel_planes_pago?select=*&activo=eq.true&order=orden.asc"))||[];
     // Bloque 2: el tope de intentos lo pone gerencia (funnel_parametros). Si no se puede leer, 3.
     try{ const pr=await getJSON("funnel_parametros?select=valor&clave=eq.tmk_intentos_max"); if(pr&&pr[0]&&Number(pr[0].valor)>=2) TOPE_INTENTOS=Number(pr[0].valor); }catch(_e){}
-    if(verTodo) AGENTES=(await getJSON("funnel_agentes?select=*&order=nombre.asc"))||[];
+    if(verTodo||['vendedor','cerrador','verificador'].includes(ROLE)) AGENTES=(await getJSON("funnel_agentes?select=*&order=nombre.asc"))||[];
     // Bloque 1: la persona se ata a su CUENTA (user_id), no a su correo.
     const ag=UID?await getJSON("funnel_agentes?select=id,nombre,rol,email&activo=eq.true&user_id=eq."+encodeURIComponent(UID)):null;
     miAgente=(ag&&ag[0])||null;
     $('funWho').textContent=USER+" · "+(esGerente?'Gerencia':(VENTAS.includes(ROLE)?'Ventas':(miAgente?'TMK':ROLE)));
-    funTab = esGerente ? 'cargar' : (MIS_PERMISOS.recibir_sala ? 'recepcion' : (ROLE==='verificador' && MIS_PERMISOS.verificar_contratos ? 'verificacion' : (verTodo ? 'cierre' : 'midia')));
+    funTab = esGerente ? 'cargar' : (MIS_PERMISOS.recibir_sala ? 'recepcion' : (['vendedor','cerrador'].includes(ROLE) ? 'misclientes' : (ROLE==='verificador' && MIS_PERMISOS.verificar_contratos ? 'verificacion' : (verTodo ? 'cierre' : 'midia'))));
     funCargado=true;
     funPintarTabs(); await funIrTab(funTab);
   }catch(e){ $('funCont').innerHTML='<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar el embudo</b><p>Puede ser la conexión. <b onclick="funArrancar()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>'; }
 }
 
 function funPintarTabs(){
-  const defs=ROLE==='recepcion'?[]:[['midia','Mi día']];
+  const defs=['recepcion','vendedor','cerrador'].includes(ROLE)?[]:[['midia','Mi día']]; // «Mi día» es del telemarketer
   // Bloque 5: lo que ese puesto hace primero va al frente.
   if(MIS_PERMISOS.aprobar_descuentos) defs.push(['aprobaciones','Aprobaciones']);
   if(MIS_PERMISOS.verificar_contratos) defs.push(['verificacion','Verificación']);
   if(MIS_PERMISOS.recibir_sala||MIS_PERMISOS.armar_turnos) defs.push(['recepcion','Recepción']);
   if(MIS_PERMISOS.armar_turnos) defs.push(['turnos','Turnos']);
-  if(verTodo){ defs.push(['cierre','Cierre']); defs.push(['postventa','Postventa']); defs.push(['reservas','Reservas']); defs.push(['todos','Todos']); }
+  // Bloque 7: liner y closer, sus clientes y su cierre; reservas solo con el permiso de la matriz.
+  if(['vendedor','cerrador'].includes(ROLE)){ defs.push(['misclientes','Mis clientes']); defs.push(['cierre','Cierre']); }
+  if(verTodo){ defs.push(['cierre','Cierre']); defs.push(['postventa','Postventa']); defs.push(['todos','Todos']); }
+  if(MIS_PERMISOS.gestionar_reservas) defs.push(['reservas','Reservas']);
   if(MIS_PERMISOS.confirmar_citas) defs.push(['citas','Citas']);
   if(MIS_PERMISOS.gestionar_lugares) defs.push(['lugares','Lugares']);
   if(MIS_PERMISOS.gestionar_descuentos) defs.push(['descuentos','Descuentos']);
@@ -2328,6 +2331,7 @@ async function funIrTab(k){ funTab=k; funPintarTabs();
     else if(k==='verificacion'){ await vistaVerificacion(); }
     else if(k==='descuentos'){ await vistaDescuentos(); }
     else if(k==='reglas'){ await vistaReglas(); }
+    else if(k==='misclientes'){ await vistaMisClientes(); }
     else if(k==='citas'){ await vistaCitas(); }
     else if(k==='lugares'){ await vistaLugares(); }
     else if(k==='cierre'){ await vistaCierre(); }
@@ -2568,10 +2572,15 @@ function verifCard(c){
     <div class="lmeta">${esc(c.membresia||'')} · ${esc(c.plan_pago||'')} · Liner: <b>${esc(c.liner||'—')}</b> · Closer: <b>${esc(c.closer||'—')}</b>${c.digitador?' · Digitador: <b>'+esc(c.digitador)+'</b>':''}</div>
     <div class="sala-precio"><span>Contrato</span><b>${usd(c.monto)}</b><small>lista ${usd(c.precio_lista)}${Number(c.descuento)>0?' − descuentos '+usd(c.descuento):''}${c.enganche!=null?' · enganche '+usd(c.enganche):''}${Number(c.reservas)>0?' · '+c.reservas+' reserva'+(c.reservas>1?'s':''):''}</small></div>
     ${c.estado==='observado'?`<div role="status" class="sala-aviso">Con observaciones: ${esc(c.verificacion_nota||'')}</div>`:''}
+    ${MIS_PERMISOS.corregir_sala?`<div class="fld" style="margin:0 0 8px"><label for="asv${c.id}">Verificador asignado</label><select id="asv${c.id}" onchange="asignarVerificador(${c.id},this)"><option value="">${c.verificador?esc(c.verificador):'Sin asignar'}</option>${(AGENTES||[]).filter(a=>a.activo&&a.rol==='verificador'&&a.id!==c.verificador_id).map(a=>`<option value="${a.id}">${esc(a.nombre)}</option>`).join('')}</select></div>`
+      :`<div class="lmeta">Verificador: <b>${esc(c.verificador||'sin asignar')}</b></div>`}
     ${tel?`<a class="btn" style="display:block;text-align:center;text-decoration:none;margin:0 0 8px" href="tel:${esc(tel)}">Llamar al cliente · ${esc(c.telefono)}</a>`:'<div role="status" class="sala-aviso">Sin teléfono registrado.</div>'}
     ${acciones}
   </div>`;
 }
+async function asignarVerificador(id,sel){ const v=Number(sel.value); if(!v) return; sel.disabled=true;
+  try{ await rpcSala('funnel_contrato_asignar_verificador',{p_id:id,p_agente:v}); toast('Verificador asignado'); await vistaVerificacion(); }
+  catch(e){ sel.disabled=false; sel.value=''; toast(e.message||'No se pudo'); } }
 async function verificar(id,res,btn){
   const nota=res==='verificado'?null:String(($('vnot'+id)||{}).value||'').trim();
   if(res!=='verificado'&&!nota){ toast('Escribí qué pasó con el cliente'); return; }
@@ -2580,6 +2589,31 @@ async function verificar(id,res,btn){
     toast(res==='verificado'?'Verificado: comisiones liberadas':res==='observado'?'Quedó con observaciones':'Contrato cancelado');
     if(res==='observado'){ await vistaVerificacion(); } else { VERIF=VERIF.filter(x=>x.id!==id); pintarVerif(); }
   }catch(e){ btn.disabled=false; toast(e.message||'No se pudo'); }
+}
+
+// ── BLOQUE 7: «Mis clientes» (liner y closer) ──
+// En qué paso va un cliente, en palabras. Pura → qa/misclientes.mjs.
+function pasoCliente(c){
+  if(c.contrato==='verificado') return 'Contrato verificado';
+  if(c.contrato==='cancelado') return 'Se arrepintió';
+  if(c.contrato==='por_verificar'||c.contrato==='observado') return 'Cerrado · falta verificar';
+  if(c.etapa==='baja') return 'No calificó / baja';
+  if(c.descuento==='pendiente') return 'En sala · descuento esperando al gerente';
+  if(c.descuento==='aprobada') return 'En sala · descuento aprobado';
+  if(c.etapa==='sala') return c.closer?'En sala · con closer':'En sala · falta closer';
+  return 'Por llegar';
+}
+async function vistaMisClientes(){
+  $('funCap').textContent='Tus clientes: los que te asignó la sala (hoy y los que siguen en curso).';
+  $('funCont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
+  const l=await rpcSala('funnel_mis_clientes')||[];
+  const top=`<div class="sala-top"><div class="cap" style="flex:1">${l.length} cliente${l.length===1?'':'s'}</div><button class="st" style="flex:none" onclick="vistaMisClientes()">Actualizar</button></div>`;
+  $('funCont').innerHTML=`<div class="sala">${top}${l.length?l.map(c=>`<div class="lead" style="border-left-color:${c.etapa==='sala'?'var(--verde)':'var(--kux)'}">
+      <div class="lname">${esc(c.nombre)}</div>
+      <div class="lmeta">${[c.telefono,'llegó '+(horaGT(c.recepcion_en)||'—'),'sos '+(c.mi_papel==='liner'?'el liner':'el closer')].filter(Boolean).map(esc).join(' · ')}</div>
+      <div class="lmeta">Liner: <b>${esc(c.liner||'—')}</b> · Closer: <b>${esc(c.closer||'—')}</b></div>
+      <div class="sala-aviso" role="status" style="margin-top:8px">${esc(pasoCliente(c))}</div></div>`).join('')
+    :'<div class="vacio"><b>Todavía no tenés clientes</b><p>Cuando la sala te asigne a alguien, aparece acá.</p></div>'}</div>`;
 }
 
 // ── BLOQUE 6: reglas de comisión (gerencia de ventas) ──
