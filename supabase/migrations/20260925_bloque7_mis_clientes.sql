@@ -161,4 +161,23 @@ end $$;
 revoke all on function public.funnel_mis_clientes() from public, anon;
 grant execute on function public.funnel_mis_clientes() to authenticated;
 
+-- ── 5. revisión del bloque 7: cliente sin closer (o sin liner) ────────────
+-- «v_yo in (vendedor_id, cerrador_id)» da NULL (no «falso») si uno de los dos está vacío, y el
+-- «if not (...)» dejaba pasar a cualquiera con cerrar_contrato. Pasa a coalesce(..., false).
+do $p$
+declare f text; d text;
+begin
+  foreach f in array array['public.funnel_descuento_de(bigint)', 'public.funnel_descuento_pedir(bigint,text,bigint)',
+                           'public.funnel_descuento_retirar(bigint)'] loop
+    d := pg_get_functiondef(f::regprocedure);
+    if position('v_yo in (pr.vendedor_id, pr.cerrador_id))' in d) > 0 then
+      d := replace(d, 'v_yo in (pr.vendedor_id, pr.cerrador_id))', 'coalesce(v_yo in (pr.vendedor_id, pr.cerrador_id), false))');
+      execute d;
+    end if;
+    if position('coalesce(v_yo in (pr.vendedor_id, pr.cerrador_id), false)' in pg_get_functiondef(f::regprocedure)) = 0 then
+      raise exception 'no pude corregir %', f;
+    end if;
+  end loop;
+end $p$;
+
 commit;
