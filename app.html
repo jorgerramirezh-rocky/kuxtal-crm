@@ -2611,7 +2611,7 @@ async function cerrarContrato(id,btn){
     const body={p_prospecto:id, p_membresia:g('mem'), p_plan:g('pln'), p_monto:Number(g('mon'))||0,
       p_vendedor:l.vendedor_id||null, p_cerrador:l.cerrador_id||null, p_digitador:g('dig')?Number(g('dig')):null, p_verificador:g('ver')?Number(g('ver')):null, p_anios:anios};
     const r=await api("rpc/funnel_cerrar_contrato",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-    if(!r.ok){ toast('No se pudo cerrar el contrato'); btn.disabled=false; btn.innerHTML='<svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Cerrar contrato'; return; }
+    if(!r.ok){ let m='No se pudo cerrar el contrato'; try{ const e=await r.json(); if(e&&e.message&&r.status<500) m='No se cerró: '+String(e.message); }catch(_e){} toast(m); btn.disabled=false; btn.innerHTML='<svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Cerrar contrato'; return; }
     let res={}; try{ res=await r.json(); }catch(e){}
     // (M1d) enganche como pago inicial: a la fila del contrato (si hay columna) + bitácora
     const eng=g('eng')?Number(g('eng')):null;

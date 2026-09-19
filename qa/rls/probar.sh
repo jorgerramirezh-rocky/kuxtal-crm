@@ -294,6 +294,15 @@ caso "ciber #4: la bitácora no acepta 'contrato' del cliente" "ERROR" vendedor 
 caso "ciber #4: ni un tipo reservado con un espacio invisible" "ERROR" vendedor "$EN_SALA" "insert into funnel_eventos(prospecto_id,tipo,actor,payload) values (900101,'sala_asignado'||chr(8203),'vendedor@prueba.kx','{}');"
 caso "ciber #4: lo de la lista blanca sí entra (contacto)" "1" vendedor "$EN_SALA" "with i as (insert into funnel_eventos(prospecto_id,tipo,actor,payload) values (900101,'contacto','vendedor@prueba.kx','{}') returning 1) select count(*) from i;"
 caso "ciber #5: la hostess no vuelve a la tabla por el organigrama" "0" recepcion "$SALA update funnel_agentes set supervisor_id=900011 where id=900002;" "select count(*) from funnel_prospectos;"
+echo "· bloque 4 · ronda 2 ciber: el cierre respeta la sala"
+MEMB="insert into funnel_membresias(tipo,precio) select 'x',1000 where not exists (select 1 from funnel_membresias where tipo='x');"
+caso "ciber2 A1: sacarlo de sala por la tabla no se puede" "ERROR: eso se anota desde Recepción, no directo en la tabla" vendedor "$CON_CLOSER" "update funnel_prospectos set etapa='presentacion' where id=900101;"
+caso "ciber2 A1b: dado de baja no se cierra (liner)" "ERROR: solo se cierra a quien calificó en la sala" vendedor "$CON_CLOSER $MEMB" "update funnel_prospectos set etapa='baja' where id=900101; select funnel_cerrar_contrato(900101,'x','y',1000,900021,900031,null,null,4);"
+caso "ciber2 A2: antes de calificar no se cierra" "ERROR: solo se cierra a quien calificó en la sala" vendedor "$SALA $MEMB" "select funnel_cerrar_contrato(900101,'x','y',1000,900021,900033,null,null,4);"
+caso "ciber2 C3: sin closer no se cierra" "ERROR: falta el closer: pasalo a closer en Recepción" vendedor "$EN_SALA $MEMB" "select funnel_cerrar_contrato(900101,'x','y',1000,900021,null,null,null,4);"
+caso "ciber2 C4: quien llegó no se esconde de Recepción cambiando el estado" "ERROR: eso se anota desde Recepción, no directo en la tabla" vendedor "$EN_SALA" "update funnel_prospectos set estado='interesado' where id=900101;"
+caso "ciber2 5: ni gerencia lo mueve de lugar en dos pasos" "ERROR: eso se anota desde Recepción, no directo en la tabla" gerente_ventas "$EN_SALA" "update funnel_prospectos set etapa='presentacion' where id=900101;"
+caso "ciber2: gerencia SÍ da de baja a quien llegó" "1" gerente_ventas "$SALA select set_config('request.jwt.claims','{\"role\":\"authenticated\",\"app_metadata\":{\"role\":\"admin\"},\"email\":\"admin@prueba.kx\"}',true); select funnel_sala_llegada(900101);" "with u as (update funnel_prospectos set etapa='baja', motivo_baja='x' where id=900101 returning 1) select count(*) from u;"
 echo "· bloque 4 · ronda 1 QA: la rueda cuenta bien"
 # L1 «recibió» 2 hoy pero ya no los tiene; L2 tiene 1 de verdad → la rueda le toca a L1 (contar filas crudas daría L2).
 CRUDO="$SALA update funnel_prospectos set vendedor_id=900022 where id=900104;

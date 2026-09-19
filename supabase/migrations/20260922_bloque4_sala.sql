@@ -368,9 +368,13 @@ begin
      or new.califica is distinct from old.califica or new.recepcion_en is distinct from old.recepcion_en
      or new.recepcionado_por is distinct from old.recepcionado_por
      or (new.etapa is distinct from old.etapa and (new.etapa in ('sala', 'socio') or (old.etapa = 'socio' and new.etapa <> 'baja')))
-     -- ya en sala: no se mueve de lugar ni de hora por la tabla (desaparecería de la sala; QA M6)
-     or (old.etapa = 'sala' and (new.restaurante_id is distinct from old.restaurante_id
-                                 or new.presenta_en is distinct from old.presenta_en)) then
+     -- Quien ya llegó a la sala queda congelado para la tabla: la etapa solo puede pasar a baja, y no
+     -- cambian estado, lugar ni hora (se escondería de Recepción o volvería a tirar la rueda). QA M6 + ronda 2 ciber.
+     or ((old.recepcion_en is not null or old.etapa = 'sala')
+         and ((new.etapa is distinct from old.etapa and new.etapa <> 'baja')
+              or new.estado is distinct from old.estado
+              or new.restaurante_id is distinct from old.restaurante_id
+              or new.presenta_en is distinct from old.presenta_en)) then
     raise exception 'eso se anota desde Recepción, no directo en la tabla';
   end if;
   return new;
@@ -396,10 +400,16 @@ begin
   d := pg_get_functiondef('public.funnel_cerrar_contrato(bigint,text,text,numeric,bigint,bigint,bigint,bigint,integer)'::regprocedure);
   if position('kux.b4.sala' in d) = 0 then
     d := replace(d, '  -- Anti-fraude (nuevo): cada beneficiario',
-      E'  -- kux.b4.sala: si viene de la sala, liner y closer son los que asignó la rueda (o a mano en Recepción).\n'
-      || E'  if pr.etapa = ''sala'' and not funnel_es_gerente()\n'
-      || E'     and (p_vendedor is distinct from pr.vendedor_id or p_cerrador is distinct from pr.cerrador_id) then\n'
-      || E'    raise exception ''el liner y el closer del contrato son los que asignó la sala'';\n'
+      E'  -- kux.b4.sala: quien no es gerente cierra SOLO lo que dejó la sala: calificado, en sala, con\n'
+      || E'  -- closer, y con el liner y el closer que asignó la rueda (o a mano en Recepción). Ronda 2 ciber.\n'
+      || E'  if not funnel_es_gerente() then\n'
+      || E'    if pr.etapa is distinct from ''sala'' or not coalesce(pr.califica, false) then\n'
+      || E'      raise exception ''solo se cierra a quien calificó en la sala'';\n'
+      || E'    end if;\n'
+      || E'    if pr.cerrador_id is null then raise exception ''falta el closer: pasalo a closer en Recepción''; end if;\n'
+      || E'    if p_vendedor is distinct from pr.vendedor_id or p_cerrador is distinct from pr.cerrador_id then\n'
+      || E'      raise exception ''el liner y el closer del contrato son los que asignó la sala'';\n'
+      || E'    end if;\n'
       || E'  end if;\n\n'
       || '  -- Anti-fraude (nuevo): cada beneficiario');
     if position('kux.b4.sala' in d) = 0 then raise exception 'no encontré dónde parchar funnel_cerrar_contrato'; end if;
