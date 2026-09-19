@@ -56,11 +56,31 @@ $$;
 revoke all on function public.funnel_cuenta_es_de(uuid, text) from public, anon;
 grant execute on function public.funnel_cuenta_es_de(uuid, text) to authenticated;
 
+-- El último número de agente que la base dio EN ESTA SESIÓN (null si no dio ninguno: alta con número a mano).
+create or replace function public.funnel_agente_ultimo_id() returns bigint
+  language plpgsql volatile security definer set search_path to 'public', 'pg_temp' as $$
+begin
+  return currval('public.funnel_agentes_id_seq');
+exception when object_not_in_prerequisite_state then
+  return null;
+end $$;
+revoke all on function public.funnel_agente_ultimo_id() from public, anon;
+grant execute on function public.funnel_agente_ultimo_id() to authenticated;
+
 create or replace function public.funnel_agente_gerente_guardia() returns trigger
   language plpgsql set search_path to 'public', 'pg_temp' as $$
 declare v_jefe boolean := current_user not in ('authenticated', 'anon')
                           or public.funnel_rol() in ('admin', 'gerente_general');
 begin
+  -- Ronda 4 ciber: el número de un agente no cambia nunca (cambiarlo lo borraba de sus contratos).
+  if tg_op = 'UPDATE' and new.id is distinct from old.id then
+    raise exception 'el número de un agente no se cambia';
+  end if;
+  -- Ronda 4: con un número elegido a mano solo dan de alta admin o el gerente general (recrear números
+  -- huérfanos o tapar los siguientes).
+  if tg_op = 'INSERT' and not v_jefe and new.id is distinct from public.funnel_agente_ultimo_id() then
+    raise exception 'el número de un agente lo pone la base';
+  end if;
   -- Ronda 2 ciber: lo que decide quién cobra (puesto, cuenta atada, correo, jefe, gerente de ventas) lo
   -- cambian solo admin o el gerente general. La pantalla de Equipo solo crea agentes y los activa/desactiva.
   if not v_jefe then
@@ -93,6 +113,17 @@ begin
 end $$;
 -- Ronda 3 ciber: nadie BORRA agentes (se desactivan); borrar y recrear el mismo id robaba comisiones.
 revoke delete on public.funnel_agentes from anon, authenticated;
+-- Ronda 4: los participantes de cada contrato son agentes que existen.
+alter table public.funnel_contratos drop constraint if exists funnel_contratos_vendedor_fk;
+alter table public.funnel_contratos add constraint funnel_contratos_vendedor_fk foreign key (vendedor_id) references public.funnel_agentes(id);
+alter table public.funnel_contratos drop constraint if exists funnel_contratos_cerrador_fk;
+alter table public.funnel_contratos add constraint funnel_contratos_cerrador_fk foreign key (cerrador_id) references public.funnel_agentes(id);
+alter table public.funnel_contratos drop constraint if exists funnel_contratos_digitador_fk;
+alter table public.funnel_contratos add constraint funnel_contratos_digitador_fk foreign key (digitador_id) references public.funnel_agentes(id);
+alter table public.funnel_contratos drop constraint if exists funnel_contratos_tmk_fk;
+alter table public.funnel_contratos add constraint funnel_contratos_tmk_fk foreign key (tmk_id) references public.funnel_agentes(id);
+alter table public.funnel_contratos drop constraint if exists funnel_contratos_verificador_fk;
+alter table public.funnel_contratos add constraint funnel_contratos_verificador_fk foreign key (verificador_id) references public.funnel_agentes(id);
 alter table public.funnel_comisiones drop constraint if exists funnel_comisiones_beneficiario_fk;
 alter table public.funnel_comisiones add constraint funnel_comisiones_beneficiario_fk
   foreign key (beneficiario_id) references public.funnel_agentes(id);

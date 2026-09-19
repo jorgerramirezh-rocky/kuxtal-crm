@@ -480,6 +480,10 @@ caso "Equipo sigue andando: y lo desactiva" "1" gerente_tmk "" "with u as (updat
 caso "ciber3 B1: nadie borra agentes (ni gerencia)" "ERROR" gerente_tmk "$GV" "delete from funnel_agentes where id=900051;"
 caso "ciber3 B1: comisiones atadas a un agente que existe" "ERROR" _dueno "$CERRADO" "update funnel_comisiones set beneficiario_id=999999 where contrato_id=$CID;"
 caso "ciber3 B2/B4: sin agente propio, un gerente de ventas no verifica" "ERROR: no podés verificar una venta en la que participaste" gerente_ventas "$CERRADO" "$VER($CID,'verificado');"
+caso "ciber4: el número de un agente no se cambia (ni para escaparse de un contrato)" "ERROR: el número de un agente no se cambia" gerente_ventas "$GV" "update funnel_agentes set id=default where id=900051;"
+caso "ciber4: un gerente no da de alta con un número elegido" "ERROR: el número de un agente lo pone la base" gerente_tmk "" "insert into funnel_agentes(id,nombre,rol,email,peso) overriding system value values (987654,'x','tmk','x@prueba.kx',1);"
+caso "ciber4: el alta normal sigue andando" "1" gerente_tmk "" "with i as (insert into funnel_agentes(nombre,rol,email,peso) values ('y','tmk','y@prueba.kx',1) returning 1) select count(*) from i;"
+caso "ciber4: participantes del contrato atados a agentes que existen" "ERROR" _dueno "$CERRADO" "update funnel_contratos set vendedor_id=999999 where id=$CID;"
 caso "nadie vacía tablas con TRUNCATE" "false|false|false" _dueno "" "select has_table_privilege('authenticated','public.socios','truncate')::text||'|'||has_table_privilege('anon','public.funnel_membresias','truncate')::text||'|'||has_table_privilege('authenticated','public.funnel_permisos','truncate')::text;"
 
 echo "── $((N-FALLAS))/$N verdes"
