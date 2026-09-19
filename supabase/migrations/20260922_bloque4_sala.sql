@@ -358,11 +358,18 @@ create or replace function public.funnel_sala_guardia() returns trigger
 begin
   if current_user not in ('authenticated', 'anon') then return new; end if;
   if tg_op = 'INSERT' then
-    if new.vendedor_id is not null or new.cerrador_id is not null or new.califica is not null
+    if new.vendedor_id is not null or new.cerrador_id is not null or new.califica is not null or new.socio_id is not null
        or new.recepcion_en is not null or coalesce(new.etapa, '') in ('sala', 'socio') then
       raise exception 'eso se anota desde Recepción, no directo en la tabla';
     end if;
     return new;
+  end if;
+  -- Comisiones (ronda 3 ciber): el socio nunca se cambia directo; el telemarketer solo lo reparte gerencia
+  -- y solo antes de que el cliente llegue a la sala.
+  if new.socio_id is distinct from old.socio_id
+     or (new.tmk_id is distinct from old.tmk_id
+         and (not public.funnel_es_gerente() or old.recepcion_en is not null or old.etapa in ('sala', 'socio'))) then
+    raise exception 'eso no se cambia directo en la tabla';
   end if;
   if new.vendedor_id is distinct from old.vendedor_id or new.cerrador_id is distinct from old.cerrador_id
      or new.califica is distinct from old.califica or new.recepcion_en is distinct from old.recepcion_en

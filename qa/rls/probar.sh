@@ -303,6 +303,12 @@ caso "ciber2 C3: sin closer no se cierra" "ERROR: falta el closer: pasalo a clos
 caso "ciber2 C4: quien llegó no se esconde de Recepción cambiando el estado" "ERROR: eso se anota desde Recepción, no directo en la tabla" vendedor "$EN_SALA" "update funnel_prospectos set estado='interesado' where id=900101;"
 caso "ciber2 5: ni gerencia lo mueve de lugar en dos pasos" "ERROR: eso se anota desde Recepción, no directo en la tabla" gerente_ventas "$EN_SALA" "update funnel_prospectos set etapa='presentacion' where id=900101;"
 caso "ciber2: gerencia SÍ da de baja a quien llegó" "1" gerente_ventas "$SALA select set_config('request.jwt.claims','{\"role\":\"authenticated\",\"app_metadata\":{\"role\":\"admin\"},\"email\":\"admin@prueba.kx\"}',true); select funnel_sala_llegada(900101);" "with u as (update funnel_prospectos set etapa='baja', motivo_baja='x' where id=900101 returning 1) select count(*) from u;"
+echo "· bloque 4 · ronda 3 ciber: las comisiones no se desvían por la tabla"
+caso "ciber3 #1: el liner no cambia el telemarketer" "ERROR: eso no se cambia directo en la tabla" vendedor "$CON_CLOSER" "update funnel_prospectos set tmk_id=900004 where id=900101;"
+caso "ciber3 #1: ni gerencia cambia el telemarketer de quien ya llegó" "ERROR: eso no se cambia directo en la tabla" gerente_ventas "$EN_SALA" "update funnel_prospectos set tmk_id=900004 where id=900101;"
+caso "ciber3 #1: gerencia sí reparte a quien no llegó" "1" gerente_tmk "" "with u as (update funnel_prospectos set tmk_id=900003 where id=900105 returning 1) select count(*) from u;"
+caso "ciber3 #2: nadie cuelga el prospecto de un socio ajeno" "ERROR: eso no se cambia directo en la tabla" gerente_ventas "$CON_CLOSER" "update funnel_prospectos set socio_id=(select min(id) from socios) where id=900101;"
+caso "ciber3 #2: ni lo da de alta ya colgado de un socio" "ERROR: eso se anota desde Recepción, no directo en la tabla" gerente_ventas "" "insert into funnel_prospectos(nombre,socio_id) values ('x',(select min(id) from socios));"
 echo "· bloque 4 · ronda 1 QA: la rueda cuenta bien"
 # L1 «recibió» 2 hoy pero ya no los tiene; L2 tiene 1 de verdad → la rueda le toca a L1 (contar filas crudas daría L2).
 CRUDO="$SALA update funnel_prospectos set vendedor_id=900022 where id=900104;
