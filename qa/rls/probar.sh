@@ -274,6 +274,46 @@ caso "el liner no elige closer a mano" "ERROR: no autorizado" vendedor "$EN_SALA
 caso "a mano: la hostess cambia a otro closer en turno (queda anotado)" "900032|manual|recepcion@prueba.kx" recepcion "$EN_SALA" "$ASG(900101,'cerrador',900032); $DUE select agente_id||'|'||modo||'|'||actor from funnel_sala_asignaciones where prospecto_id=900101 and rol='cerrador';"
 caso "a mano a alguien FUERA de turno: frena" "ERROR: esa persona no está en turno hoy como closer en este lugar" recepcion "$EN_SALA" "$ASG(900101,'cerrador',900033);"
 caso "a mano con un liner en el puesto de closer: frena" "ERROR: esa persona no está en turno hoy como closer en este lugar" recepcion "$EN_SALA" "$ASG(900101,'cerrador',900022);"
+caso "con uno solo en turno, «siguiente» dice que no hay OTRO (no que falta el turno)" "ERROR: no hay otro closer disponible en turno hoy en este lugar" recepcion "$EN_SALA delete from funnel_turnos where agente_id=900032;" "$ASG(900101,'cerrador'); $ASG(900101,'cerrador');"
+echo "· bloque 4 · ronda 1 ciber: la sala es vinculante"
+CON_CLOSER="$EN_SALA select funnel_sala_asignar(900101,'cerrador');"
+caso "ciber #1: el liner no se pone liner/closer directo en la tabla" "ERROR: eso se anota desde Recepción, no directo en la tabla" vendedor "$EN_SALA" "update funnel_prospectos set cerrador_id=900033 where id=900101;"
+caso "ciber #1: ni gerencia cambia el closer directo en la tabla" "ERROR: eso se anota desde Recepción, no directo en la tabla" gerente_ventas "$EN_SALA" "update funnel_prospectos set cerrador_id=900032 where id=900101;"
+caso "ciber #1: nadie pasa a sala directo en la tabla" "ERROR: eso se anota desde Recepción, no directo en la tabla" gerente_ventas "$SALA" "update funnel_prospectos set etapa='sala', califica=true where id=900101;"
+caso "ciber #1: nadie da de alta un prospecto ya en sala" "ERROR: eso se anota desde Recepción, no directo en la tabla" gerente_ventas "" "insert into funnel_prospectos(nombre,etapa,vendedor_id) values ('x','sala',900021);"
+caso "gerencia sí da de baja desde la sala (postventa/baja sigue andando)" "1" gerente_ventas "$EN_SALA" "with u as (update funnel_prospectos set etapa='baja', motivo_baja='x' where id=900101 returning 1) select count(*) from u;"
+caso "gerencia sí carga una base (alta normal)" "1" gerente_ventas "" "with i as (insert into funnel_prospectos(nombre) values ('nuevo') returning 1) select count(*) from i;"
+caso "ciber #2: el liner no inserta contratos directo" "ERROR" vendedor "$EN_SALA" "insert into funnel_contratos(prospecto_id,tipo_membresia,plan_pago,monto,vendedor_id,cerrador_id,estado) values (900101,'x','y',99999,900021,900033,'firmado');"
+caso "ciber #2: nadie borra contratos directo" "ERROR" gerente_ventas "" "delete from funnel_contratos;"
+caso "ciber #2: al cerrar, el closer es el que asignó la sala" "ERROR: el liner y el closer del contrato son los que asignó la sala" vendedor "$CON_CLOSER" "select funnel_cerrar_contrato(900101,'x','y',1000,900021,900033,null,null,4);"
+caso "ciber #2: al cerrar con el closer de la sala, entra" "socio|900021|900031" vendedor "$CON_CLOSER insert into funnel_membresias(tipo,precio) select 'x',1000 where not exists (select 1 from funnel_membresias where tipo='x');" "select funnel_cerrar_contrato(900101,'x','y',1000,900021,900031,null,null,4); $DUE select etapa||'|'||vendedor_id||'|'||cerrador_id from funnel_prospectos where id=900101;"
+caso "ciber #3: el liner no vuelve a tirar la rueda para elegir closer" "ERROR: no autorizado" vendedor "$CON_CLOSER" "$ASG(900101,'cerrador');"
+caso "ciber #3: el liner no pide closer para una cita sin confirmar" "ERROR: no autorizado" vendedor "$EN_SALA select set_config('kux.confirmando','si',true); update funnel_prospectos set cita_confirmada_en=null where id=900101; select set_config('kux.confirmando','',true);" "$ASG(900101,'cerrador');"
+caso "ciber #3: la rueda cuenta los clientes que TIENE (el que se lo quitaron vuelve a recibir)" "900021" recepcion "$EN_SALA" "$ASG(900101,'vendedor',900022); $CAL(900104,true); $DUE select vendedor_id from funnel_prospectos where id=900104;"
+caso "ciber #4: la bitácora no acepta 'contrato' del cliente" "ERROR" vendedor "$EN_SALA" "insert into funnel_eventos(prospecto_id,tipo,actor,payload) values (900101,'contrato','vendedor@prueba.kx','{}');"
+caso "ciber #4: ni un tipo reservado con un espacio invisible" "ERROR" vendedor "$EN_SALA" "insert into funnel_eventos(prospecto_id,tipo,actor,payload) values (900101,'sala_asignado'||chr(8203),'vendedor@prueba.kx','{}');"
+caso "ciber #4: lo de la lista blanca sí entra (contacto)" "1" vendedor "$EN_SALA" "with i as (insert into funnel_eventos(prospecto_id,tipo,actor,payload) values (900101,'contacto','vendedor@prueba.kx','{}') returning 1) select count(*) from i;"
+caso "ciber #5: la hostess no vuelve a la tabla por el organigrama" "0" recepcion "$SALA update funnel_agentes set supervisor_id=900011 where id=900002;" "select count(*) from funnel_prospectos;"
+echo "· bloque 4 · ronda 1 QA: la rueda cuenta bien"
+# L1 «recibió» 2 hoy pero ya no los tiene; L2 tiene 1 de verdad → la rueda le toca a L1 (contar filas crudas daría L2).
+CRUDO="$SALA update funnel_prospectos set vendedor_id=900022 where id=900104;
+ insert into funnel_sala_asignaciones(prospecto_id,rol,agente_id,modo) values (900102,'vendedor',900021,'rueda'),(900103,'vendedor',900021,'rueda'),(900104,'vendedor',900022,'rueda');"
+caso "QA M1: la rueda cuenta los que TIENE hoy, no las filas" "900021" recepcion "$CRUDO" "$CAL(900101,true); $DUE select vendedor_id from funnel_prospectos where id=900101;"
+caso "QA M1: el turno muestra los que TIENE hoy" "0,1" recepcion "$CRUDO" "select string_agg(clientes_hoy::text,',' order by agente_id) from funnel_turnos_dia() where rol='vendedor';"
+# Empate en clientes: le toca al que lleva MÁS rato sin recibir (L2 recibió hace 3 h, L1 hace 1 h).
+EMPATE="$SALA update funnel_prospectos set vendedor_id=900021 where id=900102; update funnel_prospectos set vendedor_id=900022 where id=900103;
+ insert into funnel_sala_asignaciones(prospecto_id,rol,agente_id,modo,creado_en) values (900102,'vendedor',900021,'rueda',now()-interval '1 hour'),(900103,'vendedor',900022,'rueda',now()-interval '3 hours');"
+caso "QA A3: empate → el que lleva más rato sin recibir" "900022" recepcion "$EMPATE" "$CAL(900101,true); $DUE select vendedor_id from funnel_prospectos where id=900101;"
+# Lo de AYER en Guatemala no cuenta hoy, aunque la sesión esté en UTC (22:00 y 23:00 de ayer en GT = hoy en UTC).
+AYER="$SALA set local timezone='UTC'; update funnel_prospectos set vendedor_id=900021 where id in (900102,900103);
+ insert into funnel_sala_asignaciones(prospecto_id,rol,agente_id,modo,creado_en) values
+  (900102,'vendedor',900021,'rueda',((((now() at time zone 'America/Guatemala')::date - 1) + time '22:00') at time zone 'America/Guatemala')),
+  (900103,'vendedor',900021,'rueda',((((now() at time zone 'America/Guatemala')::date - 1) + time '23:00') at time zone 'America/Guatemala'));
+ update funnel_prospectos set vendedor_id=900022 where id=900104; insert into funnel_sala_asignaciones(prospecto_id,rol,agente_id,modo) values (900104,'vendedor',900022,'rueda');"
+caso "QA A3: lo de ayer (hora de Guatemala) no cuenta hoy, con la sesión en UTC" "900021" recepcion "$AYER" "$CAL(900101,true); $DUE select vendedor_id from funnel_prospectos where id=900101;"
+caso "QA M2: una pantalla vieja no pisa lo que otra persona ya cambió" "ERROR: otra persona ya lo cambió: tocá Actualizar" recepcion "$EN_SALA" "select funnel_sala_asignar(900101,'vendedor',null,0);"
+caso "QA M2: con lo que ve la pantalla al día, sí cambia" "900022" recepcion "$EN_SALA" "select funnel_sala_asignar(900101,'vendedor',null,900021); $DUE select vendedor_id from funnel_prospectos where id=900101;"
+caso "QA M6: ya en sala, nadie lo mueve de lugar por la tabla" "ERROR: eso se anota desde Recepción, no directo en la tabla" gerente_ventas "$EN_SALA" "update funnel_prospectos set restaurante_id=$REST2 where id=900101;"
 caso "la rueda tiene candado por lugar y rol" "true" _dueno "" "select (pg_get_functiondef('public.funnel_sala_rueda(bigint,text,bigint)'::regprocedure) ilike '%pg_advisory_xact_lock%')::text;"
 caso "nadie escribe asignaciones directo (ni gerencia)" "ERROR" gerente_ventas "$SALA" "insert into funnel_sala_asignaciones(prospecto_id,rol,agente_id,modo) values (900101,'vendedor',900021,'rueda');"
 caso "nadie escribe turnos directo (ni gerencia)" "ERROR" gerente_ventas "$SALA" "insert into funnel_turnos(fecha,restaurante_id,agente_id) values (current_date,$REST1,900033);"

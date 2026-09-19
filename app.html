@@ -391,6 +391,24 @@
   .subtabs::-webkit-scrollbar{display:none}
   .st{flex:none;border:1px solid var(--linea);background:#fff;border-radius:9px;padding:8px 12px;font-size:12.5px;font-weight:600;color:var(--gris);cursor:pointer;min-height:38px}
   .st.on{background:var(--kux-l);color:var(--kux-d);border-color:var(--kux);font-weight:700}
+  /* bloque 4 · sala: áreas táctiles de 44px y contraste AA */
+  .sala .est,.sala .st,.sala select{min-height:44px}
+  .sala-fila{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center}
+  .sala-fila .btn{margin:0;flex:1 1 150px}
+  .sala .btn.sala-ok{background:#177a4f}
+  .sala .btn.sala-no{background:var(--rojo-t)}
+  .sala-top{display:flex;gap:6px;align-items:flex-start}
+  .sala-top .subtabs{flex:1 1 auto;min-width:0}
+  .sala-sec{background:#fff;color:var(--tinta)}
+  .sala-si{background:#177a4f;color:#fff;border-color:#177a4f}
+  .sala-nodisp{background:#fff;color:var(--rojo-t);border-color:var(--rojo-t)}
+  .sala-aviso{margin:0 0 12px;padding:10px 12px;border-radius:10px;border:1px solid var(--amar);background:var(--papel);font-size:14px;line-height:1.45;color:var(--tinta)}
+  .sala-aviso.err{border-color:var(--rojo-t)}
+  .sala-llego{display:inline-block;background:#e9f7ef;color:#11653f;border-radius:8px;padding:4px 8px;font-size:12px;font-weight:700}
+  .sala-lbl{font-size:12px;font-weight:700;color:var(--gris);margin-bottom:4px;display:block}
+  .sala-nom{font-weight:700;margin-bottom:6px}
+  .sala-turno{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--linea)}
+  .sala-turno-n{flex:1 1 0;min-width:0;overflow-wrap:anywhere}
   .row{display:flex;gap:10px;flex-wrap:wrap}
   .row>*{flex:1;min-width:120px}
   .btn{background:var(--kux);color:#fff;border:none;border-radius:12px;padding:13px 16px;font-size:15px;font-weight:700;cursor:pointer;min-height:48px;margin-top:14px;width:100%}
@@ -1763,7 +1781,7 @@ function render(){
 function decodeUser(){ try{ const d=JSON.parse(atob(SES.access_token.split('.')[1])); USER=d.email||"equipo"; UID=d.sub||null; ROLE=(d.app_metadata&&d.app_metadata.role)||"invitado"; }catch(e){ USER="equipo"; UID=null; ROLE="invitado"; }
   // F4: flags de rol del embudo (una sola fuente de verdad)
   esGerente=GERENTES.includes(ROLE); verTodo=esGerente||(VENTAS.includes(ROLE)&&ROLE!=='recepcion'); } // bloque 4: la hostess ve solo su sala
-const rolBonito=r=>({admin:'Admin general',gerente_general:'Gerente general',gerente_ventas:'Gerente de ventas',telemarketing:'Telemarketing',supervisor:'Supervisor',reservaciones:'Reservaciones'}[r]||'Invitado');
+const rolBonito=r=>({admin:'Admin general',gerente_general:'Gerente general',gerente_ventas:'Gerente de ventas',telemarketing:'Telemarketing',supervisor:'Supervisor',reservaciones:'Reservaciones',recepcion:'Hostess',vendedor:'Liner',cerrador:'Closer'}[r]||'Invitado');
 async function traerInter(sid,reint){
   try{ const r=await fetch(SB_URL+"/rest/v1/interacciones?socio_id=eq."+sid+"&select=*&order=creado_en.desc&limit=80",{headers:{apikey:SB_PUB,Authorization:"Bearer "+SES.access_token}});
     if(r.status===401){ if(!reint && await refrescar()) return traerInter(sid,true); return null; }
@@ -2317,72 +2335,95 @@ function opAgentes(rol,sel){ return AGENTES.filter(a=>a.activo&&a.rol===rol).map
 function citadosDeHoy(list,hoy){ return (list||[]).filter(l=>l.presenta_en&&partesGT(l.presenta_en).d===hoy); }
 // Bloque 4: la hostess ve SOLO las citas confirmadas de hoy de su lugar (funnel_sala_hoy) y todo se
 // escribe por funciones de la base. Al calificar, la rueda asigna el liner; «Pasar a closer», el closer.
-let recepSub='llegar', TURNOS_HOY=[];
+let recepSub='llegar', TURNOS_HOY=[], TURNOS_ERR=false, BORR={}, NOCAL={}, CAMBIO={};
 // (bloque 4) Quién puede ir a cada puesto: los de turno hoy en ESE lugar, con ese rol. Pura → qa/sala.mjs.
 function enTurno(turnos,rest,rol){ return (turnos||[]).filter(t=>t.restaurante_id==rest&&t.rol===rol); }
-function salaPartir(list){ const l=list||[]; return {llegar:l.filter(x=>x.etapa!=='sala'), sala:l.filter(x=>x.etapa==='sala')}; }
+// Por llegar (primero los que ya llegaron y faltan de calificar) · En sala (sin closer) · Completos.
+function salaPartir(list){ const l=list||[];
+  const llegar=l.filter(x=>x.etapa!=='sala').sort((a,b)=>(!!b.recepcion_en)-(!!a.recepcion_en)||String(a.presenta_en).localeCompare(String(b.presenta_en))||a.id-b.id);
+  return {llegar, sala:l.filter(x=>x.etapa==='sala'&&!x.cerrador_id), completos:l.filter(x=>x.etapa==='sala'&&x.cerrador_id)}; }
+// Avisos por lugar y por puesto: dónde no hay liner o closer disponible en turno. Pura → qa/sala.mjs.
+function avisosSala(list,turnos,lugares){
+  const rests=[...new Set((list||[]).map(x=>x.restaurante_id))]; const out=[];
+  rests.forEach(r=>{ const nom=((lugares||[]).find(x=>x.id==r)||{}).nombre||'este lugar';
+    const falta=['vendedor','cerrador'].filter(rol=>!enTurno(turnos,r,rol).some(t=>t.disponible)).map(rol=>rol==='vendedor'?'liner':'closer');
+    if(falta.length) out.push('En '+nom+' no hay '+falta.join(' ni ')+' disponible en turno hoy: pedile al gerente que arme el turno.'); });
+  return out; }
+const horaGT=ts=>ts?partesGT(ts).h:'';
 async function rpcSala(fn,body){
-  const r=await api("rpc/"+fn,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})});
-  if(!r.ok){ let m='No se pudo'; try{ const e=await r.json(); if(e&&e.message&&r.status<500) m=String(e.message); }catch(_e){} throw new Error(m.charAt(0).toUpperCase()+m.slice(1)); }
+  let r; try{ r=await api("rpc/"+fn,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})}); }
+  catch(e){ throw new Error(/sesión/.test(String(e&&e.message))?'Tu sesión venció: volvé a entrar':'Se cortó la conexión, probá de nuevo'); }
+  if(!r.ok){ let m='No se pudo'; try{ const e=await r.json(); if(e&&e.message&&r.status<500) m=String(e.message); }catch(_e){}
+    if(/^no autorizado$/i.test(m)) m='No autorizado: pedile acceso al gerente';
+    throw new Error(m.charAt(0).toUpperCase()+m.slice(1)); }
   try{ return await r.json(); }catch(_e){ return null; }
 }
 async function vistaRecepcion(){
   $('funCap').textContent='Sala de hoy: marcá la llegada, completá los datos y calificá. El liner y el closer los asigna la rueda del turno.';
   $('funCont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
-  const [lista,turnos]=await Promise.all([rpcSala('funnel_sala_hoy'), rpcSala('funnel_turnos_dia').catch(()=>[])]);
-  window.__REC=lista||[]; TURNOS_HOY=turnos||[];
+  const [lista,turnos]=await Promise.all([rpcSala('funnel_sala_hoy'), rpcSala('funnel_turnos_dia').then(t=>{TURNOS_ERR=false;return t;},()=>{TURNOS_ERR=true;return [];})]);
+  window.__REC=lista||[]; TURNOS_HOY=turnos||[]; BORR={}; NOCAL={}; CAMBIO={};
   pintarRecepcion();
 }
+// Lo que la hostess ya escribió NO se pierde cuando se repinta la lista (llega otra familia, etc.).
+function guardarBorr(){ document.querySelectorAll('#funCont [data-borr]').forEach(e=>{ const [id,k]=e.dataset.borr.split(':'); (BORR[id]=BORR[id]||{})[k]=e.value; }); }
+function valB(l,k,def){ const b=BORR[l.id]; return b&&b[k]!==undefined?b[k]:def; }
 function pintarRecepcion(){
-  const {llegar,sala}=salaPartir(window.__REC);
-  const list=recepSub==='sala'?sala:llegar;
-  const tabs=`<div class="subtabs">
-    <button class="st ${recepSub==='llegar'?'on':''}" onclick="recepSub='llegar';pintarRecepcion()">Por llegar (${llegar.length})</button>
-    <button class="st ${recepSub==='sala'?'on':''}" onclick="recepSub='sala';pintarRecepcion()">En sala (${sala.length})</button>
-  </div>`;
-  const sinTurno=!TURNOS_HOY.length?`<div role="status" style="margin:0 0 12px;padding:10px 12px;border-radius:10px;border:1px solid var(--amar);background:#fff8e6;font-size:14px;line-height:1.45"><b>Hoy no hay turno armado.</b> Sin liners ni closers en turno, la rueda no puede asignar: pedile al gerente que arme el turno de hoy.</div>`:'';
-  $('funCont').innerHTML=tabs+sinTurno+(list.length?list.map(l=>recepSub==='sala'?salaCard(l):recepCard(l)).join('')
-    :`<div class="vacio"><b>${recepSub==='sala'?'Nadie en sala todavía':'Nadie por llegar hoy'}</b><p>${recepSub==='sala'?'Cuando un cliente califica, pasa acá con su liner.':'Acá aparecen las citas CONFIRMADAS de hoy en tu lugar.'}</p></div>`);
+  guardarBorr();
+  const {llegar,sala,completos}=salaPartir(window.__REC);
+  const list=recepSub==='sala'?sala:(recepSub==='completos'?completos:llegar);
+  const varios=new Set((window.__REC||[]).map(x=>x.restaurante_id)).size>1;
+  const st=(k,t)=>`<button class="st ${recepSub===k?'on':''}" aria-pressed="${recepSub===k}" onclick="recepSub='${k}';pintarRecepcion()">${t}</button>`;
+  const tabs=`<div class="sala-top"><div class="subtabs">${st('llegar','Por llegar ('+llegar.length+')')}${st('sala','En sala ('+sala.length+')')}${st('completos','Listos ('+completos.length+')')}</div><button class="st" style="flex:none" onclick="vistaRecepcion()">Actualizar</button></div>`;
+  const aviso=t=>`<div role="status" class="sala-aviso">${t}</div>`;
+  const avisos=TURNOS_ERR?`<div role="alert" class="sala-aviso err">No pude leer el turno de hoy. <b onclick="vistaRecepcion()" style="cursor:pointer;text-decoration:underline">Reintentar</b></div>`
+    :avisosSala(window.__REC,TURNOS_HOY,LUGARES_TODOS).map(esc).map(aviso).join('');
+  const vacio={llegar:['Nadie por llegar hoy','Acá aparecen las citas CONFIRMADAS de hoy en tu lugar.'],sala:['Nadie esperando closer','Cuando un cliente califica, pasa acá con su liner.'],completos:['Nadie listo todavía','Acá quedan los que ya tienen liner y closer.']}[recepSub];
+  $('funCont').innerHTML=`<div class="sala">${tabs}${avisos}${list.length?list.map(l=>recepSub==='llegar'?recepCard(l,varios):salaCard(l,varios)).join('')
+    :`<div class="vacio"><b>${vacio[0]}</b><p>${vacio[1]}</p></div>`}</div>`;
 }
 async function marcarLlegada(id,btn){
   if(btn) btn.disabled=true;
   try{ await rpcSala('funnel_sala_llegada',{p_id:id});
     const l=(window.__REC||[]).find(x=>x.id===id); if(l){ l.recepcion_en=new Date().toISOString(); }
     toast('Llegada registrada'); pintarRecepcion();
+    const c=$('edad'+id); if(c) c.focus();
   }catch(e){ if(btn) btn.disabled=false; toast(e.message||'No se pudo'); }
 }
-function recepCard(l){
-  const rest=(LUGARES_TODOS.find(r=>r.id==l.restaurante_id)||{}).nombre||'';
-  const cita=l.presenta_en?partesGT(l.presenta_en).h:'sin hora';
-  const llegada=l.recepcion_en
-    ? `<span class="tag" style="background:#e9f7ef;color:#1a8a54">Llegó · ${esc(new Date(l.recepcion_en).toLocaleTimeString('es-GT',{hour:'2-digit',minute:'2-digit'}))}</span>`
-    : `<button class="est" style="background:var(--kux);color:#fff;border-color:var(--kux)" onclick="marcarLlegada(${l.id},this)">Marcar llegada</button>`;
+function recepCard(l,varios){
+  const rest=varios?((LUGARES_TODOS.find(r=>r.id==l.restaurante_id)||{}).nombre||''):'';
+  const meta=[l.telefono,rest,'cita '+(horaGT(l.presenta_en)||'sin hora')].filter(Boolean).map(esc).join(' · ');
+  if(!l.recepcion_en) return `<div class="lead" id="rec${l.id}" style="border-left-color:var(--gris)">
+    <div class="lname">${esc(l.nombre)}</div><div class="lmeta">${meta}</div>
+    <button class="btn" style="margin-top:10px" onclick="marcarLlegada(${l.id},this)">Llegó</button></div>`;
+  const b=(k,d)=>esc(String(valB(l,k,d??'')));
+  const ec=valB(l,'ec',l.estado_civil||'');
+  const no=!!NOCAL[l.id];
   return `<div class="lead" id="rec${l.id}" style="border-left-color:var(--amar)">
-    <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">${esc(l.telefono||'')}${rest?(' · '+esc(rest)):''} · cita: ${esc(cita)}</div></div><div style="flex:none">${llegada}</div></div>
+    <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">${meta}</div></div><div style="flex:none"><span class="sala-llego">Llegó ${esc(horaGT(l.recepcion_en))}</span></div></div>
     <div class="sub show" style="margin-top:12px">
-      <div class="fld"><label for="edad${l.id}">Edad</label><input type="number" id="edad${l.id}" inputmode="numeric" min="18" max="110" value="${l.edad||''}"></div>
-      <div class="fld"><label for="ec${l.id}">Estado civil</label><select id="ec${l.id}"><option value="">—</option><option ${l.estado_civil==='casado'?'selected':''}>casado</option><option ${l.estado_civil==='soltero'?'selected':''}>soltero</option><option ${l.estado_civil==='otro'?'selected':''}>otro</option></select></div>
+      <div class="fld"><label for="edad${l.id}">Edad</label><input type="number" id="edad${l.id}" data-borr="${l.id}:edad" inputmode="numeric" min="18" max="110" value="${b('edad',l.edad)}"></div>
+      <div class="fld"><label for="ec${l.id}">Estado civil</label><select id="ec${l.id}" data-borr="${l.id}:ec"><option value="">—</option>${['casado','soltero','otro'].map(o=>`<option ${ec===o?'selected':''}>${o}</option>`).join('')}</select></div>
     </div>
     <div class="sub show">
-      <div class="fld"><label for="ntc${l.id}">Tarjetas de crédito (cuántas)</label><input type="number" id="ntc${l.id}" inputmode="numeric" min="0" max="50" value="${l.tarjetas_credito??''}"></div>
-      <div class="fld"><label for="ttc${l.id}">Tipo de tarjetas</label><input id="ttc${l.id}" maxlength="100" value="${esc(l.tipo_tarjetas||'')}" placeholder="Visa, Amex…"></div>
+      <div class="fld"><label for="ntc${l.id}">Tarjetas de crédito (cuántas)</label><input type="number" id="ntc${l.id}" data-borr="${l.id}:ntc" inputmode="numeric" min="0" max="50" value="${b('ntc',l.tarjetas_credito)}"></div>
+      <div class="fld"><label for="ttc${l.id}">Tipo de tarjetas</label><input id="ttc${l.id}" data-borr="${l.id}:ttc" maxlength="100" value="${b('ttc',l.tipo_tarjetas)}" placeholder="Visa, Amex…"></div>
     </div>
-    <div class="note"><textarea id="mot${l.id}" maxlength="300" aria-label="Motivo si no califica" placeholder="Si NO califica, ¿por qué? (obligatorio)">${esc(l.motivo_no||'')}</textarea></div>
-    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-      <button class="btn" style="margin:0;background:var(--verde);flex:1 1 140px" onclick="recepcionar(${l.id},true,this)">Califica → a sala</button>
-      <button class="btn" style="margin:0;background:var(--rojo);flex:1 1 140px" onclick="recepcionar(${l.id},false,this)">No califica</button>
-    </div>
+    ${no?`<div class="note"><label for="mot${l.id}" class="sala-lbl">¿Por qué no califica? (obligatorio)</label><textarea id="mot${l.id}" data-borr="${l.id}:mot" maxlength="300">${b('mot',l.motivo_no)}</textarea></div>
+    <div class="sala-fila"><button class="btn sala-no" onclick="recepcionar(${l.id},false,this)">Confirmar: no califica</button><button class="est" onclick="NOCAL[${l.id}]=false;pintarRecepcion()">Cancelar</button></div>`
+    :`<div class="sala-fila"><button class="btn sala-ok" onclick="recepcionar(${l.id},true,this)">Califica → a sala</button><button class="est sala-sec" onclick="NOCAL[${l.id}]=true;pintarRecepcion();const m=$('mot${l.id}');if(m)m.focus()">No califica…</button></div>`}
   </div>`;
 }
 async function recepcionar(id,ok,btn){
-  const g=x=>{const e=$(x+id);return e?String(e.value).trim():'';};
+  guardarBorr();
+  const g=k=>String(((BORR[id]||{})[k])??'').trim();
   if(!ok&&!g('mot')){ toast('Escribí por qué no califica'); const m=$('mot'+id); if(m) m.focus(); return; }
   btn.disabled=true;
   const body={p_id:id,p_califica:ok,p_edad:g('edad')?Number(g('edad')):null,p_estado_civil:g('ec')||null,
     p_tarjetas:g('ntc')!==''?Number(g('ntc')):null,p_tipo_tarjetas:g('ttc')||null,p_motivo:ok?null:g('mot')};
   try{
     const r=await rpcSala('funnel_sala_calificar',body)||{};
-    const l=(window.__REC||[]).find(x=>x.id===id);
+    const l=(window.__REC||[]).find(x=>x.id===id); delete BORR[id]; delete NOCAL[id];
     if(!ok){ window.__REC=(window.__REC||[]).filter(x=>x.id!==id); toast('Marcado: no califica'); }
     else if(l){ Object.assign(l,{etapa:'sala',califica:true,recepcion_en:l.recepcion_en||new Date().toISOString()});
       if(r.liner){ l.vendedor_id=r.liner.agente_id; l.vendedor=r.liner.nombre; toast('Pasa a sala con '+(r.liner.nombre||'su liner')); }
@@ -2391,16 +2432,20 @@ async function recepcionar(id,ok,btn){
   }catch(e){ btn.disabled=false; toast(e.message||'No se pudo'); }
 }
 function opTurno(rest,rol,sel){ return enTurno(TURNOS_HOY,rest,rol).map(t=>`<option value="${t.agente_id}" ${sel==t.agente_id?'selected':''}>${esc(t.nombre)}${t.disponible?'':' (no disponible)'}</option>`).join(''); }
-function salaCard(l){
-  const rest=(LUGARES_TODOS.find(r=>r.id==l.restaurante_id)||{}).nombre||'';
-  const puesto=(rol,nom,idAg,etq)=>`<div class="fld"><label for="${rol}${l.id}">${etq}</label>
-      ${idAg?`<div style="font-weight:700;margin-bottom:6px">${esc(nom||'')}</div>`:''}
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="est" style="background:var(--kux);color:#fff;border-color:var(--kux)" onclick="salaAsignar(${l.id},'${rol}',null,this)">${idAg?'Siguiente en la rueda':(rol==='cerrador'?'Pasar a closer':'Asignar liner')}</button>
-        <select id="${rol}${l.id}" aria-label="Cambiar ${etq.toLowerCase()} a mano" onchange="if(this.value)salaAsignar(${l.id},'${rol}',Number(this.value),this)"><option value="">A mano…</option>${opTurno(l.restaurante_id,rol,null)}</select>
-      </div></div>`;
+function salaCard(l,varios){
+  const rest=varios?((LUGARES_TODOS.find(r=>r.id==l.restaurante_id)||{}).nombre||''):'';
+  const puesto=(rol,nom,idAg,etq)=>{ const k=l.id+rol, abierto=!!CAMBIO[k];
+    const cambio=`<div class="sala-fila"><button class="est" onclick="salaAsignar(${l.id},'${rol}',null,this)">Siguiente en la rueda</button>
+        <select id="${rol}${l.id}" aria-label="Elegir ${etq.toLowerCase()} a mano"><option value="">A mano…</option>${opTurno(l.restaurante_id,rol,null)}</select>
+        <button class="est" onclick="const v=$('${rol}${l.id}').value;if(!v){toast('Elegí a quién');return;}salaAsignar(${l.id},'${rol}',Number(v),this)">Asignar</button>
+        ${idAg?`<button class="est" onclick="CAMBIO['${k}']=false;pintarRecepcion()">Cancelar</button>`:''}</div>`;
+    return `<div class="fld"><div class="sala-lbl">${etq}</div>
+      ${idAg?`<div class="sala-nom">${esc(nom||'')}</div>${abierto?cambio:`<button class="est sala-sec" onclick="CAMBIO['${k}']=true;pintarRecepcion()">Cambiar ${etq.toLowerCase()}…</button>`}`
+        :`<button class="btn" style="margin:0 0 8px" onclick="salaAsignar(${l.id},'${rol}',null,this)">${rol==='cerrador'?'Pasar a closer':'Asignar liner'}</button>${abierto?cambio:`<button class="est sala-sec" onclick="CAMBIO['${k}']=true;pintarRecepcion()">Elegir a mano…</button>`}`}
+    </div>`; };
   return `<div class="lead" id="sal${l.id}" style="border-left-color:var(--verde)">
-    <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">${rest?esc(rest)+' · ':''}llegó ${l.recepcion_en?esc(new Date(l.recepcion_en).toLocaleTimeString('es-GT',{hour:'2-digit',minute:'2-digit'})):''}</div></div></div>
+    <div class="lname">${esc(l.nombre)}</div>
+    <div class="lmeta">${[l.telefono,rest,'cita '+horaGT(l.presenta_en),'llegó '+horaGT(l.recepcion_en)].filter(Boolean).map(esc).join(' · ')}</div>
     <div class="sub show" style="margin-top:12px">
       ${puesto('vendedor',l.vendedor,l.vendedor_id,'Liner')}
       ${l.vendedor_id?puesto('cerrador',l.cerrador,l.cerrador_id,'Closer'):''}
@@ -2408,43 +2453,47 @@ function salaCard(l){
   </div>`;
 }
 async function salaAsignar(id,rol,agente,el){
-  if(el) el.disabled=true;
+  if(el){ if(el.disabled) return; el.disabled=true; }
+  const l=(window.__REC||[]).find(x=>x.id===id)||{};
+  // Lo que ESTA pantalla ve hoy en ese puesto (0 = nadie): si otra persona ya lo cambió, la base frena.
+  const esperado=(rol==='vendedor'?l.vendedor_id:l.cerrador_id)||0;
   try{
-    const r=await rpcSala('funnel_sala_asignar',{p_id:id,p_rol:rol,p_agente:agente})||{};
-    const l=(window.__REC||[]).find(x=>x.id===id);
-    if(l){ if(rol==='vendedor'){ l.vendedor_id=r.agente_id; l.vendedor=r.nombre; } else { l.cerrador_id=r.agente_id; l.cerrador=r.nombre; } }
+    const r=await rpcSala('funnel_sala_asignar',{p_id:id,p_rol:rol,p_agente:agente,p_esperado:esperado})||{};
+    if(l.id){ if(rol==='vendedor'){ l.vendedor_id=r.agente_id; l.vendedor=r.nombre; } else { l.cerrador_id=r.agente_id; l.cerrador=r.nombre; } }
+    CAMBIO[id+rol]=false;
     toast((rol==='vendedor'?'Liner: ':'Closer: ')+(r.nombre||'asignado'));
     pintarRecepcion();
-  }catch(e){ if(el){ el.disabled=false; if(el.tagName==='SELECT') el.value=''; } toast(e.message||'No se pudo'); }
+  }catch(e){ if(el) el.disabled=false; toast(e.message||'No se pudo'); }
 }
 
 // ── TURNOS (bloque 4: quién trabaja cada día en qué sala) ──
-let TURNO_FECHA='';
+let TURNO_FECHA='', TQUITAR={};
 const ROL_SALA={recepcion:'Hostess',vendedor:'Liner',cerrador:'Closer'};
 async function vistaTurnos(){
   if(!TURNO_FECHA) TURNO_FECHA=hoyStr();
-  $('funCap').textContent='Turno del día: quién trabaja en qué sala. La rueda reparte entre los que están acá y disponibles.';
+  $('funCap').textContent='Turno del día: quién trabaja en qué sala. La rueda reparte entre los que están acá y en la rueda.';
   $('funCont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
-  const t=await rpcSala('funnel_turnos_dia',{p_fecha:TURNO_FECHA})||[];
+  const t=await rpcSala('funnel_turnos_dia',{p_fecha:TURNO_FECHA})||[]; TQUITAR={};
   const gente=(AGENTES||[]).filter(a=>a.activo&&ROL_SALA[a.rol]);
   const puestos=new Set(t.map(x=>x.agente_id));
   const opG=gente.filter(a=>!puestos.has(a.id)).map(a=>`<option value="${a.id}">${esc(a.nombre)} · ${ROL_SALA[a.rol]}</option>`).join('');
   const opL=RESTAS.map(r=>`<option value="${r.id}">${esc(r.nombre)}</option>`).join('');
   const porLugar=RESTAS.map(r=>{ const f=t.filter(x=>x.restaurante_id==r.id); if(!f.length) return '';
     return `<div class="lead" style="border-left-color:var(--kux)"><div class="lname">${esc(r.nombre)}</div>
-      ${f.map(x=>`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--linea,#e3e8ef)">
-        <div style="flex:1 1 160px"><b>${esc(x.nombre)}</b> · ${ROL_SALA[x.rol]||esc(x.rol)}${x.rol!=='recepcion'?` · ${x.clientes_hoy} hoy`:''}</div>
-        ${x.rol!=='recepcion'?`<button class="est" aria-pressed="${x.disponible}" style="${x.disponible?'background:var(--verde);color:#fff;border-color:var(--verde)':'background:#fdecec;color:var(--rojo);border-color:var(--rojo)'}" onclick="turnoDisp(${x.id},${!x.disponible},this)">${x.disponible?'Disponible':'No disponible'}</button>`:''}
+      ${f.map(x=>`<div class="sala-turno">
+        <div class="sala-turno-n"><b>${esc(x.nombre)}</b> · ${ROL_SALA[x.rol]||esc(x.rol)}${x.rol!=='recepcion'?` · ${x.clientes_hoy} hoy`:''}</div>
+        ${x.rol!=='recepcion'?`<button class="est ${x.disponible?'sala-si':'sala-nodisp'}" aria-pressed="${x.disponible}" onclick="turnoDisp(${x.id},${!x.disponible},this)">${x.disponible?'En la rueda':'Fuera de la rueda'}</button>`:''}
         <button class="est" aria-label="Quitar a ${esc(x.nombre)} del turno" onclick="turnoQuitar(${x.id},this)">Quitar</button></div>`).join('')}</div>`; }).join('');
-  $('funCont').innerHTML=`<div class="sub show">
+  $('funCont').innerHTML=`<div class="sala"><div class="sub show">
       <div class="fld"><label for="tfecha">Día</label><input type="date" id="tfecha" value="${esc(TURNO_FECHA)}" min="${esc(hoyStr())}" onchange="TURNO_FECHA=this.value;vistaTurnos()"></div>
     </div>
-    <div class="sub show">
+    <div class="sub show" style="flex-wrap:wrap">
       <div class="fld"><label for="tquien">Persona</label><select id="tquien"><option value="">${gente.length?'Elegí…':'No hay hostess, liners ni closers dados de alta'}</option>${opG}</select></div>
       <div class="fld"><label for="tdonde">Sala (lugar)</label><select id="tdonde">${opL}</select></div>
+      <p class="lmeta" style="flex-basis:100%;margin:0">El puesto (hostess, liner o closer) es el rol de la persona en <b>Equipo</b>.</p>
     </div>
-    <button class="btn" onclick="turnoPoner(this)">Poner en turno</button>
-    <div style="margin-top:14px">${porLugar||`<div class="vacio"><b>Nadie en turno este día</b><p>Sin turno, la rueda no puede asignar liner ni closer.</p></div>`}</div>`;
+    <button class="btn" onclick="turnoPoner(this)">Poner en turno ese día</button>
+    <div style="margin-top:14px">${porLugar||`<div class="vacio"><b>Nadie en turno este día</b><p>Sin turno, la rueda no puede asignar liner ni closer.</p></div>`}</div></div>`;
 }
 async function turnoPoner(btn){
   const a=$('tquien').value, r=$('tdonde').value; if(!a){ toast('Elegí la persona'); return; } if(!r){ toast('Elegí la sala'); return; }
@@ -2452,10 +2501,13 @@ async function turnoPoner(btn){
   try{ await rpcSala('funnel_turno_poner',{p_fecha:TURNO_FECHA,p_rest:Number(r),p_agente:Number(a)}); toast('En turno'); await vistaTurnos(); }
   catch(e){ btn.disabled=false; toast(e.message||'No se pudo'); }
 }
-async function turnoQuitar(id,btn){ btn.disabled=true;
+// Quitar pide un segundo toque (4 s) para no sacar a alguien sin querer.
+async function turnoQuitar(id,btn){
+  if(!TQUITAR[id]){ TQUITAR[id]=true; btn.textContent='¿Seguro? Tocá de nuevo'; setTimeout(()=>{ if(TQUITAR[id]&&btn.isConnected){ TQUITAR[id]=false; btn.textContent='Quitar'; } },4000); return; }
+  btn.disabled=true;
   try{ await rpcSala('funnel_turno_quitar',{p_id:id}); toast('Quitado del turno'); await vistaTurnos(); }catch(e){ btn.disabled=false; toast(e.message||'No se pudo'); } }
 async function turnoDisp(id,v,btn){ btn.disabled=true;
-  try{ await rpcSala('funnel_turno_disponible',{p_id:id,p_disponible:v}); toast(v?'Disponible: vuelve a la rueda':'No disponible: la rueda lo salta'); await vistaTurnos(); }catch(e){ btn.disabled=false; toast(e.message||'No se pudo'); } }
+  try{ await rpcSala('funnel_turno_disponible',{p_id:id,p_disponible:v}); toast(v?'En la rueda':'Fuera de la rueda: no recibe clientes'); await vistaTurnos(); }catch(e){ btn.disabled=false; toast(e.message||'No se pudo'); } }
 
 // ── CIERRE (contrato + comisiones) ──
 async function vistaCierre(){
@@ -2473,12 +2525,14 @@ function elegirMemb(id,tipo){
   const mon=$('mon'+id); if(mon) mon.value=montoMembresia(m);
   const eng=$('eng'+id); if(eng) eng.value=(m.enganche==null?'':m.enganche);
 }
+// (bloque 4) nombre de un agente por id, para mostrar quién asignó la sala.
+function agNom(id){ const a=(AGENTES||[]).find(x=>x.id==id); return a?a.nombre:''; }
 function cierreCard(l){
   const memb=MEMBS.map(m=>`<option value="${esc(m.tipo)}">${esc(m.tipo)} · $${montoMembresia(m)}${Number(m.descuento)>0?(' (precio $'+m.precio+' − desc $'+m.descuento+')'):''}</option>`).join('');
   const plan=PLANES.map(p=>`<option>${esc(p.nombre)}</option>`).join('');
   const m0=MEMBS[0]||null;
   return `<div class="lead" id="cie${l.id}" style="border-left-color:var(--verde)">
-    <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">Vendedor y cerrador asignados en recepción</div></div></div>
+    <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">Liner: <b>${esc(agNom(l.vendedor_id)||'sin asignar')}</b> · Closer: <b>${esc(agNom(l.cerrador_id)||'sin asignar')}</b> (los asignó la sala)</div></div></div>
     <div class="sub show" style="margin-top:12px">
       <div class="fld"><label>Membresía</label><select id="mem${l.id}" onchange="elegirMemb(${l.id},this.value)">${memb}</select></div>
       <div class="fld"><label>Plan de pago</label><select id="pln${l.id}">${plan}</select></div>
@@ -2490,7 +2544,8 @@ function cierreCard(l){
       <div class="fld"><label>Digitador</label><select id="dig${l.id}"><option value="">—</option>${opAgentes('digitador')}</select></div>
       <div class="fld"><label>Verificador</label><select id="ver${l.id}"><option value="">—</option>${opAgentes('verificador')}</select></div>
     </div>
-    <button class="btn" onclick="cerrarContrato(${l.id},this)"><svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Cerrar contrato</button>
+    ${l.cerrador_id?`<button class="btn" onclick="cerrarContrato(${l.id},this)"><svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Cerrar contrato</button>`
+      :`<div role="status" class="sala-aviso">Falta el closer: en Recepción, «Pasar a closer». Sin closer no se cierra.</div>`}
   </div>`;
 }
 // ── CONTRATO IMPRIMIBLE (marca Kuxtal) ──

@@ -87,6 +87,16 @@ end $$;
 revoke all on function public.funnel_sala_mis_lugares() from public, anon;
 grant execute on function public.funnel_sala_mis_lugares() to authenticated;
 
+create or replace function public.funnel_sala_clientes_hoy(p_agente bigint, p_rol text, p_dia date)
+  returns int language sql stable security definer set search_path to 'public', 'pg_temp' as $$
+  select count(distinct s.prospecto_id)::int
+    from public.funnel_sala_asignaciones s join public.funnel_prospectos p on p.id = s.prospecto_id
+   where s.agente_id = p_agente and s.rol = p_rol
+     and (s.creado_en at time zone 'America/Guatemala')::date = p_dia
+     and (case p_rol when 'vendedor' then p.vendedor_id else p.cerrador_id end) = p_agente
+$$;
+revoke all on function public.funnel_sala_clientes_hoy(bigint, text, date) from public, anon, authenticated;
+
 create or replace function public.funnel_turnos_dia(p_fecha date default null)
   returns table(id bigint, fecha date, restaurante_id bigint, agente_id bigint, nombre text, rol text,
                 disponible boolean, clientes_hoy int)
@@ -99,8 +109,7 @@ begin
   end if;
   return query
   select t.id, t.fecha, t.restaurante_id, t.agente_id, a.nombre, a.rol, t.disponible,
-         (select count(*)::int from public.funnel_sala_asignaciones s
-           where s.agente_id = t.agente_id and (s.creado_en at time zone 'America/Guatemala')::date = t.fecha)
+         public.funnel_sala_clientes_hoy(t.agente_id, a.rol, t.fecha)
     from public.funnel_turnos t join public.funnel_agentes a on a.id = t.agente_id
    where t.fecha = v_f
      and (public.funnel_puede('armar_turnos') or t.restaurante_id in (select public.funnel_sala_mis_lugares()))
@@ -205,6 +214,7 @@ begin
 end $$;
 revoke all on function public.funnel_sala_tomar(bigint) from public, anon, authenticated;
 
+-- Cuántos clientes TIENE hoy una persona en ese puesto (los que le quitaron no cuentan; los repetidos, una vez).
 -- La rueda: el siguiente en turno HOY en ese lugar, con candado por lugar y rol.
 create or replace function public.funnel_sala_rueda(p_rest bigint, p_rol text, p_excluir bigint default null)
   returns bigint language plpgsql security definer set search_path to 'public', 'pg_temp' as $$
@@ -216,9 +226,7 @@ begin
     join public.funnel_agentes a on a.id = t.agente_id and a.activo and a.rol = p_rol
    where t.fecha = v_hoy and t.restaurante_id = p_rest and t.disponible
      and t.agente_id is distinct from p_excluir
-   order by (select count(*) from public.funnel_sala_asignaciones s
-              where s.agente_id = t.agente_id and s.rol = p_rol
-                and (s.creado_en at time zone 'America/Guatemala')::date = v_hoy),
+   order by public.funnel_sala_clientes_hoy(t.agente_id, p_rol, v_hoy),
             (select max(s.creado_en) from public.funnel_sala_asignaciones s
               where s.agente_id = t.agente_id and s.rol = p_rol) nulls first,
             t.id
@@ -244,7 +252,10 @@ revoke all on function public.funnel_sala_llegada(bigint) from public, anon;
 grant execute on function public.funnel_sala_llegada(bigint) to authenticated;
 
 -- Asignar liner o closer: sin p_agente, la rueda; con p_agente, a mano (debe estar en turno).
-create or replace function public.funnel_sala_asignar(p_id bigint, p_rol text, p_agente bigint default null)
+-- p_esperado: quién ve la pantalla hoy en ese puesto (0 = nadie). Si otra persona ya lo cambió,
+-- frena en vez de pisarlo (revisión QA M2). null = sin chequeo (llamada interna al calificar).
+drop function if exists public.funnel_sala_asignar(bigint, text, bigint);
+create or replace function public.funnel_sala_asignar(p_id bigint, p_rol text, p_agente bigint default null, p_esperado bigint default null)
   returns jsonb language plpgsql security definer set search_path to 'public', 'pg_temp' as $$
 declare p public.funnel_prospectos%rowtype; v_nuevo bigint; v_antes bigint; v_modo text;
   v_actor text := left(coalesce(auth.jwt()->>'email', 'crm'), 120); v_quien text;
@@ -255,18 +266,27 @@ begin
   select * into p from public.funnel_prospectos where id = p_id;
   if found and p_rol = 'cerrador' and p_agente is null and p.vendedor_id is not null
      and p.vendedor_id = public.funnel_mi_agente() and not public.funnel_es_tmk() then
+    -- Solo para PEDIR el primer closer: volver a tirar la rueda para elegir closer, no (revisión ciber #3).
     select * into p from public.funnel_prospectos where id = p_id for update;
-    if (p.presenta_en at time zone 'America/Guatemala')::date <> public.funnel_hoy_gt() then raise exception 'no autorizado'; end if;
+    if p.cerrador_id is not null or p.estado <> 'asistira' or p.cita_confirmada_en is null
+       or (p.presenta_en at time zone 'America/Guatemala')::date <> public.funnel_hoy_gt() then
+      raise exception 'no autorizado';
+    end if;
   else
     p := public.funnel_sala_tomar(p_id);
   end if;
   if p.etapa <> 'sala' or not coalesce(p.califica, false) then raise exception 'primero tiene que calificar'; end if;
   if p_rol = 'cerrador' and p.vendedor_id is null then raise exception 'primero el liner'; end if;
   v_antes := case p_rol when 'vendedor' then p.vendedor_id else p.cerrador_id end;
+  if p_esperado is not null and coalesce(v_antes, 0) <> p_esperado then
+    raise exception 'otra persona ya lo cambió: tocá Actualizar';
+  end if;
   if p_agente is null then
     v_modo := 'rueda';
     v_nuevo := public.funnel_sala_rueda(p.restaurante_id, p_rol, v_antes);
-    if v_nuevo is null then
+    if v_nuevo is null and v_antes is not null then
+      raise exception 'no hay otro % disponible en turno hoy en este lugar', v_quien;
+    elsif v_nuevo is null then
       raise exception 'no hay ningún % disponible en turno hoy en este lugar: pedile al gerente que arme el turno', v_quien;
     end if;
   else
@@ -290,8 +310,8 @@ begin
   values (p.id, 'sala_asignado', v_actor, jsonb_strip_nulls(jsonb_build_object('rol', p_rol, 'agente_id', v_nuevo, 'modo', v_modo, 'antes', v_antes)));
   return jsonb_build_object('agente_id', v_nuevo, 'nombre', (select nombre from public.funnel_agentes where id = v_nuevo), 'modo', v_modo);
 end $$;
-revoke all on function public.funnel_sala_asignar(bigint, text, bigint) from public, anon;
-grant execute on function public.funnel_sala_asignar(bigint, text, bigint) to authenticated;
+revoke all on function public.funnel_sala_asignar(bigint, text, bigint, bigint) from public, anon;
+grant execute on function public.funnel_sala_asignar(bigint, text, bigint, bigint) to authenticated;
 
 create or replace function public.funnel_sala_calificar(
   p_id bigint, p_califica boolean, p_edad int default null, p_estado_civil text default null,
@@ -330,13 +350,81 @@ end $$;
 revoke all on function public.funnel_sala_calificar(bigint, boolean, int, text, int, text, text) from public, anon;
 grant execute on function public.funnel_sala_calificar(bigint, boolean, int, text, int, text, text) to authenticated;
 
--- ── 5. la bitácora de la sala solo la escriben las funciones ──────────────
+-- ── 6. la sala es VINCULANTE (revisión ciber: sin esto la rueda se saltaba por la tabla) ──
+-- Liner, closer, calificación, llegada y el paso a sala/socio se cambian SOLO por las funciones
+-- (que corren como dueño). Una cuenta del equipo, directo en la tabla, no los toca: ni gerencia.
+create or replace function public.funnel_sala_guardia() returns trigger
+  language plpgsql set search_path to 'public', 'pg_temp' as $$
+begin
+  if current_user not in ('authenticated', 'anon') then return new; end if;
+  if tg_op = 'INSERT' then
+    if new.vendedor_id is not null or new.cerrador_id is not null or new.califica is not null
+       or new.recepcion_en is not null or coalesce(new.etapa, '') in ('sala', 'socio') then
+      raise exception 'eso se anota desde Recepción, no directo en la tabla';
+    end if;
+    return new;
+  end if;
+  if new.vendedor_id is distinct from old.vendedor_id or new.cerrador_id is distinct from old.cerrador_id
+     or new.califica is distinct from old.califica or new.recepcion_en is distinct from old.recepcion_en
+     or new.recepcionado_por is distinct from old.recepcionado_por
+     or (new.etapa is distinct from old.etapa and (new.etapa in ('sala', 'socio') or (old.etapa = 'socio' and new.etapa <> 'baja')))
+     -- ya en sala: no se mueve de lugar ni de hora por la tabla (desaparecería de la sala; QA M6)
+     or (old.etapa = 'sala' and (new.restaurante_id is distinct from old.restaurante_id
+                                 or new.presenta_en is distinct from old.presenta_en)) then
+    raise exception 'eso se anota desde Recepción, no directo en la tabla';
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_funnel_sala_guardia on public.funnel_prospectos;
+create trigger trg_funnel_sala_guardia before insert or update on public.funnel_prospectos
+  for each row execute function public.funnel_sala_guardia();
+
+-- Contratos: nacen SOLO por funnel_cerrar_contrato. Del cliente, solo se completa el enganche,
+-- y solo quien participa del contrato (o gerencia). Nadie borra ni inserta directo.
+drop policy if exists fcon_wr on public.funnel_contratos;
+drop policy if exists fcon_upd on public.funnel_contratos;
+create policy fcon_upd on public.funnel_contratos for update to authenticated
+  using (public.funnel_es_gerente() or public.funnel_mi_agente() in (vendedor_id, cerrador_id, digitador_id, verificador_id))
+  with check (public.funnel_es_gerente() or public.funnel_mi_agente() in (vendedor_id, cerrador_id, digitador_id, verificador_id));
+revoke insert, update, delete, truncate on public.funnel_contratos from anon, authenticated;
+grant update (enganche) on public.funnel_contratos to authenticated;
+
+-- Al cerrar, el liner y el closer son los que asignó la sala (gerencia puede corregir).
+do $p$
+declare d text;
+begin
+  d := pg_get_functiondef('public.funnel_cerrar_contrato(bigint,text,text,numeric,bigint,bigint,bigint,bigint,integer)'::regprocedure);
+  if position('kux.b4.sala' in d) = 0 then
+    d := replace(d, '  -- Anti-fraude (nuevo): cada beneficiario',
+      E'  -- kux.b4.sala: si viene de la sala, liner y closer son los que asignó la rueda (o a mano en Recepción).\n'
+      || E'  if pr.etapa = ''sala'' and not funnel_es_gerente()\n'
+      || E'     and (p_vendedor is distinct from pr.vendedor_id or p_cerrador is distinct from pr.cerrador_id) then\n'
+      || E'    raise exception ''el liner y el closer del contrato son los que asignó la sala'';\n'
+      || E'  end if;\n\n'
+      || '  -- Anti-fraude (nuevo): cada beneficiario');
+    if position('kux.b4.sala' in d) = 0 then raise exception 'no encontré dónde parchar funnel_cerrar_contrato'; end if;
+    execute d;
+  end if;
+end $p$;
+
+-- La hostess no vuelve a la tabla por el organigrama (ve_equipo): esa rama es del telemarketing.
+drop policy if exists fp_sel on public.funnel_prospectos;
+create policy fp_sel on public.funnel_prospectos for select to authenticated
+  using (funnel_ve_todo() or (not funnel_es_tmk() and funnel_rol() is distinct from 'recepcion'
+         and tmk_id in (select funnel_ve_equipo())));
+drop policy if exists fp_upd on public.funnel_prospectos;
+create policy fp_upd on public.funnel_prospectos for update to authenticated
+  using (funnel_ve_todo() or (not funnel_es_tmk() and funnel_rol() is distinct from 'recepcion'
+         and tmk_id in (select funnel_ve_equipo())))
+  with check (funnel_ve_todo() or (not funnel_es_tmk() and funnel_rol() is distinct from 'recepcion'
+         and tmk_id in (select funnel_ve_equipo())));
+
+-- Bitácora: del cliente entra SOLO una lista blanca de tipos (antes, lista negra: 'contrato' o un
+-- tipo con un espacio invisible pasaban). Lo demás lo escriben las funciones.
 drop policy if exists fev_ins on public.funnel_eventos;
 create policy fev_ins on public.funnel_eventos for insert to authenticated
   with check (funnel_es_staff() and prospecto_id is not null and actor = (auth.jwt() ->> 'email')
-    and ((lower(btrim(tipo)) <> all (array['no_contesta','interesado','no_interesado','reprogramar','citar','nota',
-          'asignado','cita_confirmada','cita_regresada','llegada','sala','sala_asignado']))
-         or (tipo = 'asignado' and funnel_es_gerente()))
+    and (tipo in ('contacto', 'carta', 'baja', 'postventa', 'enganche') or (tipo = 'asignado' and funnel_es_gerente()))
     and case when funnel_es_tmk()
           then prospecto_id in (select l.id from funnel_tmk_mi_lista() l(id, nombre, telefono, estado, recontacto_en,
                                 intentos, es_socio, restaurante_id, presenta_en, comentario))
