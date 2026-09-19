@@ -397,7 +397,7 @@
   .sala-fila .btn{margin:0;flex:1 1 150px}
   .sala .btn.sala-ok{background:#177a4f}
   .sala .btn.sala-no{background:var(--rojo-t)}
-  .sala-top{display:flex;gap:6px;align-items:flex-start}
+  .sala-top{display:flex;gap:6px;align-items:center}
   .sala-top .subtabs{flex:1 1 auto;min-width:0}
   .sala-sec{background:#fff;color:var(--tinta)}
   .sala-si{background:#177a4f;color:#fff;border-color:#177a4f}
@@ -407,7 +407,8 @@
   .sala-aviso.ok{border-color:#177a4f}
   .sala-precio{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin:10px 0;padding:10px 12px;border-radius:10px;background:var(--papel)}
   .sala-precio b{font-size:20px;color:var(--tinta)}
-  .sala-precio small{flex-basis:100%;color:var(--gris);font-size:12px}
+  .sala-precio small{flex-basis:100%;color:#555f70;font-size:12px}
+  .sala-sep{gap:16px}
   .sala-llego{display:inline-block;background:#e9f7ef;color:#11653f;border-radius:8px;padding:4px 8px;font-size:12px;font-weight:700}
   .sala-lbl{font-size:12px;font-weight:700;color:var(--gris);margin-bottom:4px;display:block}
   .sala-nom{font-weight:700;margin-bottom:6px}
@@ -1400,7 +1401,7 @@ async function cargarMembs(){
   }catch(e){ cargandoMembs=false; if(tab==='membresias')$('lista').innerHTML=`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar las membresías</b><p>Puede ser la conexión. <b onclick="render()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>`; }
 }
 function membresiasPanel(){
-  const head=`<div class="adminhead"><h3><svg class="svic" aria-hidden="true"><use href="#ic-ticket"/></svg> Tipos de membresía (${MEMBDATA.length})</h3><button class="minibtn" onclick="nuevaMemb()">＋ Nueva membresía</button></div>`;
+  const head=`<div class="adminhead"><h3><svg class="svic" aria-hidden="true"><use href="#ic-ticket"/></svg> Tipos de membresía (${MEMBDATA.length})</h3>${puedeMemb()?`<button class="minibtn" onclick="nuevaMemb()">＋ Nueva membresía</button>`:''}</div>`;
   if(!MEMBDATA.length) return head+`<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-ticket"/></svg></span><b>Aún no hay tipos de membresía</b><p>Creá el primero con el botón de arriba. Definís precio, costo, descuento, enganche y beneficios; el embudo los usa al cerrar contratos.</p></div>`;
   const cards=MEMBDATA.map(m=>{
     const mon=esc(m.moneda||'USD');
@@ -1417,15 +1418,16 @@ function membresiasPanel(){
       <div class="mprice">${mon} ${numFmt(m.precio)}</div></div>
       <div class="mmeta">${chips}</div>
       ${ben}
-      <div class="macc2"><button class="minibtn" onclick="editarMemb(${m.id})"><svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Editar</button>
-      <button class="pill" onclick="toggleMembActivo(${m.id})">${m.activo?'Desactivar':'Activar'}</button></div>
+      ${puedeMemb()?`<div class="macc2"><button class="minibtn" onclick="editarMemb(${m.id})"><svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Editar</button>
+      <button class="pill" onclick="toggleMembActivo(${m.id})">${m.activo?'Desactivar':'Activar'}</button></div>`:''}
     </div>`;
   }).join('');
   const cap=`<div class="cap" style="margin-top:8px">Los tipos <b>activos</b> son los que el embudo ofrece al cerrar contratos. Nada se borra: se <b>desactiva</b> y podés reactivarlo cuando quieras.</div>`;
   return head+cards+cap;
 }
-function nuevaMemb(){ if(!puedeEditar())return; membEdit=null; abrirMembForm(null); }
-function editarMemb(id){ if(!puedeEditar())return; const m=(MEMBDATA||[]).find(x=>x.id===id); if(!m)return; membEdit=m; abrirMembForm(m); }
+const puedeMemb=()=>!!MIS_PERMISOS.gestionar_membresias; // bloque 5: el precio lo toca solo la gerencia de ventas
+function nuevaMemb(){ if(!puedeMemb())return; membEdit=null; abrirMembForm(null); }
+function editarMemb(id){ if(!puedeMemb())return; const m=(MEMBDATA||[]).find(x=>x.id===id); if(!m)return; membEdit=m; abrirMembForm(m); }
 function cerrarMemb(){ $('membModal').style.display='none'; }
 function abrirMembForm(m){
   m=m||{};
@@ -1448,7 +1450,7 @@ function abrirMembForm(m){
 // Valida un número opcional; devuelve {ok, val}. Vacío => null (permitido).
 function numOpt(id){ const s=($(id).value||'').trim(); if(s==='')return{ok:true,val:null}; const n=Number(s); if(isNaN(n))return{ok:false}; return{ok:true,val:n}; }
 async function guardarMemb(){
-  if(!puedeEditar())return;
+  if(!puedeMemb())return;
   const tipo=($('m_tipo').value||'').trim();
   if(!tipo){ $('m_err').textContent='Poné un tipo/nombre.'; return; }
   const campos={precio:'m_precio',costo:'m_costo',descuento:'m_descuento',enganche:'m_enganche',orden:'m_orden'};
@@ -1468,7 +1470,7 @@ async function guardarMemb(){
   else{ $('m_err').textContent=sbwStatus===409?'Ya existe un tipo con ese nombre.':'No se pudo guardar (¿tenés permiso?).'; btn.disabled=false; btn.textContent=txt; }
 }
 async function toggleMembActivo(id){
-  if(!puedeEditar())return;
+  if(!puedeMemb())return;
   const m=(MEMBDATA||[]).find(x=>x.id===id); if(!m)return;
   const nuevo=!m.activo; m.activo=nuevo; render();
   const ok=await sbWrite('PATCH','funnel_membresias','id=eq.'+id,{activo:nuevo});
@@ -1527,7 +1529,7 @@ async function cargarFunnelBI(){
       sbCountExact(B+'&etapa=eq.baja')
     ]);
     let comisiones=0;
-    if(esGerente){ (await getAllRows('funnel_comisiones?select=monto&order=id.asc')).forEach(c=>{comisiones+=Number(c.monto||0);}); } // #13-fix: el total de comisiones solo lo ve gerencia
+    if(esGerente){ (await getAllRows('funnel_comisiones?select=monto&estado=neq.anulada&order=id.asc')).forEach(c=>{comisiones+=Number(c.monto||0);}); } // #13-fix: el total de comisiones solo lo ve gerencia
     FUNNEL={total,contact,asis,cal,cerr,bajas,comisiones,
       conv:total>0?Math.round(cerr/total*100):0, cargado:true};
   }catch(e){ FUNNEL={cargado:false}; }
@@ -2296,7 +2298,7 @@ async function funArrancar(){
     const ag=UID?await getJSON("funnel_agentes?select=id,nombre,rol,email&activo=eq.true&user_id=eq."+encodeURIComponent(UID)):null;
     miAgente=(ag&&ag[0])||null;
     $('funWho').textContent=USER+" · "+(esGerente?'Gerencia':(VENTAS.includes(ROLE)?'Ventas':(miAgente?'TMK':ROLE)));
-    funTab = esGerente ? 'cargar' : (MIS_PERMISOS.recibir_sala ? 'recepcion' : (verTodo ? 'cierre' : 'midia'));
+    funTab = esGerente ? 'cargar' : (MIS_PERMISOS.recibir_sala ? 'recepcion' : (ROLE==='verificador' && MIS_PERMISOS.verificar_contratos ? 'verificacion' : (verTodo ? 'cierre' : 'midia')));
     funCargado=true;
     funPintarTabs(); await funIrTab(funTab);
   }catch(e){ $('funCont').innerHTML='<div class="vacio"><span class="em"><svg class="svic" aria-hidden="true"><use href="#ic-alert-circle"/></svg></span><b>No pude cargar el embudo</b><p>Puede ser la conexión. <b onclick="funArrancar()" style="cursor:pointer;text-decoration:underline">Reintentar</b>.</p></div>'; }
@@ -2304,13 +2306,14 @@ async function funArrancar(){
 
 function funPintarTabs(){
   const defs=ROLE==='recepcion'?[]:[['midia','Mi día']];
+  // Bloque 5: lo que ese puesto hace primero va al frente.
+  if(MIS_PERMISOS.aprobar_descuentos) defs.push(['aprobaciones','Aprobaciones']);
+  if(MIS_PERMISOS.verificar_contratos) defs.push(['verificacion','Verificación']);
   if(MIS_PERMISOS.recibir_sala||MIS_PERMISOS.armar_turnos) defs.push(['recepcion','Recepción']);
   if(MIS_PERMISOS.armar_turnos) defs.push(['turnos','Turnos']);
   if(verTodo){ defs.push(['cierre','Cierre']); defs.push(['postventa','Postventa']); defs.push(['reservas','Reservas']); defs.push(['todos','Todos']); }
   if(MIS_PERMISOS.confirmar_citas) defs.push(['citas','Citas']);
   if(MIS_PERMISOS.gestionar_lugares) defs.push(['lugares','Lugares']);
-  if(MIS_PERMISOS.aprobar_descuentos) defs.push(['aprobaciones','Aprobaciones']);
-  if(MIS_PERMISOS.verificar_contratos) defs.push(['verificacion','Verificación']);
   if(MIS_PERMISOS.gestionar_descuentos) defs.push(['descuentos','Descuentos']);
   if(esGerente){ defs.push(['miequipo','Mi equipo']); defs.push(['analitica','Analítica']); defs.push(['cargar','Cargar base']); defs.push(['equipo','Equipo']); defs.push(['comis','Comisiones']); }
   $('funTabs').innerHTML=defs.map(([k,t])=>`<button class="tab ${funTab===k?'on':''}" onclick="funIrTab('${k}')">${t}</button>`).join('');
@@ -2487,15 +2490,19 @@ function pintarAprob(){
   const top=`<div class="sala-top"><div class="cap" style="flex:1">${APROB.length} por aprobar</div><button class="st" style="flex:none" onclick="vistaAprobaciones()">Actualizar</button></div>`;
   $('funCont').innerHTML=`<div class="sala">${top}${APROB.length?APROB.map(aprobCard).join(''):'<div class="vacio"><b>Nada por aprobar</b><p>Cuando un closer pida un descuento, aparece acá.</p></div>'}</div>`;
 }
+const cuandoGT=ts=>{ if(!ts) return ''; const p=partesGT(ts); return (p.d===hoyStr()?'hoy':p.d.slice(8,10)+'/'+p.d.slice(5,7))+' '+p.h; };
 function aprobCard(a){
-  const final=Math.max(0,Number(a.precio_lista||0)-Number(a.monto_descuento||0));
+  const lista=Number(a.precio_lista||0), dm=Number(a.descuento_membresia||0), base=Math.max(0,lista-dm), final=Math.max(0,base-Number(a.monto_descuento||0));
+  const pct=base>0?Math.round(Number(a.monto_descuento||0)/base*1000)/10:0;
+  const conf=RECHAZO[a.id];
   return `<div class="lead" id="apr${a.id}" style="border-left-color:var(--amar)">
     <div class="lname">${esc(a.cliente)}</div>
-    <div class="lmeta">${esc(a.segmento)} · ${esc(a.membresia)} · lista ${usd(a.precio_lista)} − ${usd(a.monto_descuento)} → <b>${usd(final)}</b></div>
-    <div class="lmeta">Pidió ${esc(a.pedido_por||'')}${a.closer?' · closer '+esc(a.closer):''} · ${esc(horaGT(a.pedido_en))}</div>
-    ${RECHAZO[a.id]?`<div class="note"><label class="sala-lbl" for="rmot${a.id}">¿Por qué lo rechazás? (obligatorio)</label><textarea id="rmot${a.id}" maxlength="300"></textarea></div>
-      <div class="sala-fila"><button class="btn sala-no" onclick="resolverDesc(${a.id},false,this)">Confirmar rechazo</button><button class="est" onclick="RECHAZO[${a.id}]=false;pintarAprob()">Cancelar</button></div>`
-    :`<div class="sala-fila"><button class="btn sala-ok" onclick="resolverDesc(${a.id},true,this)">Aprobar</button><button class="est sala-sec" onclick="RECHAZO[${a.id}]=true;pintarAprob()">Rechazar…</button></div>`}
+    <div class="lmeta">Closer: <b>${esc(a.closer||'—')}</b> · pidió ${esc(cuandoGT(a.pedido_en))}</div>
+    <div class="sala-precio"><span>Queda en</span><b>${usd(final)}</b><small>lista ${usd(lista)}${dm>0?' − membresía '+usd(dm):''} − descuento ${usd(a.monto_descuento)} (${pct} %) · ${esc(a.segmento)} · ${esc(a.membresia)}</small></div>
+    ${conf==='rechazar'?`<div class="note"><label class="sala-lbl" for="rmot${a.id}">¿Por qué lo rechazás? Obligatorio.</label><textarea id="rmot${a.id}" maxlength="300"></textarea></div>
+      <div class="sala-fila"><button class="btn sala-no" onclick="resolverDesc(${a.id},false,this)">Confirmar rechazo</button><button class="est" onclick="RECHAZO[${a.id}]=null;pintarAprob()">Cancelar</button></div>`
+    :conf==='aprobar'?`<div class="sala-fila"><button class="btn sala-ok" onclick="resolverDesc(${a.id},true,this)">Confirmar: queda en ${usd(final)}</button><button class="est" onclick="RECHAZO[${a.id}]=null;pintarAprob()">Cancelar</button></div>`
+    :`<div class="sala-fila sala-sep"><button class="btn sala-ok" onclick="RECHAZO[${a.id}]='aprobar';pintarAprob()">Aprobar…</button><button class="est sala-sec" onclick="RECHAZO[${a.id}]='rechazar';pintarAprob()">Rechazar…</button></div>`}
   </div>`;
 }
 async function resolverDesc(id,ok,btn){
@@ -2520,14 +2527,18 @@ function pintarVerif(){
 function verifCard(c){
   const tel=String(c.telefono||'').replace(/[^0-9+]/g,'');
   const modo=VNOTA[c.id];
-  return `<div class="lead" id="ver${c.id}" style="border-left-color:${c.estado==='observado'?'var(--amar)':'var(--kux)'}">
-    <div class="ltop"><div><div class="lname">${esc(c.cliente)}</div><div class="lmeta">${esc(c.membresia||'')} · ${esc(c.plan_pago||'')} · liner ${esc(c.liner||'—')} · closer ${esc(c.closer||'—')}</div></div>
-      ${tel?`<a class="est" style="flex:none;display:inline-flex;align-items:center" href="tel:${esc(tel)}">Llamar ${esc(c.telefono)}</a>`:''}</div>
-    <div class="lmeta" style="margin-top:6px">Lista ${usd(c.precio_lista)}${Number(c.descuento)>0?' − descuentos '+usd(c.descuento):''} → <b>${usd(c.monto)}</b>${c.enganche!=null?' · enganche '+usd(c.enganche):''}</div>
-    ${c.estado==='observado'?`<div role="status" class="sala-aviso">Con observaciones: ${esc(c.verificacion_nota||'')}</div>`:''}
-    ${modo?`<div class="note"><label class="sala-lbl" for="vnot${c.id}">${modo==='arrepentido'?'¿Qué dijo el cliente? (se cancela el contrato)':'¿Qué observaste?'} (obligatorio)</label><textarea id="vnot${c.id}" maxlength="500"></textarea></div>
+  const acciones = modo==='verificado'
+    ? `<div class="sala-fila"><button class="btn sala-ok" onclick="verificar(${c.id},'verificado',this)">Confirmar: el cliente aceptó · libera comisiones</button><button class="est" onclick="VNOTA[${c.id}]=null;pintarVerif()">Cancelar</button></div>`
+    : modo ? `<div class="note"><label class="sala-lbl" for="vnot${c.id}">${modo==='arrepentido'?'¿Qué dijo el cliente? Obligatorio. Esto cancela el contrato.':'¿Qué observaste? Obligatorio.'}</label><textarea id="vnot${c.id}" maxlength="500"></textarea></div>
       <div class="sala-fila"><button class="btn ${modo==='arrepentido'?'sala-no':''}" onclick="verificar(${c.id},'${modo}',this)">${modo==='arrepentido'?'Confirmar: se arrepintió':'Guardar observación'}</button><button class="est" onclick="VNOTA[${c.id}]=null;pintarVerif()">Cancelar</button></div>`
-    :`<div class="sala-fila"><button class="btn sala-ok" onclick="verificar(${c.id},'verificado',this)">Verificado</button><button class="est sala-sec" onclick="VNOTA[${c.id}]='observado';pintarVerif()">Con observaciones…</button><button class="est sala-nodisp" onclick="VNOTA[${c.id}]='arrepentido';pintarVerif()">Se arrepintió…</button></div>`}
+    : `<div class="sala-fila"><button class="est sala-sec" onclick="VNOTA[${c.id}]='verificado';pintarVerif()">Verificado…</button><button class="est sala-sec" onclick="VNOTA[${c.id}]='observado';pintarVerif()">Con observaciones…</button><button class="est sala-nodisp" onclick="VNOTA[${c.id}]='arrepentido';pintarVerif()">Se arrepintió…</button></div>`;
+  return `<div class="lead" id="ver${c.id}" style="border-left-color:${c.estado==='observado'?'var(--amar)':'var(--kux)'}">
+    <div class="lname">${esc(c.cliente)}</div>
+    <div class="lmeta">${esc(c.membresia||'')} · ${esc(c.plan_pago||'')} · Liner: <b>${esc(c.liner||'—')}</b> · Closer: <b>${esc(c.closer||'—')}</b>${c.digitador?' · Digitador: <b>'+esc(c.digitador)+'</b>':''}</div>
+    <div class="sala-precio"><span>Contrato</span><b>${usd(c.monto)}</b><small>lista ${usd(c.precio_lista)}${Number(c.descuento)>0?' − descuentos '+usd(c.descuento):''}${c.enganche!=null?' · enganche '+usd(c.enganche):''}</small></div>
+    ${c.estado==='observado'?`<div role="status" class="sala-aviso">Con observaciones: ${esc(c.verificacion_nota||'')}</div>`:''}
+    ${tel?`<a class="btn" style="display:block;text-align:center;text-decoration:none;margin:0 0 8px" href="tel:${esc(tel)}">Llamar al cliente · ${esc(c.telefono)}</a>`:'<div role="status" class="sala-aviso">Sin teléfono registrado.</div>'}
+    ${acciones}
   </div>`;
 }
 async function verificar(id,res,btn){
@@ -2549,16 +2560,16 @@ async function vistaDescuentos(){
   $('funCont').innerHTML=`<div class="sala"><div class="lead" style="border-left-color:var(--kux)">
       <div class="lname">Nuevo segmento</div>
       <div class="sub show" style="margin-top:10px">
-        <div class="fld"><label for="dnom">Nombre</label><input id="dnom" maxlength="80" placeholder="Pago de contado"></div>
-        <div class="fld"><label for="dtipo">Tipo</label><select id="dtipo"><option value="porcentaje">Porcentaje (%)</option><option value="monto">Monto fijo (US$)</option></select></div>
-        <div class="fld"><label for="dval">Valor</label><input id="dval" type="number" inputmode="decimal" min="0.01" step="0.01"></div>
+        <div class="fld"><label for="dnom">Nombre</label><input id="dnom" maxlength="80" placeholder="Ej.: Pago de contado"></div>
+        <div class="fld"><label for="dtipo">Tipo</label><select id="dtipo"><option value="porcentaje">Porcentaje</option><option value="monto">Monto fijo</option></select></div>
+        <div class="fld"><label for="dval">Valor (% o US$)</label><input id="dval" type="number" inputmode="decimal" min="0.01" step="0.01"></div>
       </div>
-      <div class="sala-lbl" style="margin-top:6px">Aplica a (si no marcás ninguna, a todas)</div><div>${chk}</div>
+      <p class="lmeta" style="margin:4px 0 8px">El porcentaje se calcula sobre el precio de la membresía (ya con su propio descuento).</p><div class="sala-lbl" style="margin-top:6px">Aplica a (si no marcás ninguna, a todas)</div><div>${chk}</div>
       <button class="btn" onclick="crearDescuento(this)">Crear segmento</button>
     </div>
     ${d.map(x=>`<div class="lead" style="border-left-color:${x.activo?'var(--verde)':'var(--linea)'}"><div class="ltop"><div>
       <div class="lname">${esc(x.nombre)}</div><div class="lmeta">${x.tipo==='porcentaje'?esc(String(x.valor))+' %':usd(x.valor)} · ${x.membresias&&x.membresias.length?x.membresias.map(esc).join(', '):'todas las membresías'}</div></div>
-      <button class="est ${x.activo?'sala-si':''}" aria-pressed="${!!x.activo}" style="flex:none" onclick="apagarDescuento(${x.id},${!x.activo},this)">${x.activo?'Activo':'Apagado'}</button></div></div>`).join('')}</div>`;
+      <div style="flex:none;display:flex;gap:8px;align-items:center"><span class="tag">${x.activo?'Activo':'Apagado'}</span><button class="est sala-sec" onclick="apagarDescuento(${x.id},${!x.activo},this)">${x.activo?'Apagar':'Encender'}</button></div></div></div>`).join('')}</div>`;
 }
 async function crearDescuento(btn){
   const nombre=String($('dnom').value||'').trim(), tipo=$('dtipo').value, valor=Number($('dval').value);
@@ -2620,71 +2631,87 @@ async function turnoDisp(id,v,btn){ btn.disabled=true;
 // ── CIERRE (contrato + comisiones) ──
 async function vistaCierre(){
   $('funCap').textContent='Sala de ventas: cerrá el contrato. El precio lo pone la membresía; un descuento necesita la aprobación del gerente de ventas.';
-  $('funCont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
+  if(!cierreLeads.length) $('funCont').innerHTML='<div class="vacio"><span class="spin"></span> Cargando…</div>';
+  guardarCierre();
   cierreLeads=await getJSON("funnel_prospectos?select=*&etapa=eq.sala&califica=is.true&order=recepcion_en.asc.nullslast,id.asc");
   if(!cierreLeads.length){ $('funCont').innerHTML=`<div class="vacio"><b>Nadie en sala para cerrar</b><p>Acá caen los que calificaron en Recepción, listos para el contrato.</p></div>`; return; }
   try{ DESCUENTOS=(await getJSON("funnel_descuentos?select=*&activo=eq.true&order=nombre.asc"))||[]; }catch(_e){ DESCUENTOS=[]; }
   PEDIDOS={}; await Promise.all(cierreLeads.map(async l=>{ try{ const r=await rpcSala('funnel_descuento_de',{p_prospecto:l.id}); PEDIDOS[l.id]=(r&&r[0])||null; }catch(_e){ PEDIDOS[l.id]=null; } }));
-  pintarCierre();
+  pintarCierre(true);
+  // Mientras haya un descuento esperando, se vuelve a mirar solo cada 20 s (el closer no tiene que tocar nada).
+  clearTimeout(CIERRE_T);
+  if(Object.values(PEDIDOS).some(p=>p&&p.estado==='pendiente')) CIERRE_T=setTimeout(()=>{ if(funTab==='cierre') vistaCierre().catch(()=>{}); },20000);
 }
-let DESCUENTOS=[], PEDIDOS={};
-function pintarCierre(){ $('funCont').innerHTML=`<div class="sala">${cierreLeads.map(cierreCard).join('')}</div>`; }
+let DESCUENTOS=[], PEDIDOS={}, CIERRE_F={}, CIERRE_T=null;
+// Lo que el closer eligió (membresía, plan, vigencia, digitador, enganche, segmento) NO se pierde al repintar.
+function guardarCierre(){ (cierreLeads||[]).forEach(l=>{ const f=CIERRE_F[l.id]=CIERRE_F[l.id]||{};
+  ['mem','pln','vig','dig','eng','seg'].forEach(k=>{ const e=$(k+l.id); if(e) f[k]=e.value; }); }); }
+function pintarCierre(yaGuardado){ if(!yaGuardado) guardarCierre(); $('funCont').innerHTML=`<div class="sala">${cierreLeads.map(cierreCard).join('')}</div>`; }
 // (M1d) El contrato NACE de la tabla funnel_membresias (precio, descuento, enganche) —
 // nada de valores cableados en el HTML. montoMembresia() es pura → qa/marco.mjs.
 function montoMembresia(m){ return Math.max(0,(Number(m&&m.precio)||0)-(Number(m&&m.descuento)||0)); }
 // (bloque 5) Segmentos que aplican a una membresía. Pura → qa/verificacion.mjs.
 function segmentosDe(desc,tipo){ return (desc||[]).filter(d=>d.activo!==false&&(!d.membresias||!d.membresias.length||d.membresias.includes(tipo))); }
+// (bloque 5) Lo que restaría un segmento (igual que la base: el % va sobre el precio ya sin el descuento de la membresía).
+function montoSegmento(m,d){ const base=montoMembresia(m); if(!d) return 0; return Math.min(base, d.tipo==='porcentaje'?Math.round(base*Number(d.valor))/100:Number(d.valor)||0); }
 // (bloque 5) Precio final que va a poner la base: lista − desc. de membresía − pedido APROBADO de esa membresía.
 function precioCierre(m,pedido){ const base=montoMembresia(m); const ok=pedido&&pedido.estado==='aprobada'&&m&&pedido.membresia===m.tipo; return Math.max(0,base-(ok?Number(pedido.monto_descuento)||0:0)); }
 const usd=n=>'US$ '+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 function elegirMemb(id,tipo){
-  const l=cierreLeads.find(x=>x.id===id); if(l) l._memb=tipo;
-  const m=MEMBS.find(x=>x.tipo===tipo); const eng=$('eng'+id); if(eng&&m) eng.value=(m.enganche==null?'':m.enganche);
-  pintarCierre();
+  guardarCierre(); const f=CIERRE_F[id]=CIERRE_F[id]||{}; f.mem=tipo; f.seg='';
+  const m=MEMBS.find(x=>x.tipo===tipo); if(m) f.eng=(m.enganche==null?'':String(m.enganche));
+  pintarCierre(true);
 }
 // (bloque 4) nombre de un agente por id, para mostrar quién asignó la sala.
 function agNom(id){ const a=(AGENTES||[]).find(x=>x.id==id); return a?a.nombre:''; }
 function cierreCard(l){
-  const tipo=l._memb||(MEMBS[0]&&MEMBS[0].tipo)||''; const m=MEMBS.find(x=>x.tipo===tipo)||null;
-  const ped=PEDIDOS[l.id]||null;
-  const memb=MEMBS.map(x=>`<option value="${esc(x.tipo)}" ${x.tipo===tipo?'selected':''}>${esc(x.tipo)}</option>`).join('');
-  const plan=PLANES.map(p=>`<option>${esc(p.nombre)}</option>`).join('');
-  const segs=segmentosDe(DESCUENTOS,tipo).map(d=>`<option value="${d.id}">${esc(d.nombre)} · ${d.tipo==='porcentaje'?esc(String(d.valor))+' %':usd(d.valor)}</option>`).join('');
+  const f=CIERRE_F[l.id]||{}; const ped=PEDIDOS[l.id]||null; const pendiente=!!(ped&&ped.estado==='pendiente');
+  const tipo=f.mem||(ped&&(ped.estado==='pendiente'||ped.estado==='aprobada')?ped.membresia:'')||(MEMBS[0]&&MEMBS[0].tipo)||'';
+  const m=MEMBS.find(x=>x.tipo===tipo)||null;
+  const sel=(v,x)=>String(v)===String(x)?'selected':'';
+  const memb=MEMBS.map(x=>`<option value="${esc(x.tipo)}" ${sel(x.tipo,tipo)}>${esc(x.tipo)}</option>`).join('');
+  const plan=PLANES.map(p=>`<option ${f.pln!=null?sel(p.nombre,f.pln):''}>${esc(p.nombre)}</option>`).join('');
+  const vig=f.vig||'4';
+  const eng=f.eng!=null?f.eng:(m&&m.enganche!=null?String(m.enganche):'');
+  const segs=segmentosDe(DESCUENTOS,tipo).map(d=>`<option value="${d.id}" ${sel(d.id,f.seg)}>${esc(d.nombre)} · −${usd(montoSegmento(m,d))} → ${usd(Math.max(0,montoMembresia(m)-montoSegmento(m,d)))}</option>`).join('');
   const final=precioCierre(m,ped);
   let estadoDesc='';
-  if(ped&&ped.estado==='pendiente') estadoDesc=`<div role="status" class="sala-aviso">Descuento «${esc(ped.segmento)}» (−${usd(ped.monto_descuento)}) <b>esperando aprobación del gerente de ventas</b>. <b onclick="vistaCierre()" style="cursor:pointer;text-decoration:underline">Actualizar</b></div>`;
+  if(pendiente) estadoDesc=`<div role="status" class="sala-aviso">Descuento «${esc(ped.segmento)}» (−${usd(ped.monto_descuento)}) <b>esperando al gerente de ventas</b>. No se cierra mientras espera; se revisa solo cada 20 s.
+      <div class="sala-fila"><button class="est" onclick="vistaCierre()">Ver si ya aprobó</button><button class="est sala-sec" onclick="retirarDescuento(${l.id},this)">Retirar pedido</button></div></div>`;
   else if(ped&&ped.estado==='aprobada') estadoDesc=`<div role="status" class="sala-aviso ok">Descuento «${esc(ped.segmento)}» <b>aprobado</b> para ${esc(ped.membresia)}: −${usd(ped.monto_descuento)}.${ped.membresia!==tipo?' <b>Ojo: es para otra membresía, no se aplica a esta.</b>':''}</div>`;
   else if(ped&&ped.estado==='rechazada') estadoDesc=`<div role="status" class="sala-aviso err">Descuento «${esc(ped.segmento)}» <b>rechazado</b>${ped.nota?': '+esc(ped.nota):''}.</div>`;
-  const pendiente=ped&&ped.estado==='pendiente';
   return `<div class="lead" id="cie${l.id}" style="border-left-color:var(--verde)">
     <div class="ltop"><div><div class="lname">${esc(l.nombre)}</div><div class="lmeta">Liner: <b>${esc(agNom(l.vendedor_id)||'sin asignar')}</b> · Closer: <b>${esc(agNom(l.cerrador_id)||'sin asignar')}</b> (los asignó la sala)</div></div></div>
     <div class="sub show" style="margin-top:12px">
-      <div class="fld"><label for="mem${l.id}">Membresía</label><select id="mem${l.id}" onchange="elegirMemb(${l.id},this.value)">${memb}</select></div>
+      <div class="fld"><label for="mem${l.id}">Membresía</label><select id="mem${l.id}" ${pendiente?'disabled':''} onchange="elegirMemb(${l.id},this.value)">${memb}</select></div>
       <div class="fld"><label for="pln${l.id}">Plan de pago</label><select id="pln${l.id}">${plan}</select></div>
-      <div class="fld"><label for="eng${l.id}">Enganche / pago inicial (US$)</label><input type="number" id="eng${l.id}" inputmode="decimal" min="0" value="${m&&m.enganche!=null?esc(String(m.enganche)):''}"></div>
-      <div class="fld"><label for="vig${l.id}">Vigencia (años)</label><select id="vig${l.id}">${[1,2,3,4,5].map(n=>`<option value="${n}" ${n===4?'selected':''}>${n}</option>`).join('')}</select></div>
+      <div class="fld"><label for="eng${l.id}">Enganche / pago inicial (US$)</label><input type="number" id="eng${l.id}" inputmode="decimal" min="0" value="${esc(eng)}"></div>
+      <div class="fld"><label for="vig${l.id}">Vigencia (años)</label><select id="vig${l.id}">${[1,2,3,4,5].map(n=>`<option value="${n}" ${sel(n,vig)}>${n}</option>`).join('')}</select></div>
     </div>
     <div class="sala-precio"><span>Precio del contrato</span><b>${usd(final)}</b><small>${m?('lista '+usd(m.precio)+(Number(m.descuento)>0?' − membresía '+usd(m.descuento):'')+(final<montoMembresia(m)?' − descuento aprobado':'')):'elegí la membresía'}</small></div>
     ${estadoDesc}
-    <div class="sub show">
-      <div class="fld"><label for="seg${l.id}">Descuento por segmento (opcional)</label><select id="seg${l.id}"><option value="">Sin descuento</option>${segs}</select></div>
-      <div class="fld"><label>&nbsp;</label><button class="est" onclick="pedirDescuento(${l.id},this)">Pedir aprobación</button></div>
-    </div>
-    <div class="sub show">
-      <div class="fld"><label for="dig${l.id}">Digitador</label><select id="dig${l.id}"><option value="">—</option>${opAgentes('digitador')}</select></div>
+    ${pendiente?'':`<div class="fld" style="margin-top:8px"><label for="seg${l.id}">Descuento por segmento (opcional)</label><select id="seg${l.id}" style="width:100%"><option value="">Sin descuento</option>${segs}</select></div>
+    <button class="est sala-sec" style="margin-top:8px" onclick="pedirDescuento(${l.id},this)">Pedir aprobación del descuento</button>`}
+    <div class="sub show" style="margin-top:10px">
+      <div class="fld"><label for="dig${l.id}">Digitador</label><select id="dig${l.id}"><option value="">—</option>${opAgentes('digitador',f.dig?Number(f.dig):null)}</select></div>
     </div>
     ${!l.cerrador_id?`<div role="status" class="sala-aviso">Falta el closer: en Recepción, «Pasar a closer». Sin closer no se cierra.</div>`
-      :pendiente?`<div role="status" class="sala-aviso">No se cierra mientras el descuento espera aprobación.</div>`
+      :pendiente?''
       :`<button class="btn" onclick="cerrarContrato(${l.id},this)"><svg class="svic" aria-hidden="true"><use href="#ic-edit"/></svg> Cerrar contrato en ${usd(final)}</button>`}
   </div>`;
 }
 async function pedirDescuento(id,btn){
-  const seg=$('seg'+id)&&$('seg'+id).value, mem=$('mem'+id)&&$('mem'+id).value;
-  if(!seg){ toast('Elegí el segmento de descuento'); return; }
+  guardarCierre(); const f=CIERRE_F[id]||{};
+  if(!f.seg){ toast('Elegí el segmento de descuento'); return; }
   if(btn.disabled) return; btn.disabled=true;
-  try{ const r=await rpcSala('funnel_descuento_pedir',{p_prospecto:id,p_membresia:mem,p_descuento:Number(seg)})||{};
+  try{ const r=await rpcSala('funnel_descuento_pedir',{p_prospecto:id,p_membresia:f.mem,p_descuento:Number(f.seg)})||{};
     toast('Pedido al gerente de ventas: −'+usd(r.monto_descuento)); await vistaCierre();
   }catch(e){ btn.disabled=false; toast(e.message||'No se pudo'); }
+}
+async function retirarDescuento(id,btn){
+  if(btn.disabled) return; btn.disabled=true;
+  try{ await rpcSala('funnel_descuento_retirar',{p_prospecto:id}); const f=CIERRE_F[id]; if(f) f.seg=''; toast('Pedido retirado: se cierra sin descuento'); await vistaCierre(); }
+  catch(e){ btn.disabled=false; toast(e.message||'No se pudo'); }
 }
 // ── CONTRATO IMPRIMIBLE (marca Kuxtal) ──
 function imprimirContrato(d){
@@ -2741,7 +2768,7 @@ async function registrarEnganche(cid,pid,enganche,planPago,apiFn,tieneCol,actor)
 }
 async function cerrarContrato(id,btn){
   if(btn.disabled) return; btn.disabled=true; const txt=btn.innerHTML; btn.textContent='Cerrando…';
-  const g=x=>{const e=$(x+id);return e?e.value:'';};
+  guardarCierre(); const f=CIERRE_F[id]||{}; const g=x=>(f[x]!=null?f[x]:(($(x+id)||{}).value||''));
   const l=cierreLeads.find(x=>x.id===id)||{}; const ped=PEDIDOS[id]||null;
   const agN=aid=>{const a=AGENTES.find(x=>x.id==aid);return a?a.nombre:'';};
   try{
@@ -2753,8 +2780,8 @@ async function cerrarContrato(id,btn){
     const eng=g('eng')?Number(g('eng')):null;
     try{ await registrarEnganche(res.contrato_id,id,eng,g('pln'),api,await probeContratosExt(),USER); }catch(e){}
     imprimirContrato({ no_socio:res.no_socio, nombre:l.nombre, telefono:l.telefono, membresia:mem, plan:g('pln'), monto:Number(res.monto)||0, enganche:eng, anios:anios,
-      vendedor:agN(l.vendedor_id), cerrador:agN(l.cerrador_id), digitador:agN(g('dig')), verificador:'(lo asigna la verificación)' });
-    toast('Contrato cerrado · pasa a verificación'); cierreLeads=cierreLeads.filter(x=>x.id!==id); pintarCierre();
+      vendedor:agN(l.vendedor_id), cerrador:agN(l.cerrador_id), digitador:agN(g('dig')), verificador:'' });
+    toast('Contrato cerrado · pasa a verificación'); cierreLeads=cierreLeads.filter(x=>x.id!==id); delete CIERRE_F[id]; pintarCierre(true);
   }catch(e){ toast('No se cerró: '+(e.message||'error')); btn.disabled=false; btn.innerHTML=txt; }
 }
 
@@ -2766,7 +2793,7 @@ async function vistaComisiones(){
   if(!com.length){ $('funCont').innerHTML=`<div class="vacio"><b>Sin comisiones todavía</b><p>Se generan solas cuando cerrás un contrato en la pestaña Cierre.</p></div>`; return; }
   // Bloque 5: las anuladas no suman; pendientes = contrato todavía sin verificar.
   const total=com.filter(c=>c.estado!=='anulada').reduce((a,c)=>a+Number(c.monto||0),0);
-  const porRol={}; com.forEach(c=>{porRol[c.rol]=(porRol[c.rol]||0)+Number(c.monto||0);});
+  const porRol={}; com.filter(c=>c.estado!=='anulada').forEach(c=>{porRol[c.rol]=(porRol[c.rol]||0)+Number(c.monto||0);});
   const nombreAg=id=>{const a=AGENTES.find(x=>x.id===id);return a?a.nombre:'(por rol)';};
   $('funCont').innerHTML=`<div class="panel"><h3>Total en comisiones: $${total.toFixed(2)}</h3><div style="margin-top:8px">${Object.entries(porRol).map(([r,v])=>`<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(r)}: $${v.toFixed(2)}</span>`).join('')}</div></div>`+
     com.slice(0,150).map(c=>`<div class="basecard"><div><b>${esc(c.rol)}</b> · ${esc(nombreAg(c.beneficiario_id))} · <span class="tag">${esc({pendiente:'pendiente de verificar',liberada:'liberada',anulada:'anulada'}[c.estado]||c.estado||'')}</span><div class="m">${c.funnel_contratos?('Contrato · '+esc(c.funnel_contratos.tipo_membresia||'')+' $'+(c.funnel_contratos.monto||0)):''}</div></div><span class="tag" style="background:#8dc63f22;color:#6f9e12">$${Number(c.monto||0).toFixed(2)}</span></div>`).join('');
@@ -2787,7 +2814,7 @@ async function vistaAnalitica(){
   const nomAg=id=>{const a=AGENTES.find(x=>x.id===id);return a?a.nombre:'(sin asignar)';};
   // Paginado (getAllRows): acá sí se necesitan las FILAS para agrupar, y limit>1000 no sirve (max_rows)
   const P=await getAllRows("funnel_prospectos?select=id,estado,etapa,califica,tmk_id,vendedor_id,cerrador_id,base_id,recepcion_en,actualizado_en,motivo_baja&order=id.asc");
-  const COM=await getAllRows("funnel_comisiones?select=rol,monto&order=id.asc");
+  const COM=await getAllRows("funnel_comisiones?select=rol,monto&estado=neq.anulada&order=id.asc"); // bloque 5: las anuladas no cuentan
   const LEXT=await getAllRows("leads?select=estado&order=id.asc"); // leads captados fuera del embudo (web/bot)
   const total=P.length, contact=P.filter(p=>p.estado!=='nuevo').length, asis=P.filter(p=>p.recepcion_en).length, cal=P.filter(p=>p.califica===true).length;
   const socios=P.filter(p=>p.etapa==='socio'), cerr=socios.length;

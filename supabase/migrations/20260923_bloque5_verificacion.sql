@@ -24,8 +24,19 @@ select r.clave, p.permiso,
          then r.clave in ('admin','gerente_general','gerente_ventas','verificador')
          else r.clave in ('admin','gerente_general','gerente_ventas') end
   from public.funnel_roles r
-  cross join (values ('gestionar_descuentos'), ('aprobar_descuentos'), ('verificar_contratos')) p(permiso)
+  cross join (values ('gestionar_descuentos'), ('aprobar_descuentos'), ('verificar_contratos'), ('gestionar_membresias')) p(permiso)
 on conflict do nothing;
+
+-- Ronda 1 ciber (H1): el precio NO se mueve por la puerta de atrás. Las membresías (precio y su
+-- descuento) las toca solo la gerencia de ventas, y el precio siempre es positivo.
+drop policy if exists funnel_membresias_wr on public.funnel_membresias;
+create policy funnel_membresias_wr on public.funnel_membresias to authenticated
+  using (public.funnel_puede('gestionar_membresias')) with check (public.funnel_puede('gestionar_membresias'));
+alter table public.funnel_membresias drop constraint if exists funnel_membresias_precio_ck;
+alter table public.funnel_membresias add constraint funnel_membresias_precio_ck
+  check (precio is not null and precio > 0 and precio < 1000000
+         and (descuento is null or (descuento >= 0 and descuento < precio))
+         and (enganche is null or (enganche >= 0 and enganche <= precio)));
 
 -- ── 2. segmentos de descuento ─────────────────────────────────────────────
 create table if not exists public.funnel_descuentos (
@@ -39,6 +50,10 @@ create table if not exists public.funnel_descuentos (
   creado_en timestamptz not null default now(),
   constraint funnel_descuentos_pct_ck check (tipo <> 'porcentaje' or valor <= 100)
 );
+alter table public.funnel_descuentos drop constraint if exists funnel_descuentos_valor_ck;
+alter table public.funnel_descuentos add constraint funnel_descuentos_valor_ck
+  check (valor > 0 and valor <= 100000 and valor <> 'NaN'::numeric);
+alter table public.funnel_descuentos alter column creado_por set default left(coalesce(auth.jwt()->>'email', 'crm'), 120);
 comment on table public.funnel_descuentos is
   'Bloque 5: segmentos de descuento que define el gerente de ventas (porcentaje o monto, por membresía).';
 alter table public.funnel_descuentos enable row level security;
@@ -51,7 +66,7 @@ drop policy if exists fdes_upd on public.funnel_descuentos;
 create policy fdes_upd on public.funnel_descuentos for update to authenticated
   using (public.funnel_puede('gestionar_descuentos')) with check (public.funnel_puede('gestionar_descuentos'));
 revoke all on public.funnel_descuentos from public, anon, authenticated;
-grant select, insert (nombre, tipo, valor, membresias, creado_por), update (activo) on public.funnel_descuentos to authenticated;
+grant select, insert (nombre, tipo, valor, membresias), update (activo) on public.funnel_descuentos to authenticated;
 
 -- ── 3. pedidos de descuento (se escriben solo por funciones) ──────────────
 create table if not exists public.funnel_descuento_solicitudes (
@@ -79,7 +94,17 @@ alter table public.funnel_contratos
   add column if not exists descuento_monto numeric,
   add column if not exists verificado_por text,
   add column if not exists verificado_en timestamptz,
-  add column if not exists verificacion_nota text;
+  add column if not exists verificacion_nota text,
+  add column if not exists cerrado_por text;
+alter table public.funnel_contratos drop constraint if exists funnel_contratos_enganche_ck;
+alter table public.funnel_contratos add constraint funnel_contratos_enganche_ck check (enganche is null or enganche >= 0);
+-- El enganche lo completa quien participa, y solo mientras el contrato no está verificado ni cancelado.
+drop policy if exists fcon_upd on public.funnel_contratos;
+create policy fcon_upd on public.funnel_contratos for update to authenticated
+  using (estado in ('firmado', 'por_verificar', 'observado')
+         and (public.funnel_es_gerente() or public.funnel_mi_agente() in (vendedor_id, cerrador_id, digitador_id, verificador_id)))
+  with check (estado in ('firmado', 'por_verificar', 'observado')
+         and (public.funnel_es_gerente() or public.funnel_mi_agente() in (vendedor_id, cerrador_id, digitador_id, verificador_id)));
 alter table public.funnel_contratos drop constraint if exists funnel_contratos_estado_ck;
 alter table public.funnel_contratos add constraint funnel_contratos_estado_ck
   check (estado in ('firmado', 'por_verificar', 'observado', 'verificado', 'cancelado'));
@@ -89,6 +114,9 @@ alter table public.funnel_comisiones drop constraint if exists funnel_comisiones
 alter table public.funnel_comisiones add constraint funnel_comisiones_estado_ck
   check (estado in ('pendiente', 'liberada', 'anulada'));
 revoke insert, update, delete, truncate on public.funnel_comisiones from anon, authenticated;
+-- Las comisiones de antes del bloque 5 (contratos «firmado», sin verificación) quedan liberadas, no pendientes para siempre.
+update public.funnel_comisiones set estado = 'liberada'
+ where estado = 'pendiente' and (contrato_id is null or contrato_id in (select id from public.funnel_contratos where estado = 'firmado'));
 
 alter table public.socios add column if not exists contrato_cancelado_en timestamptz;
 comment on column public.socios.contrato_cancelado_en is
@@ -98,7 +126,7 @@ comment on column public.socios.contrato_cancelado_en is
 -- Precio de lista y descuento propio de la membresía (activa). null si no existe.
 create or replace function public.funnel_membresia_precio(p_tipo text, out precio numeric, out descuento numeric)
   language sql stable security definer set search_path to 'public', 'pg_temp' as $$
-  select coalesce(m.precio, 0), coalesce(m.descuento, 0) from public.funnel_membresias m where m.tipo = p_tipo and m.activo
+  select m.precio, coalesce(m.descuento, 0) from public.funnel_membresias m where m.tipo = p_tipo and m.activo and m.precio > 0
 $$;
 revoke all on function public.funnel_membresia_precio(text) from public, anon, authenticated;
 
@@ -126,7 +154,7 @@ begin
     raise exception 'ese segmento no aplica a la membresía %', p_membresia;
   end if;
   v_monto := case d.tipo when 'porcentaje' then round((v_p - v_dm) * d.valor / 100.0, 2) else d.valor end;
-  v_monto := least(v_monto, greatest(v_p - v_dm, 0));
+  if v_monto >= v_p - v_dm then raise exception 'ese descuento deja el precio en 0: no se puede'; end if;
   -- Un pedido vivo por cliente: el nuevo reemplaza al anterior (pendiente o aprobado sin usar).
   update public.funnel_descuento_solicitudes set estado = 'reemplazada'
    where prospecto_id = pr.id and estado in ('pendiente', 'aprobada');
@@ -158,14 +186,16 @@ end $$;
 revoke all on function public.funnel_descuento_de(bigint) from public, anon;
 grant execute on function public.funnel_descuento_de(bigint) to authenticated;
 
+drop function if exists public.funnel_descuentos_por_aprobar();
 create or replace function public.funnel_descuentos_por_aprobar()
   returns table(id bigint, prospecto_id bigint, cliente text, segmento text, membresia text, precio_lista numeric,
-                monto_descuento numeric, pedido_por text, pedido_en timestamptz, closer text)
+                descuento_membresia numeric, monto_descuento numeric, pedido_por text, pedido_en timestamptz, closer text)
   language plpgsql stable security definer set search_path to 'public', 'pg_temp' as $$
 begin
   if public.funnel_es_tmk() or not public.funnel_puede('aprobar_descuentos') then raise exception 'no autorizado'; end if;
   return query select s.id, s.prospecto_id, p.nombre, d.nombre, s.membresia,
-         (select m.precio from public.funnel_membresias m where m.tipo = s.membresia), s.monto_descuento,
+         (select m.precio from public.funnel_membresias m where m.tipo = s.membresia),
+         (select coalesce(m.descuento, 0) from public.funnel_membresias m where m.tipo = s.membresia), s.monto_descuento,
          s.pedido_por, s.pedido_en, c.nombre
     from public.funnel_descuento_solicitudes s
     join public.funnel_descuentos d on d.id = s.descuento_id
@@ -187,6 +217,11 @@ begin
   select * into s from public.funnel_descuento_solicitudes where id = p_id for update;
   if not found then raise exception 'no autorizado'; end if;
   if s.estado <> 'pendiente' then raise exception 'ese pedido ya se resolvió'; end if;
+  -- Separación de funciones (ronda 1): nadie aprueba su propio pedido.
+  if lower(coalesce(s.pedido_por, '')) = lower(v_actor) then raise exception 'no podés aprobar tu propio pedido de descuento'; end if;
+  if not exists (select 1 from public.funnel_prospectos where id = s.prospecto_id and etapa = 'sala') then
+    raise exception 'ese cliente ya no está en la sala';
+  end if;
   update public.funnel_descuento_solicitudes
      set estado = case when p_aprobar then 'aprobada' else 'rechazada' end, resuelto_por = v_actor,
          resuelto_en = now(), nota = p_nota
@@ -198,6 +233,29 @@ begin
 end $$;
 revoke all on function public.funnel_descuento_resolver(bigint, boolean, text) from public, anon;
 grant execute on function public.funnel_descuento_resolver(bigint, boolean, text) to authenticated;
+
+-- Retirar el pedido (el cliente no quiere esperar): quien lo puede pedir, o gerencia.
+create or replace function public.funnel_descuento_retirar(p_prospecto bigint)
+  returns jsonb language plpgsql security definer set search_path to 'public', 'pg_temp' as $$
+declare pr public.funnel_prospectos%rowtype; v_yo bigint := public.funnel_mi_agente(); v_n int;
+  v_actor text := left(coalesce(auth.jwt()->>'email', 'crm'), 120);
+begin
+  if public.funnel_es_tmk() or not public.funnel_puede('cerrar_contrato') then raise exception 'no autorizado'; end if;
+  select * into pr from public.funnel_prospectos where id = p_prospecto for update;
+  if not found or not (public.funnel_puede('corregir_sala') or public.funnel_puede('aprobar_descuentos')
+                       or (v_yo is not null and v_yo in (pr.vendedor_id, pr.cerrador_id))) then
+    raise exception 'no autorizado';
+  end if;
+  update public.funnel_descuento_solicitudes set estado = 'reemplazada', resuelto_por = v_actor, resuelto_en = now(), nota = 'retirado'
+   where prospecto_id = pr.id and estado in ('pendiente', 'aprobada');
+  get diagnostics v_n = row_count;
+  if v_n = 0 then raise exception 'no hay pedido de descuento vivo'; end if;
+  insert into public.funnel_eventos(prospecto_id, tipo, actor, payload)
+  values (pr.id, 'descuento_retirado', v_actor, '{}'::jsonb);
+  return jsonb_build_object('ok', true);
+end $$;
+revoke all on function public.funnel_descuento_retirar(bigint) from public, anon;
+grant execute on function public.funnel_descuento_retirar(bigint) to authenticated;
 
 -- ── 7. cerrar el contrato: precio calculado, nace «por verificar» ─────────
 drop function if exists public.funnel_cerrar_contrato(bigint, text, text, numeric, bigint, bigint, bigint, bigint, integer);
@@ -256,12 +314,16 @@ begin
     v_ds := s.monto_descuento;
     update funnel_descuento_solicitudes set estado = 'usada' where id = s.id;
   end if;
-  v_monto := greatest(v_p - v_dm - v_ds, 0);
+  v_monto := v_p - v_dm - v_ds;
+  if v_monto <= 0 then raise exception 'el precio final no puede quedar en 0'; end if;
+  -- Cualquier otro pedido vivo de este cliente se cierra (no queda colgado en Aprobaciones).
+  update funnel_descuento_solicitudes set estado = 'reemplazada', nota = coalesce(nota, 'se cerró el contrato')
+   where prospecto_id = p_prospecto and estado in ('pendiente', 'aprobada');
 
   insert into funnel_contratos(prospecto_id, tipo_membresia, plan_pago, monto, tmk_id, vendedor_id, cerrador_id, digitador_id,
-                               estado, precio_lista, descuento_membresia, descuento_solicitud_id, descuento_monto)
+                               estado, precio_lista, descuento_membresia, descuento_solicitud_id, descuento_monto, cerrado_por)
     values (p_prospecto, p_membresia, p_plan, v_monto, pr.tmk_id, p_vendedor, p_cerrador, p_digitador,
-            'por_verificar', v_p, v_dm, s.id, v_ds) returning id into cid;
+            'por_verificar', v_p, v_dm, s.id, v_ds, left(coalesce(auth.jwt()->>'email', 'crm'), 120)) returning id into cid;
   update funnel_prospectos set etapa = 'socio', vendedor_id = p_vendedor, cerrador_id = p_cerrador, actualizado_en = now() where id = p_prospecto;
   insert into funnel_eventos(prospecto_id, tipo, actor, payload)
     values (p_prospecto, 'contrato', coalesce(nullif(auth.jwt()->>'email', ''), 'sistema'),
@@ -279,7 +341,15 @@ begin
               coalesce(p_anios, 4), v_liner, v_closer, v_closer) returning id into v_socio;
     update funnel_prospectos set socio_id = v_socio where id = p_prospecto;
   else
+    -- Vuelve a cerrar (p. ej. después de arrepentirse): el socio se pone al día con el contrato nuevo.
     v_socio := pr.socio_id; select no_socio into v_no from socios where id = v_socio;
+    select nombre into v_liner from funnel_agentes where id = p_vendedor;
+    select nombre into v_closer from funnel_agentes where id = p_cerrador;
+    update socios set tipo = p_membresia, tipo_norm = p_membresia, total_texto = v_monto::text, total_num = v_monto,
+           vencimiento = (current_date + (coalesce(p_anios, 4)::text || ' years')::interval)::date,
+           anios_servicio = coalesce(p_anios, 4), liner = v_liner, closer = v_closer, closer_norm = v_closer,
+           contrato_cancelado_en = null
+     where id = v_socio;
   end if;
   update funnel_contratos set socio_id = v_socio where id = cid;
 
@@ -303,20 +373,22 @@ revoke all on function public.funnel_cerrar_contrato(bigint, text, text, bigint,
 grant execute on function public.funnel_cerrar_contrato(bigint, text, text, bigint, bigint, bigint, integer, bigint) to authenticated;
 
 -- ── 8. verificación ───────────────────────────────────────────────────────
+drop function if exists public.funnel_contratos_por_verificar();
 create or replace function public.funnel_contratos_por_verificar()
   returns table(id bigint, cliente text, telefono text, membresia text, plan_pago text, precio_lista numeric,
                 descuento numeric, monto numeric, enganche numeric, estado text, verificacion_nota text,
-                liner text, closer text, creado_en timestamptz)
+                liner text, closer text, digitador text, creado_en timestamptz)
   language plpgsql stable security definer set search_path to 'public', 'pg_temp' as $$
 begin
   if public.funnel_es_tmk() or not public.funnel_puede('verificar_contratos') then raise exception 'no autorizado'; end if;
   return query select c.id, p.nombre, p.telefono, c.tipo_membresia, c.plan_pago, c.precio_lista,
          coalesce(c.descuento_membresia, 0) + coalesce(c.descuento_monto, 0), c.monto, c.enganche, c.estado,
-         c.verificacion_nota, v.nombre, k.nombre, c.creado_en
+         c.verificacion_nota, v.nombre, k.nombre, dg.nombre, c.creado_en
     from public.funnel_contratos c
     join public.funnel_prospectos p on p.id = c.prospecto_id
     left join public.funnel_agentes v on v.id = c.vendedor_id
     left join public.funnel_agentes k on k.id = c.cerrador_id
+    left join public.funnel_agentes dg on dg.id = c.digitador_id
    where c.estado in ('por_verificar', 'observado')
    order by (c.estado = 'observado'), c.creado_en limit 300;
 end $$;
@@ -336,13 +408,20 @@ begin
   if not found then raise exception 'no autorizado'; end if;
   if c.estado not in ('por_verificar', 'observado') then raise exception 'ese contrato ya no está por verificar'; end if;
   -- Nadie verifica una venta en la que participó.
-  if v_yo is not null and v_yo in (c.vendedor_id, c.cerrador_id, c.digitador_id, c.tmk_id) then
+  if (v_yo is not null and v_yo in (c.vendedor_id, c.cerrador_id, c.digitador_id, c.tmk_id))
+     or lower(v_actor) = lower(coalesce(c.cerrado_por, ''))
+     or lower(v_actor) in (select lower(coalesce(x, '')) from public.funnel_descuento_solicitudes ds,
+                           lateral (values (ds.pedido_por), (ds.resuelto_por)) v(x) where ds.id = c.descuento_solicitud_id) then
     raise exception 'no podés verificar una venta en la que participaste';
+  end if;
+  -- Dado de baja antes de verificar (p. ej. desde Postventa): no se verifica; solo se puede registrar que se arrepintió.
+  if p_resultado <> 'arrepentido' and not exists (select 1 from public.funnel_prospectos where id = c.prospecto_id and etapa = 'socio') then
+    raise exception 'ese cliente ya está de baja: solo se puede marcar que se arrepintió';
   end if;
   if p_resultado = 'verificado' then
     select a.id into v_verif from public.funnel_agentes a where a.id = v_yo and a.activo and a.rol = 'verificador';
     update public.funnel_contratos set estado = 'verificado', verificado_por = v_actor, verificado_en = now(),
-           verificacion_nota = p_nota, verificador_id = coalesce(v_verif, verificador_id) where id = c.id;
+           verificacion_nota = coalesce(p_nota, verificacion_nota), verificador_id = coalesce(v_verif, verificador_id) where id = c.id;
     update public.funnel_comisiones set estado = 'liberada' where contrato_id = c.id and estado = 'pendiente';
     if v_verif is not null then
       for rg in select * from public.funnel_comision_reglas where activo and rol = 'verificador'
@@ -363,7 +442,10 @@ begin
     update public.funnel_comisiones set estado = 'anulada' where contrato_id = c.id and estado <> 'anulada';
     update public.funnel_prospectos set etapa = 'baja', motivo_baja = left('Se arrepintió en la verificación: ' || p_nota, 300),
            baja_en = now(), actualizado_en = now() where id = c.prospecto_id;
-    if c.socio_id is not null then update public.socios set contrato_cancelado_en = now() where id = c.socio_id; end if;
+    -- El socio no se borra: queda marcado y vencido hoy (sus códigos dejan de valer).
+    if c.socio_id is not null then
+      update public.socios set contrato_cancelado_en = now(), vencimiento = least(vencimiento, current_date) where id = c.socio_id;
+    end if;
   end if;
   insert into public.funnel_eventos(prospecto_id, tipo, actor, payload)
   values (c.prospecto_id, 'verificacion', v_actor, jsonb_strip_nulls(jsonb_build_object('contrato_id', c.id, 'resultado', p_resultado, 'nota', p_nota)));
