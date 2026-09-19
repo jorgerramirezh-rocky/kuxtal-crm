@@ -72,11 +72,12 @@ SOL=$(psql -X -At "$U/$C" -c "select max(id) from funnel_descuento_solicitudes w
 paso "10 · el gerente de ventas lo aprueba" gerente_ventas "select funnel_descuento_resolver($SOL,true);" "aprobada" "select estado from funnel_descuento_solicitudes where id=$SOL"
 paso "11 · el liner cierra (el precio lo pone la base)" vendedor "select funnel_cerrar_contrato($ID,'QA-Oro','Contado',900021,900031,null,4,$SOL);" "por_verificar|900.00|socio" "select c.estado||'|'||c.monto||'|'||p.etapa from funnel_contratos c join funnel_prospectos p on p.id=c.prospecto_id where c.prospecto_id=$ID"
 paso "11b · (las comisiones nacen pendientes)" vendedor "select 1;" "pendiente" "select string_agg(distinct estado,',') from funnel_comisiones where contrato_id=$CID"
+paso "11c · la gerencia de ventas asigna el verificador" gerente_ventas "select funnel_contrato_asignar_verificador($CID,900041);" "900041" "select verificador_id from funnel_contratos where id=$CID"
 paso "12 · el verificador llama y verifica" verificador "select funnel_contrato_verificar($CID,'verificado');" "verificado" "select estado from funnel_contratos where id=$CID"
 paso "13 · comisiones liberadas, cada una a su persona" verificador "select 1;" "cerrador:900031:27.00,gerente_ventas:900051:9.00,supervisor_tmk:900001:9.00,tmk:900002:18.00,vendedor:900021:27.00,verificador:900041:30.00" \
   "select string_agg(rol||':'||beneficiario_id||':'||monto,',' order by rol) from funnel_comisiones where contrato_id=$CID and estado='liberada' and beneficiario_id is not null"
 paso "14 · nació el socio con el precio final" verificador "select 1;" "900.00|QA-Oro" "select s.total_num||'|'||s.tipo from socios s join funnel_prospectos p on p.socio_id=s.id where p.id=$ID"
-paso "15 · la bitácora cuenta la historia completa" verificador "select 1;" "citar,cita_confirmada,llegada,sala,sala_asignado,descuento_pedido,descuento_aprobado,contrato,verificacion" \
+paso "15 · la bitácora cuenta la historia completa" verificador "select 1;" "citar,cita_confirmada,llegada,sala,sala_asignado,descuento_pedido,descuento_aprobado,contrato,verificador_asignado,verificacion" \
   "select string_agg(tipo,',' order by id) from (select distinct on (tipo) id,tipo from funnel_eventos where prospecto_id=$ID order by tipo,id) x"
 dropdb "$C" >/dev/null 2>&1
 echo "── $((N-FALLAS))/$N pasos verdes"
