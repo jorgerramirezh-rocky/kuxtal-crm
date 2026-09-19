@@ -2234,7 +2234,10 @@ const VENTAS=['recepcion','vendedor','cerrador','reservaciones','servicio','digi
 let esGerente=false, verTodo=false, miAgente=null;
 let ESTADOS=[], RESTAS=[], LUGARES_TODOS=[], AGENTES=[], MEMBS=[], PLANES=[], BASES=[], leads=[], todos=[], cierreLeads=[];
 let funTab='', sub='pend', funCargado=false;
-const puedeEmbudo=()=> verTodo || ['tmk','telemarketing'].includes(ROLE);
+// Bloque 8.1: la pestaña Embudo es de TODO puesto que trabaja en él (desde el bloque 7 liner, closer, digitador y
+// verificador ya no «ven todo», y con eso se quedaron sin pestaña; la hostess nunca la tuvo). Qué ve adentro lo decide funPintarTabs.
+const PUESTOS_EMBUDO=['tmk','telemarketing','supervisor_tmk','supervisor','recepcion','vendedor','cerrador','digitador','verificador'];
+const puedeEmbudo=()=> verTodo || PUESTOS_EMBUDO.includes(ROLE);
 // Hora de Guatemala (UTC−6, sin horario de verano). Antes «hoy» salía de toISOString(),
 // que es hora de Londres: después de las 6 de la tarde el CRM creía que ya era mañana.
 const TZ_GT='America/Guatemala';

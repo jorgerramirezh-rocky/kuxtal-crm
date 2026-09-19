@@ -42,6 +42,8 @@ jobs:
         run: node qa/misclientes.mjs
       - name: Digitación (bloque 8) + todo el JS compila
         run: node qa/digitacion.mjs
+      - name: Pestaña Embudo para cada puesto (bloque 8.1)
+        run: node qa/pestanas.mjs
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed   # v2.0.5 (pin por SHA)
         with:
           deno-version: v2.x
